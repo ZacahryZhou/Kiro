@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CheckConflictsInput, type AttendanceView, type ConflictView, type CourseView, type SessionView, type StudentView, type UnitView, type Result, err, ok } from "@/contracts";
+import { CheckConflictsInput, type AttendanceView, type ConflictView, type CourseView, type DeductionView, type SessionView, type StudentView, type UnitView, type Result, err, ok } from "@/contracts";
 import type { Actor } from "@/lib/auth/actor";
 import { prisma } from "@/lib/db/prisma";
 
@@ -7,6 +7,7 @@ export type {
   AttendanceView,
   ConflictView,
   CourseView,
+  DeductionView,
   ErrorCode,
   Result,
   ServiceError,
@@ -23,6 +24,19 @@ const dateRange = z.object({
 });
 const scheduleInput = dateRange.extend({ courseId: id.optional() });
 const courseInput = z.object({ courseId: id });
+const attendanceListInput = z.object({
+  courseId: id.optional(),
+  sessionId: id.optional(),
+  studentId: id.optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+  status: z.enum(["PRESENT", "LEAVE", "ABSENT"]).optional(),
+});
+const deductionListInput = z.object({
+  courseId: id.optional(),
+  sessionId: id.optional(),
+  studentId: id.optional(),
+});
 
 const success = ok;
 const failure = err;
@@ -265,6 +279,120 @@ export async function getStudentWorkspace(
     });
   } catch {
     return failure("INTERNAL", "Could not load the student workspace. Please try again.");
+  }
+}
+
+async function canReadSession(actor: Actor, sessionId: string): Promise<Result<null>> {
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: {
+      course: {
+        select: {
+          teacherId: true,
+          enrollments: { where: { studentId: actor.userId }, select: { id: true }, take: 1 },
+        },
+      },
+    },
+  });
+  if (!session) return failure("NOT_FOUND", "Session not found.");
+  if (actor.role === "TEACHER" && session.course.teacherId === actor.userId) return success(null);
+  if (actor.role === "STUDENT" && session.course.enrollments.length > 0) return success(null);
+  return failure("FORBIDDEN", "You do not have access to this session.");
+}
+
+export async function listAttendance(
+  actor: Actor,
+  input: { courseId?: string; sessionId?: string; studentId?: string; from?: string; to?: string; status?: AttendanceView["status"] },
+): Promise<Result<{ records: AttendanceView[] }>> {
+  if (actor.role !== "TEACHER" && actor.role !== "STUDENT") return failure("FORBIDDEN", "You do not have permission to view attendance.");
+  const parsed = attendanceListInput.safeParse(input);
+  if (!parsed.success || (parsed.data.from && parsed.data.to && !validRange(parsed.data.from, parsed.data.to))) {
+    return failure("VALIDATION", "Enter valid attendance filters.");
+  }
+  try {
+    if (parsed.data.courseId) {
+      const access = await canReadCourse(actor, parsed.data.courseId);
+      if (!access.ok) return access;
+    }
+    if (parsed.data.sessionId) {
+      const access = await canReadSession(actor, parsed.data.sessionId);
+      if (!access.ok) return access;
+    }
+    const records = await prisma.attendance.findMany({
+      where: {
+        studentId: actor.role === "STUDENT" ? actor.userId : parsed.data.studentId,
+        status: parsed.data.status,
+        sessionId: parsed.data.sessionId,
+        session: {
+          courseId: parsed.data.courseId,
+          startAt: parsed.data.from || parsed.data.to
+            ? { gte: parsed.data.from ? new Date(parsed.data.from) : undefined, lt: parsed.data.to ? new Date(parsed.data.to) : undefined }
+            : undefined,
+          course: actor.role === "TEACHER"
+            ? { teacherId: actor.userId }
+            : { enrollments: { some: { studentId: actor.userId } } },
+        },
+      },
+      include: { student: { select: { name: true } }, session: { select: { courseId: true, startAt: true } } },
+      orderBy: [{ session: { startAt: "asc" } }, { id: "asc" }],
+      take: limit,
+    });
+    return success({ records: records.map((record) => ({
+      id: record.id,
+      sessionId: record.sessionId,
+      courseId: record.session.courseId,
+      sessionStartAt: record.session.startAt.toISOString(),
+      studentId: record.studentId,
+      studentName: record.student.name,
+      status: record.status,
+      markedAt: record.markedAt.toISOString(),
+    })) });
+  } catch {
+    return failure("INTERNAL", "Could not load attendance. Please try again.");
+  }
+}
+
+export async function listDeductions(
+  actor: Actor,
+  input: { courseId?: string; sessionId?: string; studentId?: string },
+): Promise<Result<{ records: DeductionView[] }>> {
+  if (actor.role !== "TEACHER" && actor.role !== "STUDENT") return failure("FORBIDDEN", "You do not have permission to view deductions.");
+  const parsed = deductionListInput.safeParse(input);
+  if (!parsed.success) return failure("VALIDATION", "Enter valid deduction filters.");
+  try {
+    if (parsed.data.courseId) {
+      const access = await canReadCourse(actor, parsed.data.courseId);
+      if (!access.ok) return access;
+    }
+    if (parsed.data.sessionId) {
+      const access = await canReadSession(actor, parsed.data.sessionId);
+      if (!access.ok) return access;
+    }
+    const records = await prisma.deduction.findMany({
+      where: {
+        courseId: parsed.data.courseId,
+        sessionId: parsed.data.sessionId,
+        studentId: actor.role === "STUDENT" ? actor.userId : parsed.data.studentId,
+        course: actor.role === "TEACHER"
+          ? { teacherId: actor.userId }
+          : { enrollments: { some: { studentId: actor.userId } } },
+      },
+      include: { student: { select: { name: true } } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: limit,
+    });
+    return success({ records: records.map((record) => ({
+      id: record.id,
+      sessionId: record.sessionId,
+      courseId: record.courseId,
+      studentId: record.studentId,
+      studentName: record.student.name,
+      amountCents: record.amountCents,
+      reason: record.reason,
+      createdAt: record.createdAt.toISOString(),
+    })) });
+  } catch {
+    return failure("INTERNAL", "Could not load deductions. Please try again.");
   }
 }
 

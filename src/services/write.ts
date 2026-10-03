@@ -3,9 +3,13 @@ import {
   AddStudentInput as AddStudentInputSchema,
   CreateCourseInput as CreateCourseInputSchema,
   CreateSessionsInput as CreateSessionsInputSchema,
+  ConfirmAttendanceInput as ConfirmAttendanceInputSchema,
   type AddStudentInput,
+  type AttendanceView,
+  type ConfirmAttendanceInput,
   type CreateCourseInput,
   type CreateSessionsInput,
+  type DeductionView,
   err,
   ok,
   type Result,
@@ -14,6 +18,53 @@ import {
 import type { Actor } from "@/lib/auth/actor";
 import { prisma } from "@/lib/db/prisma";
 import { checkConflicts } from "@/services/read";
+
+const attendanceSessionInclude = {
+  course: {
+    select: {
+      id: true,
+      teacherId: true,
+      pricePerSessionCents: true,
+      enrollments: { select: { studentId: true } },
+    },
+  },
+  attendance: { include: { student: { select: { name: true } } }, orderBy: [{ studentId: "asc" }] },
+  deductions: { include: { student: { select: { name: true } } }, orderBy: [{ studentId: "asc" }] },
+} satisfies Prisma.SessionInclude;
+
+type AttendanceSessionSnapshot = Prisma.SessionGetPayload<{ include: typeof attendanceSessionInclude }>;
+
+function attendanceViews(session: AttendanceSessionSnapshot): AttendanceView[] {
+  return session.attendance.map((record) => ({
+    id: record.id,
+    sessionId: record.sessionId,
+    courseId: session.courseId,
+    sessionStartAt: session.startAt.toISOString(),
+    studentId: record.studentId,
+    studentName: record.student.name,
+    status: record.status,
+    markedAt: record.markedAt.toISOString(),
+  }));
+}
+
+function deductionViews(session: AttendanceSessionSnapshot): DeductionView[] {
+  return session.deductions.map((record) => ({
+    id: record.id,
+    sessionId: record.sessionId,
+    courseId: record.courseId,
+    studentId: record.studentId,
+    studentName: record.student.name,
+    amountCents: record.amountCents,
+    reason: record.reason,
+    createdAt: record.createdAt.toISOString(),
+  }));
+}
+
+function sameAttendance(session: AttendanceSessionSnapshot, records: ConfirmAttendanceInput["records"]): boolean {
+  if (session.attendance.length !== records.length) return false;
+  const submitted = new Map(records.map((record) => [record.studentId, record.status]));
+  return session.attendance.every((record) => submitted.get(record.studentId) === record.status);
+}
 
 export async function createCourse(
   actor: Actor,
@@ -171,5 +222,107 @@ export async function createSessions(
     return ok({ sessionIds: sessions.map(({ id }) => id) });
   } catch {
     return err("INTERNAL", "Could not schedule sessions. Please try again.");
+  }
+}
+
+export async function confirmAttendance(
+  actor: Actor,
+  input: ConfirmAttendanceInput,
+): Promise<Result<{ attendance: AttendanceView[]; deductions: DeductionView[]; sessionStatus: "COMPLETED" }>> {
+  if (actor.role !== "TEACHER") return err("FORBIDDEN", "Only teachers can confirm attendance.");
+  const parsed = ConfirmAttendanceInputSchema.safeParse(input);
+  if (!parsed.success) return err("VALIDATION", "Enter valid attendance details.");
+  const submitted = parsed.data.records;
+  if (new Set(submitted.map((record) => record.studentId)).size !== submitted.length) {
+    return err("VALIDATION", "Each student can appear only once in attendance.");
+  }
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      let session = await tx.session.findUnique({ where: { id: parsed.data.sessionId }, include: attendanceSessionInclude });
+      if (!session) return err("NOT_FOUND", "Session not found.");
+      if (session.course.teacherId !== actor.userId) return err("FORBIDDEN", "You do not have access to this session.");
+
+      if (session.status === "COMPLETED" && session.attendance.length > 0) {
+        if (!sameAttendance(session, submitted)) {
+          return err("CONFLICT", "Attendance has been submitted and cannot be changed yet.");
+        }
+        return ok({ attendance: attendanceViews(session), deductions: deductionViews(session), sessionStatus: "COMPLETED" as const });
+      }
+      if (session.status !== "SCHEDULED" && session.status !== "RESCHEDULED") {
+        return err("CONFLICT", "This session is already completed or cancelled.");
+      }
+
+      const enrolledIds = new Set(session.course.enrollments.map(({ studentId }) => studentId));
+      if (submitted.some(({ studentId }) => !enrolledIds.has(studentId))) {
+        return err("VALIDATION", "Attendance contains students who are not enrolled in this course.");
+      }
+      const submittedIds = new Set(submitted.map(({ studentId }) => studentId));
+      const missingCount = [...enrolledIds].filter((studentId) => !submittedIds.has(studentId)).length;
+      if (missingCount > 0) {
+        return err("VALIDATION", `Attendance is still missing for ${missingCount} students.`);
+      }
+
+      // Claim the state transition before inserting unique attendance rows. The status update
+      // and all following writes share this transaction, so a failed insert rolls everything back.
+      const claimed = await tx.session.updateMany({
+        where: { id: session.id, status: session.status },
+        data: { status: "COMPLETED" },
+      });
+      if (claimed.count === 0) {
+        session = await tx.session.findUnique({ where: { id: session.id }, include: attendanceSessionInclude });
+        if (session?.status === "COMPLETED" && session.attendance.length > 0 && sameAttendance(session, submitted)) {
+          return ok({ attendance: attendanceViews(session), deductions: deductionViews(session), sessionStatus: "COMPLETED" as const });
+        }
+        return err("CONFLICT", "Attendance has been submitted and cannot be changed yet.");
+      }
+
+      await tx.attendance.createMany({
+        data: submitted.map(({ studentId, status }) => ({
+          sessionId: session!.id,
+          studentId,
+          status,
+          markedById: actor.userId,
+        })),
+      });
+      const deductionRecords = submitted.flatMap(({ studentId, status }) =>
+        status === "PRESENT" || status === "ABSENT"
+          ? [{
+            sessionId: session!.id,
+            studentId,
+            courseId: session!.courseId,
+            amountCents: session!.course.pricePerSessionCents,
+            reason: status,
+          }]
+          : [],
+      );
+      await tx.deduction.createMany({ data: deductionRecords });
+      await tx.sessionChange.create({
+        data: {
+          sessionId: session.id,
+          changedById: actor.userId,
+          fromStatus: session.status,
+          toStatus: "COMPLETED",
+        },
+      });
+
+      const completed = await tx.session.findUnique({ where: { id: session.id }, include: attendanceSessionInclude });
+      if (!completed) return err("INTERNAL", "Could not load the saved attendance. Please try again.");
+      return ok({ attendance: attendanceViews(completed), deductions: deductionViews(completed), sessionStatus: "COMPLETED" as const });
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      // A concurrent identical submission may win the unique (sessionId, studentId) constraint.
+      try {
+        const existing = await prisma.session.findUnique({ where: { id: parsed.data.sessionId }, include: attendanceSessionInclude });
+        if (existing?.course.teacherId === actor.userId && existing.status === "COMPLETED" && sameAttendance(existing, submitted)) {
+          return ok({ attendance: attendanceViews(existing), deductions: deductionViews(existing), sessionStatus: "COMPLETED" });
+        }
+      } catch {
+        // Fall through to the normal service error below.
+      }
+      return err("CONFLICT", "Attendance has been submitted and cannot be changed yet.");
+    }
+    return err("INTERNAL", "Could not confirm attendance. Please try again.");
   }
 }
