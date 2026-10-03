@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/actor";
-import { addExistingStudentToCourse, createCourse, createSessions } from "@/services/write";
+import { addExistingStudentToCourse, confirmAttendance, createCourse, createSessions } from "@/services/write";
 import type { ConflictView } from "@/contracts";
 
 type ActionState = { kind: "success" | "error" | null; message: string; details?: string[] };
@@ -169,5 +169,27 @@ export async function createSessionsAction(_previousState: ActionState, formData
   return {
     kind: "success",
     message: `${result.data.sessionIds.length} ${result.data.sessionIds.length === 1 ? "session" : "sessions"} scheduled.`,
+  };
+}
+
+export async function confirmAttendanceAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const sessionId = value(formData, "sessionId");
+  const studentIds = formData.getAll("studentId").filter((entry): entry is string => typeof entry === "string");
+  const records = studentIds.map((studentId) => ({
+    studentId,
+    status: value(formData, `status:${studentId}`) as "PRESENT" | "LEAVE" | "ABSENT",
+  }));
+  const result = await confirmAttendance(actor, { sessionId, records });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  const courseId = result.data.attendance[0]?.courseId;
+  if (courseId) {
+    revalidatePath(`/teacher/courses/${courseId}`);
+    revalidatePath("/teacher");
+    revalidatePath("/student");
+  }
+  return {
+    kind: "success",
+    message: `Attendance saved for ${result.data.attendance.length} ${result.data.attendance.length === 1 ? "student" : "students"}.`,
   };
 }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { requireRole } from "@/lib/auth/actor";
 import { formatLocalDate, formatLocalTime, getLocalDateKey } from "@/lib/time";
-import { getStudentWorkspace, type SessionView } from "@/services/read";
+import { getStudentWorkspace, listAttendance, type SessionView } from "@/services/read";
 
 const statusLabels = {
   SCHEDULED: "Scheduled",
@@ -21,7 +21,10 @@ export default async function Page() {
   const now = new Date();
   const timeZone = process.env.APP_TZ || "America/Vancouver";
   const to = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const result = await getStudentWorkspace(actor, { from: now.toISOString(), to: to.toISOString() });
+  const [result, attendanceResult] = await Promise.all([
+    getStudentWorkspace(actor, { from: now.toISOString(), to: to.toISOString() }),
+    listAttendance(actor, {}),
+  ]);
 
   const sessionsByDate = new Map<string, SessionView[]>();
   if (result.ok) {
@@ -122,6 +125,53 @@ export default async function Page() {
                     </ul>
                   </section>
                 ))}
+              </div>
+            )}
+          </section>
+
+          <section aria-labelledby="attendance-heading" className="space-y-4">
+            <div>
+              <h2 id="attendance-heading" className="text-xl font-semibold">Attendance history</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Your attendance for completed sessions.</p>
+            </div>
+            {!attendanceResult.ok ? (
+              <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
+                {attendanceResult.error.message}
+              </div>
+            ) : attendanceResult.data.records.length === 0 ? (
+              <div className="rounded-2xl border bg-white px-6 py-8 text-center">
+                <h3 className="font-medium">No attendance records yet</h3>
+                <p className="mt-2 text-sm text-muted-foreground">Your teacher&apos;s attendance records will appear here.</p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-xl border bg-white">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-muted-foreground">
+                    <tr>
+                      <th scope="col" className="px-5 py-3 font-medium">Date</th>
+                      <th scope="col" className="px-5 py-3 font-medium">Course</th>
+                      <th scope="col" className="px-5 py-3 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {attendanceResult.data.records.map((record) => {
+                      const courseName = result.ok
+                        ? result.data.courses.find((course) => course.id === record.courseId)?.name
+                        : undefined;
+                      return (
+                        <tr key={record.id}>
+                          <td className="px-5 py-4">{formatLocalDate(new Date(record.sessionStartAt), timeZone)}</td>
+                          <td className="px-5 py-4 font-medium">{courseName ?? "Course"}</td>
+                          <td className="px-5 py-4">
+                            <Badge variant={record.status === "ABSENT" ? "destructive" : record.status === "PRESENT" ? "secondary" : "outline"}>
+                              {record.status === "PRESENT" ? "Present" : record.status === "LEAVE" ? "Leave" : "Absent"}
+                            </Badge>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </section>

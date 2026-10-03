@@ -2,10 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AddStudentForm, CreateSessionsForm } from "@/components/teacher-course-forms";
+import { AddStudentForm, CreateSessionsForm, MarkAttendanceForm } from "@/components/teacher-course-forms";
 import { requireRole } from "@/lib/auth/actor";
 import { formatLocalDate, formatLocalTime, getLocalDateKey } from "@/lib/time";
-import { getTeacherSchedule, listMyCourses, listMyStudents, type SessionView } from "@/services/read";
+import { getTeacherSchedule, listAttendance, listDeductions, listMyCourses, listMyStudents, type SessionView } from "@/services/read";
 
 const statusLabels = {
   SCHEDULED: "Scheduled",
@@ -36,13 +36,15 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   if (!course) notFound();
 
   const timeZone = process.env.APP_TZ || "America/Vancouver";
-  const [studentsResult, scheduleResult] = await Promise.all([
+  const [studentsResult, scheduleResult, attendanceResult, deductionsResult] = await Promise.all([
     listMyStudents(actor, { courseId: id }),
     getTeacherSchedule(actor, {
       from: "1970-01-01T00:00:00.000Z",
       to: "9999-12-31T23:59:59.999Z",
       courseId: id,
     }),
+    listAttendance(actor, { courseId: id }),
+    listDeductions(actor, { courseId: id }),
   ]);
 
   const sessionsByDate = new Map<string, SessionView[]>();
@@ -153,17 +155,22 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                   </h3>
                   <ul className="divide-y">
                     {sessions.map((session) => (
-                      <li key={session.id} className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-4">
-                        <time dateTime={session.startAt} className="w-24 shrink-0 font-medium tabular-nums">
-                          {formatLocalTime(new Date(session.startAt), timeZone)}
-                        </time>
-                        <span className="min-w-32 flex-1 font-medium">
-                          {session.durationMin} min
-                          {session.location && <span className="ml-2 font-normal text-muted-foreground">· {session.location}</span>}
-                        </span>
-                        <Badge variant={session.status === "CANCELLED" ? "destructive" : session.status === "COMPLETED" ? "secondary" : "outline"}>
-                          {statusLabels[session.status]}
-                        </Badge>
+                      <li key={session.id} className="space-y-3 px-5 py-4">
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                          <time dateTime={session.startAt} className="w-24 shrink-0 font-medium tabular-nums">
+                            {formatLocalTime(new Date(session.startAt), timeZone)}
+                          </time>
+                          <span className="min-w-32 flex-1 font-medium">
+                            {session.durationMin} min
+                            {session.location && <span className="ml-2 font-normal text-muted-foreground">· {session.location}</span>}
+                          </span>
+                          <Badge variant={session.status === "CANCELLED" ? "destructive" : session.status === "COMPLETED" ? "secondary" : "outline"}>
+                            {statusLabels[session.status]}
+                          </Badge>
+                        </div>
+                        {(session.status === "SCHEDULED" || session.status === "RESCHEDULED") && studentsResult.ok && (
+                          <MarkAttendanceForm sessionId={session.id} students={studentsResult.data.students} />
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -180,11 +187,53 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           </div>
         </TabsContent>
 
-        <TabsContent value="attendance">
-          <div className="rounded-2xl border bg-white px-6 py-10 text-center">
-            <h2 className="font-medium">Attendance records are not available yet</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Attendance tracking will be added in a later step.</p>
+        <TabsContent value="attendance" className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Attendance</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Attendance and lesson deductions by session.</p>
           </div>
+          {!attendanceResult.ok ? (
+            <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
+              {attendanceResult.error.message}
+            </div>
+          ) : !deductionsResult.ok ? (
+            <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
+              {deductionsResult.error.message}
+            </div>
+          ) : attendanceResult.data.records.length === 0 ? (
+            <div className="rounded-2xl border bg-white px-6 py-10 text-center">
+              <h3 className="font-medium">No attendance records yet</h3>
+              <p className="mt-2 text-sm text-muted-foreground">Mark attendance for a scheduled session to see it here.</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border bg-white">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-muted-foreground">
+                  <tr>
+                    <th scope="col" className="px-5 py-3 font-medium">Session</th>
+                    <th scope="col" className="px-5 py-3 font-medium">Student</th>
+                    <th scope="col" className="px-5 py-3 font-medium">Attendance</th>
+                    <th scope="col" className="px-5 py-3 font-medium">Lesson deduction</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {attendanceResult.data.records.map((record) => {
+                    const deduction = deductionsResult.data.records.find(
+                      (item) => item.sessionId === record.sessionId && item.studentId === record.studentId,
+                    );
+                    return (
+                      <tr key={record.id}>
+                        <td className="px-5 py-4">{formatLocalDate(new Date(record.sessionStartAt), timeZone)}</td>
+                        <td className="px-5 py-4 font-medium">{record.studentName}</td>
+                        <td className="px-5 py-4">{record.status === "PRESENT" ? "Present" : record.status === "LEAVE" ? "Leave" : "Absent"}</td>
+                        <td className="px-5 py-4">{deduction ? `$${(deduction.amountCents / 100).toFixed(2)}` : "No deduction"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </section>
