@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Actor, ErrorCode, Result, Role } from "@/contracts";
+import type { Actor, ErrorCode, ProposalView, Result, Role } from "@/contracts";
 import {
   APP_TZ,
   describeInstant,
@@ -11,12 +11,18 @@ import {
 } from "../../core/time";
 import type { ToolSpec } from "../../core/types";
 import * as services from "../../services";
+import { eduProposals, sessionsDeducted } from "./proposal-types";
 
 // Tools the model can call. The actor is always injected by code: tool arguments never carry a user
 // ID or role, and unknown argument keys are ignored. Dates and times are given in the app time zone
 // and converted to UTC here, because the model must not do date or time-zone math.
 
-export type ToolResult = { ok: boolean; content: string };
+export type ToolResult = {
+  ok: boolean;
+  content: string;
+  /** Set when the call created a pending proposal, so the loop can hand it to the UI. */
+  proposal?: ProposalView;
+};
 export type Tool = ToolSpec & { run: (actor: Actor, args: unknown) => Promise<ToolResult> };
 
 const MAX_ITEMS = 50;
@@ -355,6 +361,101 @@ const getCourseMaterials = defineTool({
   },
 });
 
+
+const STATUS_LABEL = { PRESENT: "Present", LEAVE: "Leave", ABSENT: "Absent" } as const;
+const SESSION_LOOKUP_DAYS = 45;
+
+const proposeMarkAttendance = defineTool({
+  name: "proposeMarkAttendance",
+  description:
+    "Prepare an attendance proposal for one session. This does NOT record anything: the teacher must confirm it afterwards. " +
+    "Get sessionId from getTeacherSchedule and studentIds from listMyStudents. Include every student of the course, each as PRESENT, LEAVE or ABSENT. " +
+    "If the teacher did not say what happened for some student, ask before calling this.",
+  parameters: obj(
+    {
+      sessionId: { type: "string", description: "A session ID from getTeacherSchedule." },
+      records: {
+        type: "array",
+        description: "One entry per enrolled student.",
+        items: obj(
+          { studentId: { type: "string" }, status: { type: "string", enum: ["PRESENT", "LEAVE", "ABSENT"] } },
+          ["studentId", "status"],
+        ),
+      },
+    },
+    ["sessionId", "records"],
+  ),
+  schema: z.object({
+    sessionId: id,
+    records: z.array(z.object({ studentId: id, status: z.enum(["PRESENT", "LEAVE", "ABSENT"]) })).min(1),
+  }),
+  async run(actor, args) {
+    // Preflight with read-only services, so a proposal that would fail on confirmation is never created.
+    const now = Date.now();
+    const schedule = await services.getTeacherSchedule(actor, {
+      from: new Date(now - SESSION_LOOKUP_DAYS * 86_400_000).toISOString(),
+      to: new Date(now + SESSION_LOOKUP_DAYS * 86_400_000).toISOString(),
+    });
+    if (!schedule.ok) return serviceFailure(schedule.error);
+    const session = schedule.data.sessions.find((s) => s.id === args.sessionId);
+    if (!session) {
+      return failed("NOT_FOUND", `No session with that ID was found in your schedule for the last or next ${SESSION_LOOKUP_DAYS} days.`);
+    }
+    if (session.status !== "SCHEDULED" && session.status !== "RESCHEDULED") {
+      return failed("CONFLICT", "That session is already completed or cancelled, so attendance cannot be proposed.");
+    }
+    const roster = await services.listMyStudents(actor, { courseId: session.courseId });
+    if (!roster.ok) return serviceFailure(roster.error);
+
+    const names = new Map(roster.data.students.map((s) => [s.id, s.name]));
+    const submitted = args.records.map((r) => r.studentId);
+    const unknown = submitted.filter((studentId) => !names.has(studentId));
+    if (unknown.length > 0) {
+      return failed("VALIDATION", "Some studentIds are not enrolled in this course. Use listMyStudents to get the right IDs.");
+    }
+    if (new Set(submitted).size !== submitted.length) {
+      return failed("VALIDATION", "Each student can appear only once.");
+    }
+    const missing = roster.data.students.filter((s) => !submitted.includes(s.id));
+    if (missing.length > 0) {
+      return failed(
+        "VALIDATION",
+        `Attendance is still missing for: ${missing.map((s) => s.name).join(", ")}. Ask the teacher what happened for them.`,
+      );
+    }
+
+    const count = (status: "PRESENT" | "LEAVE" | "ABSENT") => args.records.filter((r) => r.status === status).length;
+    const when = describeInstant(session.startAt);
+    const summary =
+      `${session.courseName} on ${when.localDate} ${when.localTime}: ` +
+      `${count("PRESENT")} present, ${count("LEAVE")} on leave, ${count("ABSENT")} absent`;
+    const created = await eduProposals.create({
+      actor,
+      type: "MARK_ATTENDANCE",
+      payload: { sessionId: args.sessionId, records: args.records },
+      courseId: session.courseId,
+      summary,
+    });
+    if (!created.ok) return serviceFailure(created.error);
+
+    return {
+      ok: true,
+      proposal: created.data,
+      content: JSON.stringify({
+        status: "PENDING_CONFIRMATION",
+        proposalId: created.data.id,
+        summary,
+        preview: args.records.map((r) => ({
+          student: names.get(r.studentId),
+          attendance: STATUS_LABEL[r.status],
+          sessionsDeducted: sessionsDeducted(r.status),
+        })),
+        note: "Nothing has been recorded yet. Tell the teacher to review this and confirm.",
+      }),
+    };
+  },
+});
+
 // ---------- tool sets ----------
 
 const TEACHER_TOOLS: Tool[] = [
@@ -365,6 +466,7 @@ const TEACHER_TOOLS: Tool[] = [
   listDeductions,
   checkConflicts,
   getCourseMaterials,
+  proposeMarkAttendance,
 ];
 
 /** Student tools are added in S4; students never get proposal or write tools. */

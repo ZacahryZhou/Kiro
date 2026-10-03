@@ -1,4 +1,4 @@
-import type { Actor, Role } from "@/contracts";
+import type { Actor, ProposalView, Role } from "@/contracts";
 import { getSystemPrompt } from "../domain/edu/prompts";
 import { findTool, getToolsForRole } from "../domain/edu/tools";
 import { chatCompletion } from "./provider";
@@ -16,6 +16,8 @@ export type AgentInput = {
 export type AgentOutput = {
   reply: string;
   toolCalls: ToolCallLog[];
+  /** Proposals created during this run; the teacher still has to confirm them. */
+  proposals: ProposalView[];
   status: "OK" | "ERROR";
   error?: string;
 };
@@ -48,6 +50,7 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
 
   const startedAt = now().getTime();
   const toolLog: ToolCallLog[] = [];
+  const proposals: ProposalView[] = [];
 
   const finish = (reply: string, status: "OK" | "ERROR", error?: string): AgentOutput => {
     record({
@@ -59,7 +62,7 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
       error,
       createdAt: new Date(startedAt).toISOString(),
     });
-    return { reply, toolCalls: toolLog, status, error };
+    return { reply, toolCalls: toolLog, proposals, status, error };
   };
 
   const tools = getToolsForRole(input.role);
@@ -103,6 +106,7 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
       return JSON.stringify({ error: { code: "INVALID_ARGUMENTS", message: call.argsError ?? "The arguments were not valid JSON." } });
     }
     const result = await tool.run(input.actor, call.args);
+    if (result.proposal) proposals.push(result.proposal);
     log(result.ok, result.ok ? undefined : errorCode(result.content));
     return result.content;
   }

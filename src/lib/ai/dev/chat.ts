@@ -2,11 +2,13 @@
 // Run: DEV_ROLE=TEACHER DEV_USER_EMAIL=teacher1@example.test npx tsx --env-file=.env src/lib/ai/dev/chat.ts
 // (--env-file loads AI_BASE_URL, AI_API_KEY and AI_MODEL from your local .env; never commit that file.)
 // RAW=1 sends each line straight to the model with no tools, to test connectivity.
+// Commands: /pending, /confirm <id>, /discard <id>, exit.
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout, stderr } from "node:process";
 import type { Role } from "@/contracts";
 import { runAgent, type ChatTurn } from "../core/agent-loop";
 import { chatCompletion } from "../core/provider";
+import { eduProposals } from "../domain/edu/proposal-types";
 import { actorFor, findUserByEmail } from "./fake-store";
 
 const MAX_HISTORY = 10;
@@ -39,7 +41,41 @@ async function main() {
     }
     const result = await runAgent({ actor, role: role as Role, userMessage: line, history });
     const used = result.toolCalls.map((c) => `${c.name}${c.ok ? "" : ` (${c.error ?? "failed"})`} ${c.ms}ms`);
-    return used.length > 0 ? `[tools: ${used.join(", ")}]\n${result.reply}` : result.reply;
+    const blocks = [used.length > 0 ? `[tools: ${used.join(", ")}]` : "", result.reply];
+    for (const proposal of result.proposals) {
+      const lines = await eduProposals.describe(actor, proposal.id);
+      blocks.push(
+        [
+          `--- Proposal ${proposal.id} (pending, nothing has been changed yet) ---`,
+          ...(lines.ok ? lines.data.map((l) => `  ${l}`) : [`  ${proposal.summary}`]),
+          `Type /confirm ${proposal.id} to apply it, or /discard ${proposal.id}.`,
+        ].join("\n"),
+      );
+    }
+    return blocks.filter(Boolean).join("\n");
+  };
+
+  const command = async (line: string): Promise<string> => {
+    const [name, id] = line.split(/\s+/);
+    if (name === "/pending") {
+      const pending = await eduProposals.list(actor, "pending");
+      return pending.length === 0 ? "No pending proposals." : pending.map((p) => `${p.id}: ${p.summary}`).join("\n");
+    }
+    if ((name === "/confirm" || name === "/discard") && !id) return `Usage: ${name} <proposal id>`;
+    if (name === "/confirm") {
+      const result = await eduProposals.confirm(actor, id);
+      if (!result.ok) return `Error: ${result.error.message}`;
+      if (result.data.status === "failed") return `Failed: ${result.data.error?.message}`;
+      const done = result.data.result as { attendance?: unknown[]; deductions?: unknown[]; sessionStatus?: string };
+      return done.attendance
+        ? `Executed: ${done.attendance.length} attendance records, ${done.deductions?.length ?? 0} deductions, session ${done.sessionStatus}.`
+        : "Executed.";
+    }
+    if (name === "/discard") {
+      const result = await eduProposals.discard(actor, id);
+      return result.ok ? "Discarded." : `Error: ${result.error.message}`;
+    }
+    return `Unknown command ${name}. Try /pending, /confirm <id>, /discard <id> or exit.`;
   };
   const rl = createInterface({ input: stdin });
   stdout.write("> ");
@@ -48,10 +84,12 @@ async function main() {
     const line = raw.trim();
     if (line === "exit" || line === "quit") break;
     if (line !== "") {
-      const reply = await respond(line);
+      const reply = line.startsWith("/") ? await command(line) : await respond(line);
       stdout.write(`${reply}\n`);
-      history.push({ role: "user", content: line }, { role: "assistant", content: reply });
-      history.splice(0, Math.max(0, history.length - MAX_HISTORY));
+      if (!line.startsWith("/")) {
+        history.push({ role: "user", content: line }, { role: "assistant", content: reply });
+        history.splice(0, Math.max(0, history.length - MAX_HISTORY));
+      }
     }
     stdout.write("> ");
   }
