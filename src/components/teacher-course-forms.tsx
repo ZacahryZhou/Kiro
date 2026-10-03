@@ -16,9 +16,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   addStudentAction,
+  confirmAttendanceAction,
   createCourseAction,
   createSessionsAction,
 } from "@/app/(teacher)/teacher/courses/actions";
+import type { StudentView } from "@/contracts";
 
 type FormState = { kind: "success" | "error" | null; message: string; details?: string[] };
 const initialState: FormState = { kind: null, message: "" };
@@ -155,5 +157,42 @@ export function CreateSessionsForm({ courseId, timeZone }: { courseId: string; t
       <FormFeedback state={state} />
       <SubmitButton pending={pending}>Schedule sessions</SubmitButton>
     </form>
+  );
+}
+
+export function MarkAttendanceForm({ sessionId, students }: { sessionId: string; students: StudentView[] }) {
+  const [state, formAction, pending] = useActionState(confirmAttendanceAction, initialState);
+  if (students.length === 0) {
+    return <p className="text-sm text-muted-foreground">Enroll students before marking attendance.</p>;
+  }
+
+  return (
+    <details className="basis-full rounded-lg border bg-slate-50 p-4">
+      <summary className="cursor-pointer font-medium">Mark attendance</summary>
+      <form action={formAction} className="mt-4 space-y-4">
+        <input type="hidden" name="sessionId" value={sessionId} />
+        <fieldset disabled={pending} className="space-y-3">
+          <legend className="sr-only">Choose attendance for every enrolled student</legend>
+          {students.map((student) => (
+            <div key={student.id} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-center">
+              <input type="hidden" name="studentId" value={student.id} />
+              <Label htmlFor={`attendance-${sessionId}-${student.id}`}>{student.name}</Label>
+              <select
+                id={`attendance-${sessionId}-${student.id}`}
+                name={`status:${student.id}`}
+                defaultValue="PRESENT"
+                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="PRESENT">Present</option>
+                <option value="LEAVE">Leave</option>
+                <option value="ABSENT">Absent</option>
+              </select>
+            </div>
+          ))}
+        </fieldset>
+        <FormFeedback state={state} />
+        <SubmitButton pending={pending || state.kind === "success"}>Save attendance</SubmitButton>
+      </form>
+    </details>
   );
 }
