@@ -1,0 +1,30 @@
+// Every piece of text shown in the AI panel lives here (the only file to change when re-skinning).
+export const labels = {
+  title: "AI assistant",
+  teacherHint: "Try: \"Jordan came to math today and Sam is on leave\"",
+  studentHint: "Ask about your schedule, or about something in your course materials.",
+  inputLabel: "Message the assistant",
+  inputPlaceholder: "Type a message",
+  send: "Send",
+  thinking: "Thinking...",
+  you: "You",
+  assistant: "Kora",
+  failure: "Something went wrong. Please try again.",
+  sources: "Sources",
+  result: {
+    studentAdded: "added to the course",
+    studentAlreadyJoined: "was already in the course",
+    studentNotRegistered: "no student account with this email, so not added",
+    studentFailed: "could not be added",
+  },
+  proposal: {
+    heading: "Review before anything changes",
+    notChanged: "Nothing has been changed yet.",
+    confirm: "Confirm",
+    cancel: "Cancel",
+    working: "Working...",
+    done: "Done. The change has been applied.",
+    discarded: "Cancelled. Nothing was changed.",
+    failedPrefix: "Not applied: ",
+  },
+} as const;

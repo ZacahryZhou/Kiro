@@ -307,6 +307,7 @@ AI_MOCK=0
 | H0 | Zachary | v0.4: add AgentMemory table (Nick creates table only), ADD_STUDENT_NOTE proposal, MemoryKind, acceptance scenario 9, and memory seed examples | Pending |
 | H0 | Zachary | v0.2: add return types, all input types, access-control matrix, confirmation rules, API endpoints, panel integration, detailed seed data, acceptance scenarios, and new `listMyCourses` function | Pending |
 | 2026-10-03 | Project owner | Update baseline local demo logins to one teacher (`t@example.test`) and one student (`s@example.test`); keep the shared password in `prisma/seed.ts` only | Confirmed |
+| 2026-10-03 | Zachary | v0.5 (additive): `ProposalView` gains optional `preview?: string[]` (readable preview lines computed by code) so the AI panel can show per-student and per-session details. No existing field changed. | Pending |
 
 ## 15. Decision log
 **Confirmed by Zachary**

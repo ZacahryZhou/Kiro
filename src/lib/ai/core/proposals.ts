@@ -33,7 +33,7 @@ export type ConfirmOutcome = {
   error?: ServiceError;
 };
 
-export function toView(record: ProposalRecord): ProposalView {
+export function toView(record: ProposalRecord, preview?: string[]): ProposalView {
   return {
     id: record.id,
     type: record.type,
@@ -41,6 +41,7 @@ export function toView(record: ProposalRecord): ProposalView {
     payload: record.payload,
     status: record.status,
     createdAt: record.createdAt,
+    ...(preview ? { preview } : {}),
   };
 }
 
@@ -67,6 +68,17 @@ export function createProposalService(registry: ProposalRegistry, store: Proposa
     return err("CONFLICT", "This proposal is already being confirmed.");
   };
 
+  /** Preview lines for a record; a failure to build them never blocks the proposal itself. */
+  async function previewFor(actor: Actor, record: ProposalRecord): Promise<string[] | undefined> {
+    const handler = handlerFor(record.type);
+    if (!handler) return undefined;
+    try {
+      return await handler.describe(actor, record.payload);
+    } catch {
+      return undefined;
+    }
+  }
+
   return {
     /** Validates the payload, then stores a pending proposal. Business data is not touched. */
     async create(input: {
@@ -89,7 +101,7 @@ export function createProposalService(registry: ProposalRegistry, store: Proposa
         payload: parsed.data,
         summary: input.summary,
       });
-      return ok(toView(record));
+      return ok(toView(record, await previewFor(input.actor, record)));
     },
 
     async describe(actor: Actor, id: string): Promise<Result<string[]>> {
@@ -101,7 +113,8 @@ export function createProposalService(registry: ProposalRegistry, store: Proposa
     },
 
     async list(actor: Actor, status?: ProposalStatus): Promise<ProposalView[]> {
-      return (await store.listByActor(actor.userId, status)).map(toView);
+      const records = await store.listByActor(actor.userId, status);
+      return Promise.all(records.map(async (r) => toView(r, await previewFor(actor, r))));
     },
 
     /** Confirmation steps from contract section 9. Executes at most once. */

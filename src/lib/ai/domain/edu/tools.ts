@@ -2,10 +2,12 @@ import { z } from "zod";
 import type { Actor, Citation, ErrorCode, ProposalView, Result, Role } from "@/contracts";
 import {
   APP_TZ,
+  WEEKDAY_CODES,
   describeInstant,
   localDayRange,
   parseDateOnly,
   parseTimeOnly,
+  resolveSessions,
   resolveWhen,
   zonedTimeToUtc,
 } from "../../core/time";
@@ -14,7 +16,7 @@ import { chatCompletion } from "../../core/provider";
 import type { ToolSpec } from "../../core/types";
 import * as services from "../../services";
 import { materialsQaSystemPrompt } from "./prompts";
-import { eduProposals, sessionsDeducted } from "./proposal-types";
+import { eduProposals, money, sessionsDeducted } from "./proposal-types";
 
 // Tools the model can call. The actor is always injected by code: tool arguments never carry a user
 // ID or role, and unknown argument keys are ignored. Dates and times are given in the app time zone
@@ -569,6 +571,177 @@ const answerFromCourseMaterials = defineTool({
   },
 });
 
+
+const COURSE_TYPE_LABEL = { ONE_ON_ONE: "one-on-one", SMALL_CLASS: "small class" } as const;
+
+const proposeCreateCourse = defineTool({
+  name: "proposeCreateCourse",
+  description:
+    "Prepare a proposal to create a new course and add existing students to it by email. This does NOT create anything: the teacher must confirm. " +
+    "Students are added only if they already have a student account. Ask the teacher for any missing detail (name, subject, one-on-one or small class, price, student emails); never guess emails.",
+  parameters: obj(
+    {
+      name: { type: "string", description: "Course name." },
+      subject: { type: "string" },
+      type: { type: "string", enum: ["ONE_ON_ONE", "SMALL_CLASS"] },
+      pricePerSession: { type: "number", description: "Price of one session in dollars, for example 40 or 40.5. Use 0 only if the teacher says it is free." },
+      location: { type: "string" },
+      description: { type: "string" },
+      studentEmails: { type: "array", items: { type: "string" }, description: "Emails of students to add." },
+    },
+    ["name", "subject", "type", "pricePerSession"],
+  ),
+  schema: z.object({
+    name: z.string().trim().min(1).max(80),
+    subject: z.string().trim().min(1).max(40),
+    type: z.enum(["ONE_ON_ONE", "SMALL_CLASS"]),
+    pricePerSession: z.number().min(0).max(100_000),
+    location: z.string().max(120).optional(),
+    description: z.string().max(500).optional(),
+    studentEmails: z.array(z.string().trim().toLowerCase().email()).max(30).default([]),
+  }),
+  async run(actor, args) {
+    if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers can create courses.");
+    const existing = await services.listMyCourses(actor);
+    if (!existing.ok) return serviceFailure(existing.error);
+
+    const warnings: string[] = [];
+    if (existing.data.courses.some((c) => c.name.toLowerCase() === args.name.toLowerCase())) {
+      warnings.push(`You already have a course named "${args.name}". Tell the teacher and let them decide.`);
+    }
+    const pricePerSessionCents = Math.round(args.pricePerSession * 100); // code converts dollars to cents
+    if (pricePerSessionCents === 0) warnings.push("The price per session is 0, so no money will be deducted per session. Mention this to the teacher.");
+    const studentEmails = [...new Set(args.studentEmails)];
+
+    const summary = `Create "${args.name}" (${COURSE_TYPE_LABEL[args.type]}, ${args.subject}) with ${studentEmails.length} ${studentEmails.length === 1 ? "student" : "students"}`;
+    const created = await eduProposals.create({
+      actor,
+      type: "CREATE_COURSE",
+      payload: {
+        course: { name: args.name, subject: args.subject, type: args.type, location: args.location, description: args.description, pricePerSessionCents },
+        studentEmails,
+      },
+      summary,
+    });
+    if (!created.ok) return serviceFailure(created.error);
+    return {
+      ok: true,
+      proposal: created.data,
+      content: JSON.stringify({
+        status: "PENDING_CONFIRMATION",
+        proposalId: created.data.id,
+        summary,
+        pricePerSession: money(pricePerSessionCents),
+        studentEmails,
+        ...(warnings.length > 0 ? { warnings } : {}),
+        note: "Nothing has been created yet. Tell the teacher to review this and confirm. Students without a registered account will be reported after confirmation.",
+      }),
+    };
+  },
+});
+
+const weekdayEnum = z.enum(WEEKDAY_CODES);
+
+const proposeCreateSessions = defineTool({
+  name: "proposeCreateSessions",
+  description:
+    "Prepare a proposal to schedule sessions for one of the teacher's courses. This does NOT create anything: the teacher must confirm. " +
+    "Describe WHEN in the teacher's own terms; the system works out exact dates and UTC times. Use either `dates`, or `weekdays` with `when` (this_week or next_week) or with `startDate` and `weeks`. " +
+    "Conflicts with the teacher's other sessions or the students' other courses are checked first; if any session conflicts, no proposal is created and you must explain which ones and ask how to adjust.",
+  parameters: obj(
+    {
+      courseId: { type: "string", description: "A course ID from listMyCourses." },
+      time: { type: "string", description: `Local start time as 24-hour HH:mm in ${APP_TZ}.` },
+      durationMin: { type: "integer", description: "Length of each session in minutes (15 to 480)." },
+      dates: { type: "array", items: { type: "string" }, description: "Specific local dates as YYYY-MM-DD." },
+      weekdays: { type: "array", items: { type: "string", enum: [...WEEKDAY_CODES] }, description: "Weekdays such as TUE and THU." },
+      when: { type: "string", enum: ["this_week", "next_week"], description: "Which week the weekdays fall in." },
+      startDate: { type: "string", description: "First day of a repeating pattern, YYYY-MM-DD (use with weekdays and weeks)." },
+      weeks: { type: "integer", description: "How many weeks the repeating pattern runs (1 to 12)." },
+      location: { type: "string" },
+    },
+    ["courseId", "time", "durationMin"],
+  ),
+  schema: z.object({
+    courseId: id,
+    time: timeText,
+    durationMin: z.number().int().min(15).max(480),
+    dates: z.array(dateText).max(30).optional(),
+    weekdays: z.array(weekdayEnum).min(1).max(7).optional(),
+    when: z.enum(["this_week", "next_week"]).optional(),
+    startDate: dateText.optional(),
+    weeks: z.number().int().min(1).max(12).optional(),
+    location: z.string().max(120).optional(),
+  }),
+  async run(actor, args) {
+    if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers can schedule sessions.");
+    const courses = await services.listMyCourses(actor);
+    if (!courses.ok) return serviceFailure(courses.error);
+    const course = courses.data.courses.find((c) => c.id === args.courseId);
+    if (!course) return failed("NOT_FOUND", "That course was not found among your courses.");
+
+    const resolved = resolveSessions(args);
+    if (!resolved.ok) return failed("INVALID_ARGUMENTS", resolved.message);
+    const past = resolved.sessions.filter((x) => Date.parse(x.startAt) < Date.now());
+    if (past.length > 0) {
+      return failed("VALIDATION", `These sessions are in the past: ${past.map((x) => `${x.localDate} ${x.localTime}`).join(", ")}. Ask the teacher for future dates.`);
+    }
+
+    // Stage 1 of the two-layer conflict check (contract section 6.3): look before creating any proposal.
+    const rows: { localDate: string; weekday: string; localTime: string; conflictsWith: { courseName: string; localDate: string; localTime: string; durationMin: number }[] }[] = [];
+    for (const x of resolved.sessions) {
+      const check = await services.checkConflicts(actor, { courseId: args.courseId, startAt: x.startAt, durationMin: args.durationMin });
+      if (!check.ok) return serviceFailure(check.error);
+      rows.push({
+        localDate: x.localDate,
+        weekday: x.weekday,
+        localTime: x.localTime,
+        conflictsWith: check.data.conflicts.map((c) => ({ courseName: c.courseName, ...pick(describeInstant(c.startAt)), durationMin: c.durationMin })),
+      });
+    }
+    const marked = rows.map((r) => ({ ...r, ok: r.conflictsWith.length === 0 }));
+    if (marked.some((r) => !r.ok)) {
+      return {
+        ok: true,
+        content: JSON.stringify({
+          status: "CONFLICTS_FOUND",
+          course: course.name,
+          sessions: marked,
+          note: "No proposal was created and nothing was scheduled. Tell the teacher which sessions conflict and with what, and ask how to adjust (for example another time or day).",
+        }),
+      };
+    }
+
+    const summary = `${course.name}: ${marked.length} ${marked.length === 1 ? "session" : "sessions"} at ${args.time}, ${args.durationMin} min each`;
+    const created = await eduProposals.create({
+      actor,
+      type: "CREATE_SESSIONS",
+      payload: {
+        courseId: args.courseId,
+        sessions: resolved.sessions.map((x) => ({ startAt: x.startAt, durationMin: args.durationMin, location: args.location })),
+      },
+      courseId: args.courseId,
+      summary,
+    });
+    if (!created.ok) return serviceFailure(created.error);
+    return {
+      ok: true,
+      proposal: created.data,
+      content: JSON.stringify({
+        status: "PENDING_CONFIRMATION",
+        proposalId: created.data.id,
+        summary,
+        sessions: marked.map((r) => ({ localDate: r.localDate, weekday: r.weekday, localTime: r.localTime, ok: true })),
+        note: "Nothing has been scheduled yet. Tell the teacher to review this and confirm.",
+      }),
+    };
+  },
+});
+
+function pick({ localDate, localTime }: { localDate: string; localTime: string }) {
+  return { localDate, localTime };
+}
+
 // ---------- tool sets ----------
 
 const TEACHER_TOOLS: Tool[] = [
@@ -580,6 +753,8 @@ const TEACHER_TOOLS: Tool[] = [
   checkConflicts,
   getCourseMaterials,
   proposeMarkAttendance,
+  proposeCreateCourse,
+  proposeCreateSessions,
 ];
 
 /** Students never get proposal, write or memory tools. */
