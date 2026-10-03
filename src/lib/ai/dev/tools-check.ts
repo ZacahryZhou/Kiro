@@ -33,11 +33,11 @@ async function run(tool: string, actor = alex, args: unknown = {}) {
 async function main() {
   // ----- tool sets -----
   const names = getToolsForRole("TEACHER").map((t) => t.name).sort();
-  check("Teacher has the 7 read-only tools plus the attendance proposal tool", JSON.stringify(names) === JSON.stringify(["checkConflicts", "getCourseMaterials", "getTeacherSchedule", "listAttendance", "listDeductions", "listMyCourses", "listMyStudents", "proposeMarkAttendance"]), names);
+  check("Teacher has the 7 read-only tools plus three proposal tools", JSON.stringify(names) === JSON.stringify(["checkConflicts", "getCourseMaterials", "getTeacherSchedule", "listAttendance", "listDeductions", "listMyCourses", "listMyStudents", "proposeCreateCourse", "proposeCreateSessions", "proposeMarkAttendance"]), names);
   check("Students get exactly two read-only tools", JSON.stringify(getToolsForRole("STUDENT").map((t) => t.name).sort()) === JSON.stringify(["answerFromCourseMaterials", "getStudentWorkspace"]));
   const schemaText = JSON.stringify(getToolsForRole("TEACHER").map((t) => t.parameters));
   check("No tool parameter is called userId or role", !/"userId"|"role"/.test(schemaText));
-  check("No tool can write directly (only proposeMarkAttendance prepares a pending proposal)", getToolsForRole("TEACHER").every((t) => !/^(create|add|confirm|reschedule|delete|update|discard)/.test(t.name)) && getToolsForRole("TEACHER").filter((t) => t.name.startsWith("propose")).length === 1);
+  check("No tool can write directly (three propose* tools only prepare pending proposals)", getToolsForRole("TEACHER").every((t) => !/^(create|add|confirm|reschedule|delete|update|discard)/.test(t.name)) && getToolsForRole("TEACHER").filter((t) => t.name.startsWith("propose")).length === 3);
 
   // ----- calendar helpers -----
   check("parseDateOnly rejects 2026-02-30", parseDateOnly("2026-02-30") === null && parseDateOnly("2026-2-3") === null && parseDateOnly("2026-02-28") !== null);

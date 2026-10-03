@@ -11,6 +11,12 @@ export const labels = {
   assistant: "Kora",
   failure: "Something went wrong. Please try again.",
   sources: "Sources",
+  result: {
+    studentAdded: "added to the course",
+    studentAlreadyJoined: "was already in the course",
+    studentNotRegistered: "no student account with this email, so not added",
+    studentFailed: "could not be added",
+  },
   proposal: {
     heading: "Review before anything changes",
     notChanged: "Nothing has been changed yet.",

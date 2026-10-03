@@ -141,3 +141,87 @@ export function describeInstant(
     weekday: WEEKDAYS[new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay()],
   };
 }
+
+// ---------- session scheduling (the model gives an intent; code produces the exact UTC times) ----------
+
+export const WEEKDAY_CODES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"] as const;
+export type WeekdayCode = (typeof WEEKDAY_CODES)[number];
+
+export type SessionPattern = {
+  time: string; // HH:mm, local
+  dates?: string[]; // explicit YYYY-MM-DD dates
+  weekdays?: WeekdayCode[];
+  when?: "this_week" | "next_week";
+  startDate?: string; // first day of the window, used with weeks
+  weeks?: number;
+};
+
+export type ResolvedSession = { localDate: string; weekday: string; localTime: string; startAt: string };
+
+const MAX_SESSIONS = 30; // contract: CreateSessionsInput allows at most 30 sessions
+const MAX_WEEKS = 12;
+
+/**
+ * Expands a scheduling intent into concrete sessions. Dates, weekdays and time-zone (including
+ * daylight-saving) conversion are all done here, never by the model.
+ */
+export function resolveSessions(
+  pattern: SessionPattern,
+  now = new Date(),
+  timeZone = APP_TZ,
+): { ok: true; sessions: ResolvedSession[] } | { ok: false; message: string } {
+  const clock = parseTimeOnly(pattern.time);
+  if (!clock) return { ok: false, message: "Use a 24-hour time as HH:mm." };
+
+  const days: DateOnly[] = [];
+  if (pattern.dates && pattern.dates.length > 0) {
+    for (const text of pattern.dates) {
+      const day = parseDateOnly(text);
+      if (!day) return { ok: false, message: `${text} is not a real date (use YYYY-MM-DD).` };
+      days.push(day);
+    }
+  } else if (pattern.weekdays && pattern.weekdays.length > 0) {
+    let start: DateOnly;
+    let length = 7;
+    if (pattern.when) {
+      const today = todayLocal(now, timeZone);
+      const dayOfWeek = new Date(Date.UTC(today.year, today.month - 1, today.day)).getUTCDay() || 7;
+      start = addDaysTo(today, -(dayOfWeek - 1) + (pattern.when === "next_week" ? 7 : 0));
+    } else if (pattern.startDate) {
+      const parsed = parseDateOnly(pattern.startDate);
+      if (!parsed) return { ok: false, message: `${pattern.startDate} is not a real date (use YYYY-MM-DD).` };
+      const weeks = pattern.weeks ?? 1;
+      if (!Number.isInteger(weeks) || weeks < 1 || weeks > MAX_WEEKS) {
+        return { ok: false, message: `weeks must be a whole number from 1 to ${MAX_WEEKS}.` };
+      }
+      start = parsed;
+      length = weeks * 7;
+    } else {
+      return { ok: false, message: "With weekdays, also give when (this_week or next_week) or startDate." };
+    }
+    const wanted = new Set<string>(pattern.weekdays);
+    for (let offset = 0; offset < length; offset += 1) {
+      const day = addDaysTo(start, offset);
+      const code = WEEKDAY_CODES[((new Date(Date.UTC(day.year, day.month - 1, day.day)).getUTCDay() + 6) % 7)];
+      if (wanted.has(code)) days.push(day);
+    }
+  } else {
+    return { ok: false, message: "Give either dates, or weekdays together with when or startDate." };
+  }
+
+  const unique = [...new Map(days.map((d) => [formatDateOnly(d), d])).values()].sort(
+    (a, b) => Date.UTC(a.year, a.month - 1, a.day) - Date.UTC(b.year, b.month - 1, b.day),
+  );
+  if (unique.length === 0) return { ok: false, message: "No dates match that pattern." };
+  if (unique.length > MAX_SESSIONS) {
+    return { ok: false, message: `That would create ${unique.length} sessions; the limit is ${MAX_SESSIONS} at a time.` };
+  }
+  return {
+    ok: true,
+    sessions: unique.map((day) => {
+      const startAt = zonedTimeToUtc({ ...day, ...clock }, timeZone).toISOString();
+      const { weekday } = describeInstant(startAt, timeZone);
+      return { localDate: formatDateOnly(day), weekday, localTime: pattern.time, startAt };
+    }),
+  };
+}

@@ -6,15 +6,16 @@ import type { ProposalView } from "@/contracts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { labels } from "@/lib/ai/domain/edu/labels";
+import { resultLines } from "./results";
 
 type State =
   | { kind: "pending" }
   | { kind: "working" }
-  | { kind: "executed" }
+  | { kind: "executed"; lines: string[] }
   | { kind: "discarded" }
   | { kind: "failed"; message: string };
 
-type ApiBody = { status?: string; error?: { message?: string } };
+type ApiBody = { status?: string; result?: unknown; error?: { message?: string } };
 
 async function post(path: string): Promise<{ ok: boolean; body: ApiBody }> {
   try {
@@ -33,7 +34,7 @@ export function ProposalCard({ proposal }: { proposal: ProposalView }) {
     setState({ kind: "working" });
     const { ok, body } = await post(`/api/ai/proposals/${proposal.id}/confirm`);
     if (ok && body.status === "executed") {
-      setState({ kind: "executed" });
+      setState({ kind: "executed", lines: resultLines(proposal.type, body.result) });
       router.refresh(); // show the new data on the page behind the panel
     } else {
       setState({ kind: "failed", message: body.error?.message ?? labels.failure });
@@ -74,11 +75,18 @@ export function ProposalCard({ proposal }: { proposal: ProposalView }) {
           </div>
         </>
       ) : null}
-      <p role="status" className="text-xs">
-        {state.kind === "executed" ? labels.proposal.done : null}
-        {state.kind === "discarded" ? labels.proposal.discarded : null}
-        {state.kind === "failed" ? `${labels.proposal.failedPrefix}${state.message}` : null}
-      </p>
+      <div role="status" className="text-xs">
+        {state.kind === "executed" ? <p>{labels.proposal.done}</p> : null}
+        {state.kind === "executed" && state.lines.length > 0 ? (
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground">
+            {state.lines.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        ) : null}
+        {state.kind === "discarded" ? <p>{labels.proposal.discarded}</p> : null}
+        {state.kind === "failed" ? <p>{`${labels.proposal.failedPrefix}${state.message}`}</p> : null}
+      </div>
     </section>
   );
 }

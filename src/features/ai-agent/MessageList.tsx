@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import type { Citation, ProposalView } from "@/contracts";
 import { Badge } from "@/components/ui/badge";
 import { labels } from "@/lib/ai/domain/edu/labels";
@@ -12,6 +15,11 @@ export type PanelMessage = {
 };
 
 export function MessageList({ messages, busy }: { messages: PanelMessage[]; busy: boolean }) {
+  const end = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    end.current?.scrollIntoView?.({ block: "end" }); // keep the newest message in view
+  }, [messages, busy]);
+
   return (
     <div className="flex-1 space-y-3 overflow-y-auto p-3" role="log" aria-live="polite" aria-label={labels.title}>
       {messages.map((message) => (
@@ -44,6 +52,7 @@ export function MessageList({ messages, busy }: { messages: PanelMessage[]; busy
         </div>
       ))}
       {busy ? <p className="text-sm text-muted-foreground">{labels.thinking}</p> : null}
+      <div ref={end} />
     </div>
   );
 }
