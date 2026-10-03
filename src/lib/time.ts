@@ -90,10 +90,10 @@ export function formatLocalDate(date: Date, timeZone = process.env.APP_TZ || "Am
 }
 
 export function formatLocalTime(date: Date, timeZone = process.env.APP_TZ || "America/Vancouver"): string {
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat("en-US", {
     timeZone,
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
-    hourCycle: "h23",
+    hourCycle: "h12",
   }).format(date);
 }
