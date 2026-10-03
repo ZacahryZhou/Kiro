@@ -61,5 +61,7 @@ export type ProposalView = {
   payload: unknown;
   status: ProposalStatus;
   createdAt: string;
+  /** Readable preview lines computed by code (added in v0.5; optional so older callers still work). */
+  preview?: string[];
 };
 export type Citation = { materialId: string; unitId: string; title: string; quote: string };
