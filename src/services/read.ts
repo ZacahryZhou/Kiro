@@ -1,63 +1,19 @@
 import { z } from "zod";
+import { CheckConflictsInput, type AttendanceView, type ConflictView, type CourseView, type SessionView, type StudentView, type UnitView, type Result, err, ok } from "@/contracts";
 import type { Actor } from "@/lib/auth/actor";
 import { prisma } from "@/lib/db/prisma";
 
-export type ErrorCode =
-  | "UNAUTHENTICATED"
-  | "FORBIDDEN"
-  | "NOT_FOUND"
-  | "VALIDATION"
-  | "CONFLICT"
-  | "INTERNAL";
-export type ServiceError = { code: ErrorCode; message: string; details?: unknown };
-export type Result<T> = { ok: true; data: T } | { ok: false; error: ServiceError };
-export type CourseView = {
-  id: string;
-  name: string;
-  subject: string;
-  type: "ONE_ON_ONE" | "SMALL_CLASS";
-  location?: string;
-  description?: string;
-  teacherName: string;
-  studentCount: number;
-};
-export type SessionView = {
-  id: string;
-  courseId: string;
-  courseName: string;
-  startAt: string;
-  durationMin: number;
-  location?: string;
-  linkUrl?: string;
-  status: "SCHEDULED" | "RESCHEDULED" | "CANCELLED" | "COMPLETED";
-  originalStartAt?: string;
-};
-export type StudentView = { id: string; name: string; email: string };
-export type AttendanceView = {
-  id: string;
-  sessionId: string;
-  courseId: string;
-  sessionStartAt: string;
-  studentId: string;
-  studentName: string;
-  status: "PRESENT" | "LEAVE" | "ABSENT";
-  markedAt: string;
-};
-export type MaterialView = {
-  id: string;
-  unitId: string;
-  title: string;
-  kind: "TEXT" | "LINK";
-  content?: string;
-  url?: string;
-};
-export type UnitView = {
-  id: string;
-  courseId: string;
-  title: string;
-  order: number;
-  materials: MaterialView[];
-};
+export type {
+  AttendanceView,
+  ConflictView,
+  CourseView,
+  ErrorCode,
+  Result,
+  ServiceError,
+  SessionView,
+  StudentView,
+  UnitView,
+} from "@/contracts";
 
 const limit = 200;
 const id = z.string().min(1);
@@ -68,13 +24,8 @@ const dateRange = z.object({
 const scheduleInput = dateRange.extend({ courseId: id.optional() });
 const courseInput = z.object({ courseId: id });
 
-function success<T>(data: T): Result<T> {
-  return { ok: true, data };
-}
-
-function failure<T>(code: ErrorCode, message: string): Result<T> {
-  return { ok: false, error: { code, message } };
-}
+const success = ok;
+const failure = err;
 
 function validRange(from: string, to: string): boolean {
   return Date.parse(from) < Date.parse(to);
@@ -314,5 +265,91 @@ export async function getStudentWorkspace(
     });
   } catch {
     return failure("INTERNAL", "Could not load the student workspace. Please try again.");
+  }
+}
+
+function overlaps(startA: Date, durationAMin: number, startB: Date, durationBMin: number): boolean {
+  const endA = startA.getTime() + durationAMin * 60_000;
+  const endB = startB.getTime() + durationBMin * 60_000;
+  return startA.getTime() < endB && endA > startB.getTime();
+}
+
+export async function checkConflicts(
+  actor: Actor,
+  input: z.input<typeof CheckConflictsInput>,
+): Promise<Result<{ conflicts: ConflictView[] }>> {
+  if (actor.role !== "TEACHER") return failure("FORBIDDEN", "Only teachers can check schedule conflicts.");
+  const parsed = CheckConflictsInput.safeParse(input);
+  if (!parsed.success) return failure("VALIDATION", "Enter a valid course, start time, and duration.");
+
+  try {
+    const course = await prisma.course.findUnique({
+      where: { id: parsed.data.courseId },
+      select: { id: true, teacherId: true, name: true },
+    });
+    if (!course) return failure("NOT_FOUND", "Course not found.");
+    if (course.teacherId !== actor.userId) return failure("FORBIDDEN", "You do not have access to this course.");
+
+    const startAt = new Date(parsed.data.startAt);
+    const [teacherSessions, enrollments] = await Promise.all([
+      prisma.session.findMany({
+        where: {
+          status: { not: "CANCELLED" },
+          id: parsed.data.excludeSessionId ? { not: parsed.data.excludeSessionId } : undefined,
+          course: { teacherId: actor.userId },
+        },
+        include: { course: { select: { name: true } } },
+      }),
+      prisma.enrollment.findMany({
+        where: { courseId: course.id },
+        select: { studentId: true },
+        orderBy: { studentId: "asc" },
+      }),
+    ]);
+
+    const studentIds = enrollments.map(({ studentId }) => studentId);
+    const studentSessions = studentIds.length
+      ? await prisma.session.findMany({
+          where: {
+            status: { not: "CANCELLED" },
+            id: parsed.data.excludeSessionId ? { not: parsed.data.excludeSessionId } : undefined,
+            courseId: { not: course.id },
+            course: { enrollments: { some: { studentId: { in: studentIds } } } },
+          },
+          include: {
+            course: {
+              select: {
+                name: true,
+                enrollments: { where: { studentId: { in: studentIds } }, select: { studentId: true } },
+              },
+            },
+          },
+        })
+      : [];
+
+    const conflicts = new Map<string, ConflictView>();
+    for (const session of teacherSessions) {
+      if (!overlaps(startAt, parsed.data.durationMin, session.startAt, session.durationMin)) continue;
+      conflicts.set(session.id, {
+        sessionId: session.id,
+        courseName: session.course.name,
+        startAt: session.startAt.toISOString(),
+        durationMin: session.durationMin,
+      });
+    }
+    for (const session of studentSessions) {
+      if (!overlaps(startAt, parsed.data.durationMin, session.startAt, session.durationMin)) continue;
+      const sharedStudentId = session.course.enrollments[0]?.studentId;
+      conflicts.set(session.id, {
+        sessionId: session.id,
+        courseName: session.course.name,
+        startAt: session.startAt.toISOString(),
+        durationMin: session.durationMin,
+        withStudentId: sharedStudentId,
+      });
+    }
+    return success({ conflicts: [...conflicts.values()].sort((a, b) => a.startAt.localeCompare(b.startAt)) });
+  } catch {
+    return failure("INTERNAL", "Could not check schedule conflicts. Please try again.");
   }
 }
