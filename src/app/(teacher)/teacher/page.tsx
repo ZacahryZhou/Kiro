@@ -45,7 +45,13 @@ export default async function Page({
             {weekOffset === 0 ? "This week" : "Next week"} · {startLabel} – {endLabel}
           </p>
         </div>
-        <nav aria-label="Choose schedule week" className="flex gap-2">
+        <nav aria-label="Teacher workspace navigation" className="flex flex-wrap gap-2">
+          <Link
+            href="/teacher/courses"
+            className="inline-flex h-9 items-center justify-center rounded-md border bg-background px-4 text-sm font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Manage courses
+          </Link>
           <Link
             href="/teacher"
             className={`inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${weekOffset === 0 ? "bg-primary text-primary-foreground" : "border bg-background hover:bg-accent"}`}
