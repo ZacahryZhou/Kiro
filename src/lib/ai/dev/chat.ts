@@ -37,7 +37,9 @@ async function main() {
       const result = await chatCompletion({ messages: [...history, { role: "user", content: line }] });
       return result.ok ? (result.data.content ?? "(empty reply)") : `Error: ${result.error.message}`;
     }
-    return (await runAgent({ actor, role: role as Role, userMessage: line, history })).reply;
+    const result = await runAgent({ actor, role: role as Role, userMessage: line, history });
+    const used = result.toolCalls.map((c) => `${c.name}${c.ok ? "" : ` (${c.error ?? "failed"})`} ${c.ms}ms`);
+    return used.length > 0 ? `[tools: ${used.join(", ")}]\n${result.reply}` : result.reply;
   };
   const rl = createInterface({ input: stdin });
   stdout.write("> ");
