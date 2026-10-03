@@ -176,9 +176,9 @@ async function main() {
     const { record } = setup();
     const model = scripted([text("I can't look that up yet.")]);
     const out = await ask(jordan, "What are my grades?", { chatCompletion: model.fn, record });
-    check("Students get no tools", out.status === "OK" && model.requests[0].tools === undefined);
+    check("Students are offered only their two tools", out.status === "OK" && model.requests[0].tools?.map((t) => t.name).sort().join() === "answerFromCourseMaterials,getStudentWorkspace");
     const system = model.requests[0].messages[0] as any;
-    check("The student prompt says there are no tools", /no tools/i.test(system.content));
+    check("The student prompt sends course-content questions to the materials tool", /answerFromCourseMaterials/.test(system.content) && /never answer such questions from your own knowledge/i.test(system.content));
   }
 
   // 11. The real provider in mock mode works through the loop.

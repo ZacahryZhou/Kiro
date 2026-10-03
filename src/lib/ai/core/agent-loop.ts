@@ -1,4 +1,4 @@
-import type { Actor, ProposalView, Role } from "@/contracts";
+import type { Actor, Citation, ProposalView, Role } from "@/contracts";
 import { getSystemPrompt } from "../domain/edu/prompts";
 import { findTool, getToolsForRole } from "../domain/edu/tools";
 import { chatCompletion } from "./provider";
@@ -18,6 +18,7 @@ export type AgentOutput = {
   toolCalls: ToolCallLog[];
   /** Proposals created during this run; the teacher still has to confirm them. */
   proposals: ProposalView[];
+  citations: Citation[];
   status: "OK" | "ERROR";
   error?: string;
 };
@@ -51,6 +52,8 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
   const startedAt = now().getTime();
   const toolLog: ToolCallLog[] = [];
   const proposals: ProposalView[] = [];
+  const citations: Citation[] = [];
+  let finalReply: string | undefined;
 
   const finish = (reply: string, status: "OK" | "ERROR", error?: string): AgentOutput => {
     record({
@@ -62,7 +65,7 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
       error,
       createdAt: new Date(startedAt).toISOString(),
     });
-    return { reply, toolCalls: toolLog, proposals, status, error };
+    return { reply, toolCalls: toolLog, proposals, citations, status, error };
   };
 
   const tools = getToolsForRole(input.role);
@@ -88,6 +91,8 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
     for (const call of toolCalls) {
       messages.push({ role: "tool", tool_call_id: call.id, content: await runToolCall(call) });
     }
+    // A tool may supply an already-verified reply (materials Q&A); it is returned as is, not rewritten.
+    if (finalReply !== undefined) return finish(finalReply, "OK");
   }
   return finish(GIVE_UP_REPLY, "ERROR", "MAX_ROUNDS");
 
@@ -105,8 +110,10 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
       log(false, "INVALID_ARGUMENTS");
       return JSON.stringify({ error: { code: "INVALID_ARGUMENTS", message: call.argsError ?? "The arguments were not valid JSON." } });
     }
-    const result = await tool.run(input.actor, call.args);
+    const result = await tool.run(input.actor, call.args, { complete });
     if (result.proposal) proposals.push(result.proposal);
+    if (result.citations) citations.push(...result.citations);
+    if (result.finalReply !== undefined && finalReply === undefined) finalReply = result.finalReply;
     log(result.ok, result.ok ? undefined : errorCode(result.content));
     return result.content;
   }

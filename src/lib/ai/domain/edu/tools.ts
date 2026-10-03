@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Actor, ErrorCode, ProposalView, Result, Role } from "@/contracts";
+import type { Actor, Citation, ErrorCode, ProposalView, Result, Role } from "@/contracts";
 import {
   APP_TZ,
   describeInstant,
@@ -9,8 +9,11 @@ import {
   resolveWhen,
   zonedTimeToUtc,
 } from "../../core/time";
+import { answerWithCitations, type CitationSource } from "../../core/citations";
+import { chatCompletion } from "../../core/provider";
 import type { ToolSpec } from "../../core/types";
 import * as services from "../../services";
+import { materialsQaSystemPrompt } from "./prompts";
 import { eduProposals, sessionsDeducted } from "./proposal-types";
 
 // Tools the model can call. The actor is always injected by code: tool arguments never carry a user
@@ -22,8 +25,14 @@ export type ToolResult = {
   content: string;
   /** Set when the call created a pending proposal, so the loop can hand it to the UI. */
   proposal?: ProposalView;
+  /** When set, the loop ends and returns this text as the reply (it is already verified by code). */
+  finalReply?: string;
+  citations?: Citation[];
 };
-export type Tool = ToolSpec & { run: (actor: Actor, args: unknown) => Promise<ToolResult> };
+export type ToolContext = { complete: typeof chatCompletion };
+export type Tool = ToolSpec & {
+  run: (actor: Actor, args: unknown, ctx?: ToolContext) => Promise<ToolResult>;
+};
 
 const MAX_ITEMS = 50;
 const MAX_MATERIAL_CHARS = 2000;
@@ -110,20 +119,20 @@ function defineTool<S extends z.ZodType>(spec: {
   description: string;
   parameters: Record<string, unknown>;
   schema: S;
-  run: (actor: Actor, args: z.infer<S>) => Promise<ToolResult>;
+  run: (actor: Actor, args: z.infer<S>, ctx: ToolContext) => Promise<ToolResult>;
 }): Tool {
   return {
     name: spec.name,
     description: spec.description,
     parameters: spec.parameters,
-    async run(actor, rawArgs) {
+    async run(actor, rawArgs, ctx = { complete: chatCompletion }) {
       try {
         if (rawArgs === null || typeof rawArgs !== "object" || Array.isArray(rawArgs)) {
           return failed("INVALID_ARGUMENTS", "The arguments must be a JSON object.");
         }
         const parsed = spec.schema.safeParse(rawArgs);
         if (!parsed.success) return invalidArguments(parsed.error);
-        return await spec.run(actor, parsed.data);
+        return await spec.run(actor, parsed.data, ctx);
       } catch {
         return failed("INTERNAL", "The tool failed unexpectedly.");
       }
@@ -456,6 +465,110 @@ const proposeMarkAttendance = defineTool({
   },
 });
 
+
+// ---------- student tools (read-only) ----------
+
+const MAX_QA_SOURCE_CHARS = 24_000;
+export const NOT_FOUND_REPLY = "I couldn't find that in the course materials.";
+
+const getStudentWorkspace = defineTool({
+  name: "getStudentWorkspace",
+  description:
+    "Get the signed-in student's own courses, sessions and attendance in a date range (default: this week). " +
+    "Use it for questions about the student's own schedule, courses or attendance.",
+  parameters: obj({ ...rangeProperties }),
+  schema: z.object({ ...rangeArgs }),
+  async run(actor, args) {
+    const range = toUtcRange(args.when || args.startDate ? args : { when: "this_week" });
+    if (range === null || range === "invalid") {
+      return failed("INVALID_ARGUMENTS", "endDate must not be before startDate.");
+    }
+    return fromService(await services.getStudentWorkspace(actor, range), (d) => {
+      const count = (status: string) => d.attendance.filter((r) => r.status === status).length;
+      return {
+        courses: capped(d.courses).items.map((c) => ({
+          courseId: c.id,
+          name: c.name,
+          subject: c.subject,
+          teacherName: c.teacherName,
+        })),
+        sessions: capped(d.sessions).items.map((s) => ({
+          sessionId: s.id,
+          courseName: s.courseName,
+          ...describeInstant(s.startAt),
+          durationMin: s.durationMin,
+          status: s.status,
+          location: s.location,
+        })),
+        attendance: {
+          summary: { present: count("PRESENT"), leave: count("LEAVE"), absent: count("ABSENT"), total: d.attendance.length },
+          records: capped(d.attendance).items.map((r) => ({
+            courseId: r.courseId,
+            sessionDate: describeInstant(r.sessionStartAt).localDate,
+            status: r.status,
+          })),
+        },
+      };
+    });
+  },
+});
+
+const answerFromCourseMaterials = defineTool({
+  name: "answerFromCourseMaterials",
+  description:
+    "Answer a question about course content using ONLY the student's course materials. Use this for every question about what a course teaches. " +
+    "The answer comes back already verified with citations; pass it on without changing it. Never answer course-content questions from your own knowledge.",
+  parameters: obj(
+    {
+      question: { type: "string", description: "The student's question, in their own words." },
+      courseId: { type: "string", description: "Limit the search to one course. Omit to search all the student's courses." },
+    },
+    ["question"],
+  ),
+  schema: z.object({ question: z.string().min(1).max(500), courseId: id.optional() }),
+  async run(actor, args, ctx) {
+    let courseIds: string[];
+    if (args.courseId) {
+      courseIds = [args.courseId];
+    } else {
+      const mine = await services.listMyCourses(actor);
+      if (!mine.ok) return serviceFailure(mine.error);
+      courseIds = mine.data.courses.map((c) => c.id);
+    }
+
+    const sources: CitationSource[] = [];
+    let size = 0;
+    for (const courseId of courseIds) {
+      const materials = await services.getCourseMaterials(actor, { courseId });
+      if (!materials.ok) return serviceFailure(materials.error);
+      for (const unit of materials.data.units) {
+        for (const m of unit.materials) {
+          if (m.kind !== "TEXT" || !m.content || size + m.content.length > MAX_QA_SOURCE_CHARS) continue;
+          size += m.content.length;
+          sources.push({ materialId: m.id, unitId: unit.id, title: m.title, content: m.content });
+        }
+      }
+    }
+
+    const answer = await answerWithCitations({
+      question: args.question,
+      sources,
+      system: materialsQaSystemPrompt(),
+      complete: ctx.complete,
+    });
+    if (!answer.found) {
+      return { ok: true, content: JSON.stringify({ found: false }), finalReply: NOT_FOUND_REPLY };
+    }
+    const titles = [...new Set(answer.citations.map((c) => c.title))];
+    return {
+      ok: true,
+      content: JSON.stringify({ found: true }),
+      finalReply: `${answer.answer}\n\nSources: ${titles.join("; ")}`,
+      citations: answer.citations,
+    };
+  },
+});
+
 // ---------- tool sets ----------
 
 const TEACHER_TOOLS: Tool[] = [
@@ -469,8 +582,8 @@ const TEACHER_TOOLS: Tool[] = [
   proposeMarkAttendance,
 ];
 
-/** Student tools are added in S4; students never get proposal or write tools. */
-const STUDENT_TOOLS: Tool[] = [];
+/** Students never get proposal, write or memory tools. */
+const STUDENT_TOOLS: Tool[] = [getStudentWorkspace, answerFromCourseMaterials];
 
 export function getToolsForRole(role: Role): Tool[] {
   return role === "TEACHER" ? TEACHER_TOOLS : STUDENT_TOOLS;
