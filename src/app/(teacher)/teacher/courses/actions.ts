@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/actor";
-import { addExistingStudentToCourse, confirmAttendance, createCourse, createSessions } from "@/services/write";
+import { addExistingStudentToCourse, addMaterial, confirmAttendance, createCourse, createCourseUnit, createSessions } from "@/services/write";
 import type { ConflictView } from "@/contracts";
 
 type ActionState = { kind: "success" | "error" | null; message: string; details?: string[] };
@@ -192,4 +192,30 @@ export async function confirmAttendanceAction(_previousState: ActionState, formD
     kind: "success",
     message: `Attendance saved for ${result.data.attendance.length} ${result.data.attendance.length === 1 ? "student" : "students"}.`,
   };
+}
+
+export async function createCourseUnitAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const courseId = value(formData, "courseId");
+  const result = await createCourseUnit(actor, { courseId, title: value(formData, "title") });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidatePath(`/teacher/courses/${courseId}`);
+  return { kind: "success", message: "Unit created successfully." };
+}
+
+export async function addMaterialAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const courseId = value(formData, "courseId");
+  const kind = value(formData, "kind");
+  const result = await addMaterial(actor, {
+    unitId: value(formData, "unitId"),
+    title: value(formData, "title"),
+    kind: kind as "TEXT" | "LINK",
+    content: kind === "TEXT" ? value(formData, "content") : undefined,
+    url: kind === "LINK" ? value(formData, "url") : undefined,
+  });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidatePath(`/teacher/courses/${courseId}`);
+  revalidatePath(`/student/courses/${courseId}`);
+  return { kind: "success", message: "Material added successfully." };
 }

@@ -2,10 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AddStudentForm, CreateSessionsForm, MarkAttendanceForm } from "@/components/teacher-course-forms";
+import { AddStudentForm, CreateSessionsForm, MarkAttendanceForm, TeacherCourseMaterials } from "@/components/teacher-course-forms";
 import { requireRole } from "@/lib/auth/actor";
 import { formatLocalDate, formatLocalTime, getLocalDateKey } from "@/lib/time";
-import { getTeacherSchedule, listAttendance, listDeductions, listMyCourses, listMyStudents, type SessionView } from "@/services/read";
+import { getCourseMaterials, getTeacherSchedule, listAttendance, listDeductions, listMyCourses, listMyStudents, type SessionView } from "@/services/read";
 
 const statusLabels = {
   SCHEDULED: "Scheduled",
@@ -36,7 +36,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   if (!course) notFound();
 
   const timeZone = process.env.APP_TZ || "America/Vancouver";
-  const [studentsResult, scheduleResult, attendanceResult, deductionsResult] = await Promise.all([
+  const [studentsResult, scheduleResult, attendanceResult, deductionsResult, materialsResult] = await Promise.all([
     listMyStudents(actor, { courseId: id }),
     getTeacherSchedule(actor, {
       from: "1970-01-01T00:00:00.000Z",
@@ -45,6 +45,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     }),
     listAttendance(actor, { courseId: id }),
     listDeductions(actor, { courseId: id }),
+    getCourseMaterials(actor, { courseId: id }),
   ]);
 
   const sessionsByDate = new Map<string, SessionView[]>();
@@ -180,11 +181,18 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           )}
         </TabsContent>
 
-        <TabsContent value="materials">
-          <div className="rounded-2xl border bg-white px-6 py-10 text-center">
-            <h2 className="font-medium">Course materials are not available yet</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Material management will be added in a later step.</p>
+        <TabsContent value="materials" className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Course materials</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Organize text lessons and helpful links into course units.</p>
           </div>
+          {!materialsResult.ok ? (
+            <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
+              {materialsResult.error.message}
+            </div>
+          ) : (
+            <TeacherCourseMaterials courseId={id} units={materialsResult.data.units} />
+          )}
         </TabsContent>
 
         <TabsContent value="attendance" className="space-y-4">

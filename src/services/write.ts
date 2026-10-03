@@ -1,14 +1,18 @@
 import { Prisma } from "@prisma/client";
 import {
   AddStudentInput as AddStudentInputSchema,
+  AddMaterialInput as AddMaterialInputSchema,
+  CreateUnitInput as CreateUnitInputSchema,
   CreateCourseInput as CreateCourseInputSchema,
   CreateSessionsInput as CreateSessionsInputSchema,
   ConfirmAttendanceInput as ConfirmAttendanceInputSchema,
   type AddStudentInput,
+  type AddMaterialInput,
   type AttendanceView,
   type ConfirmAttendanceInput,
   type CreateCourseInput,
   type CreateSessionsInput,
+  type CreateUnitInput,
   type DeductionView,
   err,
   ok,
@@ -90,6 +94,66 @@ export async function createCourse(
     return ok({ courseId: course.id });
   } catch {
     return err("INTERNAL", "Could not create the course. Please try again.");
+  }
+}
+
+export async function createCourseUnit(
+  actor: Actor,
+  input: CreateUnitInput,
+): Promise<Result<{ unitId: string }>> {
+  if (actor.role !== "TEACHER") return err("FORBIDDEN", "Only teachers can create course units.");
+  const parsed = CreateUnitInputSchema.safeParse(input);
+  if (!parsed.success) return err("VALIDATION", "Enter a valid course and unit title.");
+  try {
+    const course = await prisma.course.findUnique({
+      where: { id: parsed.data.courseId },
+      select: { id: true, teacherId: true },
+    });
+    if (!course) return err("NOT_FOUND", "Course not found.");
+    if (course.teacherId !== actor.userId) return err("FORBIDDEN", "You do not have access to this course.");
+
+    const order = parsed.data.order ?? ((await prisma.courseUnit.aggregate({
+      where: { courseId: course.id },
+      _max: { order: true },
+    }))._max.order ?? 0) + 1;
+    const unit = await prisma.courseUnit.create({
+      data: { courseId: course.id, title: parsed.data.title, order },
+      select: { id: true },
+    });
+    return ok({ unitId: unit.id });
+  } catch {
+    return err("INTERNAL", "Could not create the course unit. Please try again.");
+  }
+}
+
+export async function addMaterial(
+  actor: Actor,
+  input: AddMaterialInput,
+): Promise<Result<{ materialId: string }>> {
+  if (actor.role !== "TEACHER") return err("FORBIDDEN", "Only teachers can add course materials.");
+  const parsed = AddMaterialInputSchema.safeParse(input);
+  if (!parsed.success) return err("VALIDATION", "Enter valid material details. TEXT requires content; LINK requires a URL.");
+  try {
+    const unit = await prisma.courseUnit.findUnique({
+      where: { id: parsed.data.unitId },
+      select: { id: true, course: { select: { teacherId: true } } },
+    });
+    if (!unit) return err("NOT_FOUND", "Course unit not found.");
+    if (unit.course.teacherId !== actor.userId) return err("FORBIDDEN", "You do not have access to this course unit.");
+
+    const material = await prisma.material.create({
+      data: {
+        unitId: unit.id,
+        title: parsed.data.title,
+        kind: parsed.data.kind,
+        content: parsed.data.content,
+        url: parsed.data.url,
+      },
+      select: { id: true },
+    });
+    return ok({ materialId: material.id });
+  } catch {
+    return err("INTERNAL", "Could not add the course material. Please try again.");
   }
 }
 

@@ -15,12 +15,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  addMaterialAction,
   addStudentAction,
   confirmAttendanceAction,
   createCourseAction,
+  createCourseUnitAction,
   createSessionsAction,
 } from "@/app/(teacher)/teacher/courses/actions";
-import type { StudentView } from "@/contracts";
+import type { StudentView, UnitView } from "@/contracts";
 
 type FormState = { kind: "success" | "error" | null; message: string; details?: string[] };
 const initialState: FormState = { kind: null, message: "" };
@@ -194,5 +196,98 @@ export function MarkAttendanceForm({ sessionId, students }: { sessionId: string;
         <SubmitButton pending={pending || state.kind === "success"}>Save attendance</SubmitButton>
       </form>
     </details>
+  );
+}
+
+export function CreateCourseUnitForm({ courseId }: { courseId: string }) {
+  const [state, formAction, pending] = useActionState(createCourseUnitAction, initialState);
+  return (
+    <form action={formAction} className="space-y-3 rounded-xl border bg-white p-4 sm:flex sm:items-end sm:gap-3 sm:space-y-0">
+      <input type="hidden" name="courseId" value={courseId} />
+      <div className="flex-1 space-y-2">
+        <Label htmlFor="unit-title">New unit</Label>
+        <Input id="unit-title" name="title" maxLength={80} placeholder="e.g. Fractions and decimals" required />
+      </div>
+      <SubmitButton pending={pending}>Add unit</SubmitButton>
+      <div className="sm:basis-full"><FormFeedback state={state} /></div>
+    </form>
+  );
+}
+
+export function AddMaterialForm({ courseId, unitId }: { courseId: string; unitId: string }) {
+  const [state, formAction, pending] = useActionState(addMaterialAction, initialState);
+  return (
+    <form action={formAction} className="space-y-3 rounded-lg border bg-slate-50 p-4">
+      <input type="hidden" name="courseId" value={courseId} />
+      <input type="hidden" name="unitId" value={unitId} />
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
+        <div className="space-y-2">
+          <Label htmlFor={`material-title-${unitId}`}>Material title</Label>
+          <Input id={`material-title-${unitId}`} name="title" maxLength={80} required />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`material-kind-${unitId}`}>Type</Label>
+          <select
+            id={`material-kind-${unitId}`}
+            name="kind"
+            defaultValue="TEXT"
+            className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="TEXT">Text</option>
+            <option value="LINK">Link</option>
+          </select>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`material-content-${unitId}`}>Text content</Label>
+        <Textarea id={`material-content-${unitId}`} name="content" maxLength={20000} rows={4} />
+        <p className="text-xs text-muted-foreground">Required when the material type is Text.</p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`material-url-${unitId}`}>Link URL</Label>
+        <Input id={`material-url-${unitId}`} name="url" type="url" placeholder="https://example.com" />
+        <p className="text-xs text-muted-foreground">Required when the material type is Link.</p>
+      </div>
+      <FormFeedback state={state} />
+      <SubmitButton pending={pending}>Add material</SubmitButton>
+    </form>
+  );
+}
+
+export function TeacherCourseMaterials({ courseId, units }: { courseId: string; units: UnitView[] }) {
+  return (
+    <div className="space-y-5">
+      <CreateCourseUnitForm courseId={courseId} />
+      {units.length === 0 ? (
+        <div className="rounded-2xl border bg-white px-6 py-10 text-center">
+          <h3 className="font-medium">No units yet</h3>
+          <p className="mt-2 text-sm text-muted-foreground">Create a unit to organize text materials and links.</p>
+        </div>
+      ) : (
+        <ol className="space-y-4">
+          {units.map((unit) => (
+            <li key={unit.id} className="space-y-4 rounded-xl border bg-white p-5">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Unit {unit.order}</p>
+                <h3 className="mt-1 text-lg font-semibold">{unit.title}</h3>
+              </div>
+              {unit.materials.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No materials in this unit yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {unit.materials.map((material) => (
+                    <li key={material.id} className="rounded-lg bg-slate-50 p-3">
+                      <p className="font-medium">{material.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{material.kind === "TEXT" ? "Text" : "Link"}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <AddMaterialForm courseId={courseId} unitId={unit.id} />
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }
