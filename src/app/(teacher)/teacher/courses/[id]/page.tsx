@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AddStudentForm, CreateSessionsForm } from "@/components/teacher-course-forms";
 import { requireRole } from "@/lib/auth/actor";
 import { formatLocalDate, formatLocalTime, getLocalDateKey } from "@/lib/time";
 import { getTeacherSchedule, listMyCourses, listMyStudents, type SessionView } from "@/services/read";
@@ -96,30 +97,35 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
               {studentsResult.error.message}
             </div>
-          ) : studentsResult.data.students.length === 0 ? (
-            <div className="rounded-2xl border bg-white px-6 py-10 text-center">
-              <h3 className="font-medium">No students enrolled yet</h3>
-              <p className="mt-2 text-sm text-muted-foreground">Students enrolled in this course will appear here.</p>
-            </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border bg-white">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-muted-foreground">
-                  <tr>
-                    <th scope="col" className="px-5 py-3 font-medium">Name</th>
-                    <th scope="col" className="px-5 py-3 font-medium">Email</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {studentsResult.data.students.map((student) => (
-                    <tr key={student.id}>
-                      <td className="px-5 py-4 font-medium">{student.name}</td>
-                      <td className="px-5 py-4 text-muted-foreground">{student.email}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <AddStudentForm courseId={id} />
+              {studentsResult.data.students.length === 0 ? (
+                <div className="rounded-2xl border bg-white px-6 py-10 text-center">
+                  <h3 className="font-medium">No students enrolled yet</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">Add a registered student by email to get started.</p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-xl border bg-white">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-muted-foreground">
+                      <tr>
+                        <th scope="col" className="px-5 py-3 font-medium">Name</th>
+                        <th scope="col" className="px-5 py-3 font-medium">Email</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {studentsResult.data.students.map((student) => (
+                        <tr key={student.id}>
+                          <td className="px-5 py-4 font-medium">{student.name}</td>
+                          <td className="px-5 py-4 text-muted-foreground">{student.email}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
 
@@ -128,6 +134,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             <h2 className="text-xl font-semibold">Sessions</h2>
             <p className="mt-1 text-sm text-muted-foreground">Course sessions, shown in {timeZone}.</p>
           </div>
+          <CreateSessionsForm courseId={id} timeZone={timeZone} />
           {!scheduleResult.ok ? (
             <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
               {scheduleResult.error.message}
