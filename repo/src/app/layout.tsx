@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EduSync · 教学协作平台",
+  title: "Kora · 教学协作平台",
   description: "老师与学生的共同课堂空间",
 };
 
