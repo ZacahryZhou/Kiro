@@ -10,15 +10,15 @@ export default async function LoginPage() {
         <section className="flex flex-col justify-between bg-slate-900 p-8 text-white md:p-12">
           <p className="text-xl font-semibold tracking-tight">Kora</p>
           <div className="py-12">
-            <p className="mb-4 text-sm text-cyan-300">教学协作，从这里开始</p>
-            <h1 className="text-3xl font-semibold leading-relaxed">让每一节课，<br />都衔接得更好。</h1>
-            <p className="mt-5 text-sm leading-7 text-slate-300">老师与学生的共同课堂空间。</p>
+            <p className="mb-4 text-sm text-cyan-300">Better learning starts here</p>
+            <h1 className="text-3xl font-semibold leading-relaxed">Make every lesson<br />count.</h1>
+            <p className="mt-5 text-sm leading-7 text-slate-300">A shared learning space for teachers and students.</p>
           </div>
-          <p className="text-xs text-slate-400">Kora · 教学协作平台</p>
+          <p className="text-xs text-slate-400">Kora · Learning Collaboration</p>
         </section>
         <section className="flex flex-col justify-center p-8 md:p-12">
-          <h2 className="text-2xl font-semibold">欢迎回来</h2>
-          <p className="mb-8 mt-2 text-sm text-muted-foreground">使用邮箱和密码登录你的课堂。</p>
+          <h2 className="text-2xl font-semibold">Welcome back</h2>
+          <p className="mb-8 mt-2 text-sm text-muted-foreground">Sign in to your learning space with your email and password.</p>
           <LoginForm />
         </section>
       </div>

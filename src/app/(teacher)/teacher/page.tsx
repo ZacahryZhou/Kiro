@@ -5,10 +5,10 @@ import { formatLocalDate, formatLocalTime, getLocalDateKey, getWeekRange } from 
 import { getTeacherSchedule, type SessionView } from "@/services/read";
 
 const statusLabels = {
-  SCHEDULED: "待上课",
-  RESCHEDULED: "已改期",
-  CANCELLED: "已取消",
-  COMPLETED: "已完成",
+  SCHEDULED: "Scheduled",
+  RESCHEDULED: "Rescheduled",
+  CANCELLED: "Cancelled",
+  COMPLETED: "Completed",
 } as const;
 
 export default async function Page({
@@ -33,30 +33,30 @@ export default async function Page({
 
   const startLabel = formatLocalDate(from, timeZone);
   const lastDay = new Date(to.getTime() - 1);
-  const endLabel = new Intl.DateTimeFormat("zh-CN", { timeZone, month: "long", day: "numeric" }).format(lastDay);
+  const endLabel = new Intl.DateTimeFormat("en-US", { timeZone, month: "long", day: "numeric" }).format(lastDay);
 
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="mb-2 text-sm text-muted-foreground">教师工作台</p>
-          <h1 className="text-2xl font-semibold">课程表</h1>
+          <p className="mb-2 text-sm text-muted-foreground">Teacher Workspace</p>
+          <h1 className="text-2xl font-semibold">Schedule</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {weekOffset === 0 ? "本周" : "下周"} · {startLabel} 至 {endLabel}
+            {weekOffset === 0 ? "This week" : "Next week"} · {startLabel} – {endLabel}
           </p>
         </div>
-        <nav aria-label="切换课表周次" className="flex gap-2">
+        <nav aria-label="Choose schedule week" className="flex gap-2">
           <Link
             href="/teacher"
             className={`inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${weekOffset === 0 ? "bg-primary text-primary-foreground" : "border bg-background hover:bg-accent"}`}
           >
-            本周
+            This week
           </Link>
           <Link
             href="/teacher?week=next"
             className={`inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${weekOffset === 1 ? "bg-primary text-primary-foreground" : "border bg-background hover:bg-accent"}`}
           >
-            下周
+            Next week
           </Link>
         </nav>
       </div>
@@ -67,8 +67,8 @@ export default async function Page({
         </div>
       ) : result.data.sessions.length === 0 ? (
         <div className="rounded-2xl border bg-white px-6 py-14 text-center">
-          <h2 className="text-lg font-medium">这周还没有课程</h2>
-          <p className="mt-2 text-sm text-muted-foreground">还没有课程，可以让 AI 助手帮你建课</p>
+          <h2 className="text-lg font-medium">No sessions this week</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Ask the AI assistant to create a course when you are ready.</p>
         </div>
       ) : (
         <div className="space-y-5">
@@ -88,7 +88,7 @@ export default async function Page({
                         {formatLocalTime(new Date(session.startAt), timeZone)}
                       </time>
                       <span className="min-w-40 flex-1 font-medium">{session.courseName}</span>
-                      <span className="text-sm text-muted-foreground">{session.durationMin} 分钟</span>
+                      <span className="text-sm text-muted-foreground">{session.durationMin} min</span>
                       <Badge variant={session.status === "CANCELLED" ? "destructive" : session.status === "COMPLETED" ? "secondary" : "outline"}>
                         {statusLabels[session.status]}
                       </Badge>

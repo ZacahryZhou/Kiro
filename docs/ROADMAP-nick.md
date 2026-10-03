@@ -1,169 +1,169 @@
-# Nick 开发路线（基础产品）— 详细版
+# Nick Development Roadmap (Core Product) — Detailed
 
-> 开始前读：`CLAUDE.md`、`docs/api-contract.md`、`docs/HANDOFF.md`。名字、字段一字不差照契约。
-> 规则：一次只做一个子步骤（如 N1.2），做完验收才进下一个。每个子步骤先让 AI 给计划再写代码。
-> 每约 30 分钟 commit + push。卡住超过 30 分钟，或同一错误修两次没好 → 停下，叫 Zachary。
-> 只改自己的目录（`CLAUDE.md` §2）。契约里没有的函数/字段，先在契约 §14 登记，不要自己发明。
-> 最终网站目标：老师和学生登录后各看到自己的课表/课程/资料/出勤；AI 面板（Zachary 做）嵌在页面里。
+> Before starting, read `CLAUDE.md`, `docs/api-contract.md`, and `docs/HANDOFF.md`. Match all names and fields exactly to the contract.
+> Rule: work on one roadmap substep at a time (for example, N1.2). Verify it before moving on. Give a plan before each step.
+> Commit and push about every 30 minutes. If blocked for more than 30 minutes, or the same error remains after two attempts, stop and ask Zachary.
+> Edit only your assigned directories (see §2 of `CLAUDE.md`). If a function or field is missing from the contract, request it in §14; do not invent it.
+> Product goal: after signing in, teachers and students see their own schedules, courses, materials, and attendance; Zachary integrates the AI panel into the pages.
 
-## 目标目录结构（照这个建）
+## Target directory structure (follow this layout)
 ```
 prisma/schema.prisma  seed.ts
-src/lib/db/prisma.ts                 Prisma 单例
-src/lib/auth/                        Auth.js 配置、actor.ts（requireActor）
-src/services/read.ts  write.ts       全部服务函数（返回 Result<T>）
-src/services/helpers.ts              通用：时间重叠、权限检查（可选）
+src/lib/db/prisma.ts                 Prisma singleton
+src/lib/auth/                        Auth.js config, actor.ts (requireActor)
+src/services/read.ts  write.ts       All service functions (return Result<T>)
+src/services/helpers.ts              Shared time-overlap and access checks (optional)
 src/app/login/page.tsx
-src/app/(teacher)/layout.tsx         老师布局（这里加 <AiPanel/> 一行）
-src/app/(teacher)/teacher/page.tsx                课表
-src/app/(teacher)/teacher/courses/page.tsx        课程列表 + 新建课程
-src/app/(teacher)/teacher/courses/[id]/page.tsx   课程详情（学生/场次/资料/出勤）
-src/app/(student)/layout.tsx         学生布局（这里加 <AiPanel/> 一行）
-src/app/(student)/student/page.tsx                我的课程和课表
-src/app/(student)/student/courses/[id]/page.tsx   课程资料
-src/components/**                    通用组件
+src/app/(teacher)/layout.tsx         Teacher layout (add one <AiPanel/> line here)
+src/app/(teacher)/teacher/page.tsx                Schedule
+src/app/(teacher)/teacher/courses/page.tsx        Course list + course creation
+src/app/(teacher)/teacher/courses/[id]/page.tsx   Course details (students/sessions/materials/attendance)
+src/app/(student)/layout.tsx         Student layout (add one <AiPanel/> line here)
+src/app/(student)/student/page.tsx                My courses and schedule
+src/app/(student)/student/courses/[id]/page.tsx   Course materials
+src/components/**                    Shared components
 ```
 
 ---
 
-## N1 项目能跑起来（H0–1.5）【最容易卡，Zachary 重点盯】
+## N1 Get the project running (H0–1.5) — the easiest place to get stuck; Zachary should keep an eye on it
 
-**N1.1 建项目骨架（20 分钟）**
-- 在仓库根目录：`npx create-next-app@latest . --ts --tailwind --app --src-dir --eslint --no-turbopack`（目录里已有文件时选择保留）
-- `npx shadcn@latest init`，再加组件：`npx shadcn@latest add button input label card table dialog select tabs badge textarea`
-- 装依赖：`npm i prisma @prisma/client zod next-auth@beta bcryptjs` 和 `npm i -D @types/bcryptjs tsx`
-- 在 `package.json` 加脚本：`"db:seed": "tsx prisma/seed.ts"`、`"db:seed:demo": "tsx prisma/seed-ai.ts"`
-- 验收：`npm run dev` 能打开 localhost:3000 默认页
-- 提交并 push，**把 package.json 的所有依赖一次装齐**（之后别人不改它）
+**N1.1 Create the project scaffold (20 min)**
+- From the repository root, run `npx create-next-app@latest . --ts --tailwind --app --src-dir --eslint --no-turbopack` (keep existing files if prompted).
+- Run `npx shadcn@latest init`, then add components: `npx shadcn@latest add button input label card table dialog select tabs badge textarea`.
+- Install dependencies: `npm i prisma @prisma/client zod next-auth@beta bcryptjs` and `npm i -D @types/bcryptjs tsx`.
+- Add scripts to `package.json`: `"db:seed": "tsx prisma/seed.ts"` and `"db:seed:demo": "tsx prisma/seed-ai.ts"`.
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
+- Commit and push. **Install all package.json dependencies in this step** so other contributors do not need to change dependencies later.
 
-**N1.2 Docker 能启动（30 分钟，最容易卡）**
-- 仓库里已有 `Dockerfile`、`docker-compose.yml`、`.env.example`；复制 `.env.example` 为 `.env`
-- 先只启动数据库测试：`docker compose up db`（看到 database system is ready）
-- 再整体：`docker compose up --build`
-- 卡住就把完整报错贴给 AI，**30 分钟没通 → 叫 Zachary**
-- 验收：`docker compose up --build` 后 localhost:3000 能打开
+**N1.2 Start Docker (30 min; most likely to block)**
+- The repository includes `Dockerfile`, `docker-compose.yml`, and `.env.example`. Copy `.env.example` to `.env`.
+- Start only the database first: `docker compose up db` (wait for "database system is ready").
+- Then start the full stack: `docker compose up --build`.
+- If blocked, share the full error with the AI. **If it is still blocked after 30 minutes, ask Zachary.**
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
 
-**N1.3 数据库表（30 分钟）**
-- `npx prisma init`，把 `schema.prisma` 按契约 §2 写完整：User、Course、Enrollment、Session、SessionChange、Attendance、Deduction、CourseUnit、Material，以及 **AgentRun、AgentProposal、AgentMemory**（后三张只建表，不写函数）
-- 枚举用契约 §1.3；ID 用 `@default(cuid())`；时间字段 `DateTime`；金额 `Int`
-- 唯一约束：Enrollment(courseId,studentId)、Attendance(sessionId,studentId)、Deduction(sessionId,studentId)；Session 加索引(courseId,startAt)
+**N1.3 Database schema (30 min)**
+- Run `npx prisma init` and implement `schema.prisma` according to §2 of the contract: User, Course, Enrollment, Session, SessionChange, Attendance, Deduction, CourseUnit, Material, and **AgentRun, AgentProposal, AgentMemory** (create the last three tables only; no service functions).
+- Use the enums in §1.3 of the contract; IDs use `@default(cuid())`; fields use `DateTime`; money uses `Int`.
+- Unique constraints: Enrollment(courseId,studentId), Attendance(sessionId,studentId), Deduction(sessionId,studentId); add a Session index on (courseId,startAt).
 - `npx prisma migrate dev --name init`
-- `src/lib/db/prisma.ts` 写 Prisma 单例
-- 验收：`npx prisma studio` 能看到所有表
-- 完成后立刻 push 并在 HANDOFF 通知 Zachary（他要用 schema）
+- Implement the Prisma singleton in `src/lib/db/prisma.ts`.
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
+- Push immediately when complete and add a HANDOFF entry for Zachary (he needs the schema).
 
-**N1.4 种子账号（15 分钟）**
-- `prisma/seed.ts`：陈老师 teacher1、刘老师 teacher2、小王 student1、小李 student2、小陈 student3，邮箱 `…@example.test`，密码用 bcrypt 哈希，只写在 seed 文件里
-- 幂等（用 upsert），`NODE_ENV=production` 直接退出
-- 验收：`npm run db:seed` 跑两次，User 表仍只有 5 条
+**N1.4 Seed accounts (15 min)**
+- In `prisma/seed.ts`, create the two contract teachers and three students with `@example.test` emails. Use bcrypt hashes; keep the password only in the seed file.
+- Make the seed idempotent with upsert. Exit immediately when `NODE_ENV=production`.
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
 
-**N1.5 登录（40 分钟）**
-- Auth.js（credentials：邮箱+密码），session 里带 userId 和 role
-- `src/lib/auth/actor.ts`：`requireActor()` 从会话取出 `{userId, role}`，未登录抛重定向/返回 UNAUTHENTICATED
-- `/login` 页：邮箱、密码、登录按钮，错误提示用中文
-- 登录后跳转：TEACHER → `/teacher`，STUDENT → `/student`；访问对方区域时拒绝
-- 验收：teacher1 登录进 /teacher；student1 登录进 /student；student1 手动输入 /teacher 被拦；退出登录有按钮
-- **N1 全部完成 → push，HANDOFF 通知 Zachary。**
-
----
-
-## N2 只读函数 + 课表页（1.5–3）
-
-**N2.1 只读服务函数（`src/services/read.ts`）**，全部返回 `Result<T>`，类型从 `src/contracts/views.ts` 引用（Zachary 会推；没推之前先在本文件内按契约 §3 写同名类型，之后统一）
-- `listMyCourses(actor)`：老师=自己的课；学生=已加入的课；返回 CourseView[]（含 teacherName、studentCount）
-- `getTeacherSchedule(actor, {from,to,courseId?})`：仅老师；只含自己课程；按 startAt 升序；上限 200
-- `listMyStudents(actor, {courseId})`：仅老师且课程属于他，否则 FORBIDDEN
-- `getCourseMaterials(actor, {courseId})`：老师=自己课程；学生=已加入课程；返回 units+materials，按 order
-- `getStudentWorkspace(actor, {from,to})`：仅学生；只含本人的课程/场次/出勤
-- 权限原则：越权一律 FORBIDDEN，不泄露他人数据
-- 验收：写个简单脚本或页面调用，teacher1 能查到自己的，用 teacher2 的 actor 查 teacher1 的课程返回 FORBIDDEN
-
-**N2.2 老师课表页 `/teacher`**
-- 顶部：本周/下周切换；列表按日期分组显示场次：时间（按 `APP_TZ` 显示）、课程名、状态徽章（待上课/已改期/已取消/已完成）
-- 每个场次可点进 `/teacher/courses/[id]`
-- 空状态文案："还没有课程，可以让 AI 助手帮你建课"
-- 验收：先用 Prisma Studio 手动插入一条 Course+Session，课表页能看到
-
-**N2.3 学生页 `/student`**
-- 我的课程列表 + 即将到来的课；点课程进 `/student/courses/[id]`
-- 验收：student1 只看到自己加入的课
-
-**N2.4 老师课程详情骨架 `/teacher/courses/[id]`**
-- 用 Tabs：学生 / 场次 / 资料 / 出勤（先做学生和场次两个 tab 的只读展示，其余 tab 放占位）
-
-- **N2 完成 → push，HANDOFF 通知（H3 检查点：Zachary 把假读函数换成这里的真函数）。**
+**N1.5 Sign-in (40 min)**
+- Auth.js email/password credentials; include userId and role in the session.
+- In `src/lib/auth/actor.ts`, `requireActor()` reads `{userId, role}` from the session and redirects or returns UNAUTHENTICATED when signed out.
+- `/login` page: email, password, sign-in button, and English error messages.
+- Redirect after sign-in: TEACHER → `/teacher`, STUDENT → `/student`; deny access to the other role's area.
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
+- **After all N1 steps are complete, push and notify Zachary in HANDOFF.**
 
 ---
 
-## N3 建课、加学生、排课（3–5）
+## N2 Read-only functions and schedule pages (1.5–3)
 
-**N3.1 写服务函数（`src/services/write.ts`）**
-- `createCourse(actor, CreateCourseInput)` → `{courseId}`；仅老师；入参用 Zod 校验（Zod 来自 `src/contracts/inputs.ts`）
-- `addExistingStudentToCourse(actor, {courseId,email})` → `{enrollmentId, alreadyJoined}`；邮箱找不到学生账号 → NOT_FOUND，message「该邮箱尚未注册学生账号」；已加入 → `alreadyJoined:true`，不报错不重复
-- 冲突检查辅助函数：判断时间区间重叠（开始<对方结束 且 结束>对方开始）。范围：该老师所有课程场次 + 该课程已加入学生在其他课程的场次
-- `checkConflicts(actor, input)`（放 read.ts）→ ConflictView[]
-- `createSessions(actor, CreateSessionsInput)`：先检查每一节（含本批内部互相冲突）；任意冲突 → **全部不写**，返回 `CONFLICT` + `details: ConflictView[]`；全部通过才在事务内写入，状态 SCHEDULED
-- 验收：用脚本调用——重复加同一学生不出现两条 Enrollment；排冲突的课返回 CONFLICT 且 Session 表无新增
+**N2.1 Read services (`src/services/read.ts`)** — all return `Result<T>`; import types from `src/contracts/views.ts` (Zachary will push it; until then, define contract-matching types in this file and consolidate later).
+- `listMyCourses(actor)`: teachers get their courses; students get courses they joined; return CourseView[] including teacherName and studentCount.
+- `getTeacherSchedule(actor, {from,to,courseId?})`: teachers only; own courses only; sort by startAt ascending; limit 200.
+- `listMyStudents(actor, {courseId})`: teacher only, and the course must belong to them; otherwise FORBIDDEN.
+- `getCourseMaterials(actor, {courseId})`: teachers get their own courses; students get enrolled courses; return units and materials ordered by order.
+- `getStudentWorkspace(actor, {from,to})`: student only; return only their courses, sessions, and attendance.
+- Access rule: unauthorized requests always return FORBIDDEN without revealing other users' data.
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
 
-**N3.2 手动表单页面（基础功能，AI 之外的入口）**
-- `/teacher/courses`：课程列表 + 「新建课程」弹窗（名称、科目、类型、地点、描述、每节价格）
-- 课程详情「学生」tab：输入邮箱「添加学生」按钮；错误中文提示
-- 课程详情「场次」tab：「批量排课」表单（日期、开始时间、时长、重复几周）；有冲突时显示冲突列表，不提交
-- 验收：手动建课→加小王→排 2 节课→课表页能看到；再排一节冲突的课，页面显示冲突原因且课表未变
+**N2.2 Teacher schedule page `/teacher`**
+- Top controls: switch between this week and next week. Group sessions by date and show time (in `APP_TZ`), course name, and status badge (Scheduled/Rescheduled/Cancelled/Completed).
+- Each session links to `/teacher/courses/[id]`.
+- Empty-state message: "No sessions yet. Ask the AI assistant to create a course."
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
 
-- **N3 完成 → push，HANDOFF 通知 Zachary。**
+**N2.3 Student page `/student`**
+- Show the student's courses and upcoming sessions; course links open `/student/courses/[id]`.
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
 
----
+**N2.4 Teacher course detail skeleton `/teacher/courses/[id]`**
+- Use tabs: Students / Sessions / Materials / Attendance. Initially implement read-only Students and Sessions tabs; show placeholders in the others.
 
-## N4 点名与扣课（5–6.5）
-
-**N4.1 `confirmAttendance`（规则严格照契约 §6.1）**
-- 仅老师且场次属于其课程；场次状态须 SCHEDULED/RESCHEDULED
-- `records` 必须覆盖该课程**全部已加入学生**，缺人 → VALIDATION「还有 N 名学生未点名」
-- 事务：写 Attendance；PRESENT/ABSENT 各写 1 条 Deduction（amount=课程每节价格，reason=状态）；LEAVE 不写；场次 → COMPLETED；写一条 SessionChange
-- 重复调用且结果相同 → 返回既有结果，不重复写；已完成后提交**不同**状态 → CONFLICT「已点名，暂不支持修改」
-- `listAttendance`、`listDeductions`（read.ts）：老师=自己课程范围；学生=只返回本人
-- 验收：2 名学生一节课，点名（到、请假）→ Attendance 2 条、Deduction 1 条；再点一次 → 无新增
-
-**N4.2 点名页面**
-- 课程详情「场次」tab 里，待上课场次有「点名」按钮 → 列出所有学生，每人三选一（到课/请假/旷课），提交
-- 「出勤」tab：按场次列出每人状态和扣课记录
-- 学生页：能看到自己的出勤记录
-- 验收：手动点名一次，出勤页、学生页都能看到；再提交不会重复扣课
-
-- **N4 完成 → push，HANDOFF 通知（H6 检查点：Zachary 把假写函数换成真函数）。**
+- **After N2 is complete, push and add a HANDOFF entry (H3 checkpoint: Zachary replaces fake read services with these real services).**
 
 ---
 
-## N5 资料、改期、AI 入口（6.5–8）
+## N3 Course creation, enrollment, and scheduling (3–5)
 
-**N5.1 资料**
-- `createCourseUnit(actor, {courseId,title,order?})`、`addMaterial(actor, {unitId,title,kind,content?,url?})`；老师只能操作自己的课程
-- 课程详情「资料」tab：新建单元、在单元里添加文字资料（标题+正文）或链接
-- `/student/courses/[id]`：学生查看所有单元和资料（文字全文显示）
-- 验收：老师加一段文字资料，小王登录能看到；小陈（没加入该课）打开该课 URL → 被拒
+**N3.1 Write service functions (`src/services/write.ts`)**
+- `createCourse(actor, CreateCourseInput)` → `{courseId}`: teacher only; validate inputs with Zod from `src/contracts/inputs.ts`.
+- `addExistingStudentToCourse(actor, {courseId,email})` → `{enrollmentId, alreadyJoined}`: if no student account matches, return NOT_FOUND with "No student account is registered with this email."; if already enrolled, return `alreadyJoined:true` without duplicates.
+- Conflict helper: intervals overlap when start < other end and end > other start. Check all sessions for the teacher and sessions in other courses for students enrolled in the target course.
+- `checkConflicts(actor, input)` (in read.ts) → ConflictView[].
+- `createSessions(actor, CreateSessionsInput)`: check every session, including overlaps within the batch. If any conflict exists, write none and return `CONFLICT` with `details: ConflictView[]`. Write all sessions in a transaction only when every check passes; new status is SCHEDULED.
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
 
-**N5.2 改期（可降级）**
-- `rescheduleSession(actor, {sessionId,newStartAt})`：冲突检查排除自身；有冲突 → CONFLICT 不写；成功 → 保存 originalStartAt、状态 RESCHEDULED、写 SessionChange；不扣课
-- 场次旁「改期」按钮 + 选新时间
-- 验收：改到冲突时间被拒；改到空闲时间课表更新
+**N3.2 Manual forms (basic entry points outside AI)**
+- `/teacher/courses`: course list and a "Create course" dialog (name, subject, type, location, description, price per session).
+- Course detail Students tab: email input and an "Add student" button with English error messages.
+- Course detail Sessions tab: batch-scheduling form (date, start time, duration, number of weeks); show conflicts and do not submit when conflicts exist.
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
 
-**N5.3 AI 入口（等 Zachary 通知组件已就绪）**
-- 在 `(teacher)/layout.tsx` 和 `(student)/layout.tsx` **各加一行** `<AiPanel role="TEACHER" />` / `<AiPanel role="STUDENT" />`（来自 `src/features/ai-agent`）
-- 位置：右侧抽屉或页面底部，由你定；确认提案后页面要能刷新看到新数据（AiPanel 内部调用 `router.refresh()`）
-- 验收：登录后两个角色都能看到并打开 AI 面板
-
----
-
-## N6 收尾（8 之后）
-- 界面打磨：统一中文文案、空状态、错误提示；手机宽度也别太难看
-- `README.md`：项目简介、怎么运行（`docker compose up --build`）、演示账号邮箱（不写密码）
-- 干净环境验证：`docker compose down -v` 删数据 → `docker compose up --build` → `npm run db:seed` → 登录正常
-- 演示前跑一遍契约 §13 的 1–5 号用例
+- **After N3 is complete, push and notify Zachary in HANDOFF.**
 
 ---
 
-## 时间不够时怎么砍
-- 先砍：N5.2 改期 → N6 打磨 → N3.2 的批量排课表单（改为一次一节）
-- **不能砍**：N1（登录）、N2（只读+课表）、N3.1（建课/加学生/排课函数）、N4（点名扣课）、N5.1（资料）、N5.3（AI 入口）
-- 手动表单可以砍到只剩"建课"和"点名"两个，其余让 AI 提案代替
+## N4 Attendance and lesson deductions (5–6.5)
+
+**N4.1 `confirmAttendance` (follow contract §6.1 exactly)**
+- Teacher only; the session must belong to their course. Status must be SCHEDULED or RESCHEDULED.
+- `records` must cover **every enrolled student**. Missing students return VALIDATION: "Attendance is still missing for N students."
+- Transaction: write Attendance; create one Deduction for PRESENT/ABSENT (amount = course price per session, reason = status); create none for LEAVE; set the session to COMPLETED; write one SessionChange.
+- Repeated identical calls return the existing result without duplicate records. A different status after completion returns CONFLICT: "Attendance has been submitted and cannot be changed yet."
+- `listAttendance` and `listDeductions` (read.ts): teachers see their own courses; students see only their own records.
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
+
+**N4.2 Attendance UI**
+- In the course detail Sessions tab, add a "Mark attendance" action for scheduled sessions. List every student and offer Present / Leave / Absent choices.
+- Attendance tab: show each student's status and deduction by session.
+- Student page: show the student's attendance records.
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
+
+- **After N4 is complete, push and add a HANDOFF entry (H6 checkpoint: Zachary replaces fake write services with real services).**
+
+---
+
+## N5 Materials, rescheduling, and AI entry points (6.5–8)
+
+**N5.1 Course materials**
+- `createCourseUnit(actor, {courseId,title,order?})` and `addMaterial(actor, {unitId,title,kind,content?,url?})`: teachers may only manage their own courses.
+- Course detail Materials tab: create units and add text materials (title + body) or links.
+- `/student/courses/[id]`: students can read all units and full material text.
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
+
+**N5.2 Rescheduling (may be downgraded)**
+- `rescheduleSession(actor, {sessionId,newStartAt})`: check conflicts excluding the current session; conflicts return CONFLICT without changes; success stores originalStartAt, updates startAt, sets RESCHEDULED, and writes SessionChange. No deduction is created.
+- Add a "Reschedule" action and new-time picker beside each session.
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
+
+**N5.3 AI entry point (wait until Zachary confirms the component is ready)**
+- Add one line each to `(teacher)/layout.tsx` and `(student)/layout.tsx`: `<AiPanel role="TEACHER" />` / `<AiPanel role="STUDENT" />` (from `src/features/ai-agent`).
+- Placement: right-side drawer or bottom of the page. After confirmation, the page must refresh and show new data (`router.refresh()` is handled inside AiPanel).
+- Acceptance: `npm run dev` opens the default page at localhost:3000.
+
+---
+
+## N6 Final polish (after step 8)
+- UI polish: consistent English copy, empty states, error messages, and a usable mobile layout.
+- `README.md`: project overview, local startup instructions (`docker compose up --build`), and demo account emails (no passwords).
+- Clean-environment check: `docker compose down -v` to remove data → `docker compose up --build` → `npm run db:seed` → verify sign-in.
+- Before the demo, run acceptance scenarios 1–5 in §13 of the contract.
+
+---
+
+## What to cut if time is limited
+- Cut in this order: N5.2 rescheduling → N6 polish → simplify N3.2 batch scheduling to one session at a time.
+- **Do not cut:** N1 sign-in, N2 read-only pages, N3.1 course/enrollment/scheduling services, N4 attendance/deductions, N5.1 materials, or N5.3 AI entry point.
+- Manual forms can be reduced to just "Create Course" and "Take Attendance"; let AI proposals handle the rest.

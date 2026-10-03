@@ -81,7 +81,7 @@ export function getLocalDateKey(date: Date, timeZone = process.env.APP_TZ || "Am
 }
 
 export function formatLocalDate(date: Date, timeZone = process.env.APP_TZ || "America/Vancouver"): string {
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat("en-US", {
     timeZone,
     month: "long",
     day: "numeric",

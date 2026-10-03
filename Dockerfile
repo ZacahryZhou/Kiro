@@ -1,4 +1,4 @@
-# 开发用镜像（Nick 维护）。比赛只需本地运行，不做生产优化。
+# Development image maintained by Nick. The competition build runs locally; production optimization is out of scope.
 FROM node:22-slim
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app

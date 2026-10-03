@@ -7,12 +7,12 @@ export async function loginAction(_previous: string | null, formData: FormData) 
   const parsed = credentialsSchema.safeParse({
     email: formData.get("email"), password: formData.get("password"),
   });
-  if (!parsed.success) return "请输入有效邮箱和密码。";
+  if (!parsed.success) return "Enter a valid email address and password.";
   try {
     await signIn("credentials", { ...parsed.data, redirectTo: "/" });
   } catch (error) {
     if (error instanceof AuthError) {
-      return error.type === "CredentialsSignin" ? "邮箱或密码不正确。" : "登录失败，请稍后重试。";
+      return error.type === "CredentialsSignin" ? "The email or password is incorrect." : "Sign-in failed. Please try again.";
     }
     throw error;
   }

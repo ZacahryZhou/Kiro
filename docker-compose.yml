@@ -1,4 +1,4 @@
-# 开发用（Nick 维护）。启动：docker compose up --build  →  http://localhost:3000
+# Development setup maintained by Nick. Start with: docker compose up --build → http://localhost:3000
 services:
   db:
     image: postgres:17

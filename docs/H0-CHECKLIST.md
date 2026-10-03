@@ -1,22 +1,22 @@
-# H0 检查清单（开工前 30 分钟，按顺序）
+# H0 Checklist (first 30 minutes, in order)
 
-## 比赛前/开幕式（Zachary）
-- [ ] 记下：提交截止时间、评审时间、是否有强制主题/赛道、AI 工具和预写代码规则
-- [ ] 主题适配 10 分钟决定：不冲突照做 / 换皮（只改 `domain/edu/`，1–3h）/ 只保留 AI 核心
+## Before the competition / opening ceremony (Zachary)
+- [ ] Record the submission deadline, judging time, required theme or track, and rules for AI tools and prewritten code.
+- [ ] Spend 10 minutes deciding how to adapt to the theme: proceed if compatible / reskin by changing only `domain/edu/` (1–3 hours) / keep only the AI core.
 
-## 本机环境（两人各自）
-- [ ] 装好 Docker Desktop，`docker --version` 有输出
-- [ ] 提前拉镜像：`docker pull postgres:17`、`docker pull node:22-slim`
-- [ ] Node 22、Git、VSCode 就绪；DeepSeek key 放进本机 `.env`（不进 Git）
-- [ ] 手机热点备用
+## Local environment (each person)
+- [ ] Install Docker Desktop and confirm `docker --version` prints a version.
+- [ ] Pull images in advance: `docker pull postgres:17` and `docker pull node:22-slim`.
+- [ ] Have Node 22, Git, and VS Code ready. Put the DeepSeek key in the local `.env` file (never in Git).
+- [ ] Keep a phone hotspot available as a backup.
 
-## 仓库（Nick 建，Zachary 拉）
-- [ ] 建 GitHub 仓库（公开），把 zip 里的文件放进去：`CLAUDE.md`、`docs/*`、`.gitignore`、`.prettierrc`、`.env.example`、`Dockerfile`、`docker-compose.yml`
-- [ ] 先提交 `.gitignore`、`.prettierrc`，再提交其他文件（git add 前确认没有 `.env`）
-- [ ] 建分支：`nick/core`、`zachary/ai-agent`
-- [ ] 两人核对 `docs/api-contract.md` 的"待 Nick 确认"项（§15 的 6–10），确认后冻结，在 §14 记一条
+## Repository (Nick creates it; Zachary clones it)
+- [ ] Create a public GitHub repository and add the files from the ZIP: `CLAUDE.md`, `docs/*`, `.gitignore`, `.prettierrc`, `.env.example`, `Dockerfile`, and `docker-compose.yml`.
+- [ ] Commit `.gitignore` and `.prettierrc` first, then commit the remaining files. Confirm `.env` is not staged before running `git add`.
+- [ ] Create the `nick/core` and `zachary/ai-agent` branches.
+- [ ] Review the items marked "Pending Nick's confirmation" in §15 (items 6–10) of `docs/api-contract.md`. Freeze them after agreement and record the decision in §14.
 
-## 开工
-- [ ] 各自把"开场 prompt"（docs/PROMPTS.md）贴给自己的 AI
-- [ ] Nick 开始 N1，Zachary 开始 S1
-- [ ] 每约 30 分钟 push；H3、H6 检查点停下来对一次
+## Start work
+- [ ] Each person gives their AI the relevant opening prompt from `docs/PROMPTS.md`.
+- [ ] Nick starts N1; Zachary starts S1.
+- [ ] Push about every 30 minutes. Pause and coordinate at the H3 and H6 checkpoints.

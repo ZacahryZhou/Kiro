@@ -10,8 +10,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: { signIn: "/login" },
   providers: [Credentials({
     credentials: {
-      email: { label: "邮箱", type: "email" },
-      password: { label: "密码", type: "password" },
+      email: { label: "Email", type: "email" },
+      password: { label: "Password", type: "password" },
     },
     async authorize(credentials) {
       const parsed = credentialsSchema.safeParse(credentials);
@@ -28,7 +28,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     session({ session, token }) {
       if (!token.sub || (token.role !== "TEACHER" && token.role !== "STUDENT")) {
-        throw new Error("登录会话无效。");
+        throw new Error("Invalid sign-in session.");
       }
       session.user.id = token.sub;
       session.user.role = token.role;
