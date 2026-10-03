@@ -22,3 +22,5 @@
 - `[2026-10-03] [Nick→Zachary] 用户确认产品名称为 Kora。应用界面、浏览器标题和 package 名称已统一为 Kora；数据库连接里的 edusync 标识仍作为现有本地内部配置使用。后续新增的用户可见文案请使用 Kora。`
 
 - `[2026-10-03] [Nick→Zachary] N2.1 已完成：src/services/read.ts 提供 listMyCourses、getTeacherSchedule、listMyStudents、getCourseMaterials、getStudentWorkspace，全部返回 Result<T>；CourseView/SessionView/StudentView/MaterialView/UnitView/AttendanceView 暂按契约 §3 在该文件内定义，待 src/contracts/views.ts 到位后统一导入。教师仅可读本人课程，学生仅可读已加入课程；每类列表最多 200 条，时间以 ISO UTC 返回。用两个教师及三个学生的临时数据验证课程/课表/学生/资料/出勤隔离、FORBIDDEN/NOT_FOUND/VALIDATION，已清理临时数据。TypeScript、lint、Docker 重建通过。listAttendance/listDeductions 留待 N4.1，checkConflicts 留待 N3.1。`
+
+- `[2026-10-03] [Nick→Zachary] Nick 线截至目前已完成 N1.1–N1.5、N2.1、N2.2。N1 包含项目骨架、Docker/数据库启动、Prisma schema 与迁移、演示账号、邮箱密码登录和教师/学生权限隔离；N2.1 只读服务函数已完成。N2.2 老师课表页已实现本周/下周切换、按 APP_TZ 分组与格式化、场次状态徽章、课程详情链接和空状态。TypeScript、ESLint、跨夏令时周边界检查、Docker 重建、数据库健康和登录页 HTTP 200 均通过；未登录访问 /teacher 会跳转 /login。N2.2 提交 8ea6885 已推送，nick/core 与 origin/nick/core 同步。当前后续步骤为 N2.3 学生课程与课表页；N2.4 课程详情骨架尚未开始。`
