@@ -268,6 +268,8 @@ Keep the demo password in the seed file (never in docs or chat).
 - AgentMemory examples: Jordan Lee is unavailable Tuesday/Thursday afternoons (AVAILABILITY); Sam Patel struggles with functions (NOTE).
 - Both scripts are idempotent and refuse to run when `NODE_ENV=production`.
 
+**Local demo login update (2026-10-03):** At the project owner's request, the baseline `prisma/seed.ts` login now contains only Demo Teacher (`t@example.test`) and Demo Student (`s@example.test`), with one shared demonstration password stored only in that seed file. It creates no courses. The multi-person identities above and in the acceptance scenarios are optional AI integration fixtures, not baseline demo sign-in accounts. When reseeding an existing local database, only obsolete seed accounts are removed; foreign-key restrictions prevent removal if they have linked data.
+
 ---
 
 ## 12. Environment variables (`.env.example`, maintained by Nick)
@@ -304,6 +306,7 @@ AI_MOCK=0
 |---|---|---|---|
 | H0 | Zachary | v0.4: add AgentMemory table (Nick creates table only), ADD_STUDENT_NOTE proposal, MemoryKind, acceptance scenario 9, and memory seed examples | Pending |
 | H0 | Zachary | v0.2: add return types, all input types, access-control matrix, confirmation rules, API endpoints, panel integration, detailed seed data, acceptance scenarios, and new `listMyCourses` function | Pending |
+| 2026-10-03 | Project owner | Update baseline local demo logins to one teacher (`t@example.test`) and one student (`s@example.test`); keep the shared password in `prisma/seed.ts` only | Confirmed |
 
 ## 15. Decision log
 **Confirmed by Zachary**

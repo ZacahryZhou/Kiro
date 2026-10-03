@@ -99,8 +99,8 @@ src/lib/ai/
 - No leftover `console.log` debugging output or hardcoded secrets.
 
 ## 8. Demo accounts and data
-- `npm run db:seed` (Nick, `prisma/seed.ts`) creates accounts only: teachers Alex Morgan (`teacher1`) and Taylor Chen (`teacher2`), students Jordan Lee / Sam Patel / Casey Kim (`student1`–`student3`), all using `@example.test`. No courses are created.
-- `npm run db:seed:demo` (Zachary, `prisma/seed-ai.ts`) creates full demo data (courses A/B/C, materials, conflicting sessions, and a teacher2 course for access-isolation checks). **Use this for the main demo.** Creating courses, scheduling sessions, and adding materials with AI from an empty database is an optional showcase.
+- `npm run db:seed` (Nick, `prisma/seed.ts`) creates exactly two accounts and no courses: Demo Teacher (`t@example.test`) and Demo Student (`s@example.test`). They share a simple password stored only in the seed file. The script replaces obsolete seed-only accounts when they have no linked data; database foreign-key restrictions prevent deleting linked accounts.
+- `npm run db:seed:demo` (Zachary, `prisma/seed-ai.ts`) is a separate optional AI showcase fixture. Keep any additional fixture identities separate from the two baseline demo sign-in accounts. Creating courses, scheduling sessions, and adding materials with AI from an empty database is an optional showcase.
 - Both scripts must be idempotent and refuse to run when `NODE_ENV=production`. Store passwords only in seed files, never in documentation, chat, or logs.
 
 ## 9. Environment variables
