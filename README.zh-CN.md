@@ -75,7 +75,8 @@
 | 邮箱密码登录、按角色保护路由、`requireActor()` | 已完成 |
 | 只读服务(`src/services/read.ts`):课程、课表、学生、资料、学生工作区 | 已完成 |
 | 老师课表页(本周 / 下周) | 已完成 |
-| 学生页、课程详情页 | 下一步 |
+| 学生页(我的课程和未来 30 天的场次) | 已完成 |
+| 老师课程详情页、学生课程资料页 | 下一步 |
 | 写入服务(课程、加入学生、排课、点名、资料、改期) | 计划中 |
 | AI 契约(`src/contracts`)、假服务、Agent 循环、提案、AI 面板 | 计划中 |
 | `seed-ai.ts` 完整演示数据 | 计划中 |
@@ -174,17 +175,14 @@ npm run lint                         # 代码检查
 
 ## 演示账号与种子数据
 
-`npm run db:seed` 只创建账号,没有课程。密码只写在 `prisma/seed.ts` 里,不写进文档、聊天或日志。
+`npm run db:seed` 只创建两个基础账号,没有课程。两个账号共用一个演示密码,只写在 `prisma/seed.ts` 里,不写进文档、聊天或日志。重新运行种子时,会删除旧的种子账号(前提是这些账号没有关联数据)。
 
 | 角色 | 姓名 | 邮箱 |
 |---|---|---|
-| 老师 | Alex Morgan | `teacher1@example.test` |
-| 老师 | Taylor Chen | `teacher2@example.test` |
-| 学生 | Jordan Lee | `student1@example.test` |
-| 学生 | Sam Patel | `student2@example.test` |
-| 学生 | Casey Kim | `student3@example.test` |
+| 老师 | Demo Teacher | `t@example.test` |
+| 学生 | Demo Student | `s@example.test` |
 
-`npm run db:seed:demo`(计划中)会在这些账号之上追加完整演示数据:
+下面这些多人验收角色(Alex Morgan、Taylor Chen、Jordan Lee、Sam Patel、Casey Kim)是**可选的 AI 联调数据**,和基础登录账号是分开的。`npm run db:seed:demo`(计划中)会连同完整演示数据一起创建它们:
 
 - **课程 A "Grade 8 Math Small Group"**(Alex;Jordan 和 Sam):两个单元,资料里有可验证的明确事实,并且故意**不含**二次函数顶点公式,用来测试"暂时没有"。
 - **课程 B "Grade 8 Physics 1:1"**(Alex;Jordan):有一节与课程 A 下周二 16:00 重叠的场次,用来测试冲突检测。
@@ -351,7 +349,7 @@ prisma/seed-ai.ts     完整演示数据
 | 步骤 | 内容 |
 |---|---|
 | N1 | 骨架、Docker、Prisma schema 和迁移、账号种子、登录 **(已完成)** |
-| N2 | 只读服务 **(已完成)**、老师课表 **(已完成)**、学生页、老师课程详情骨架 |
+| N2 | 只读服务 **(已完成)**、老师课表 **(已完成)**、学生页 **(已完成)**、老师课程详情骨架 |
 | N3 | 写入服务(`createCourse`、`addExistingStudentToCourse`、`createSessions`、`checkConflicts`)和手动表单 |
 | N4 | `confirmAttendance` 及扣课、`listAttendance`、`listDeductions`、点名界面 |
 | N5 | 资料、改期,以及在两个布局里各加一行 `<AiPanel/>` |
@@ -390,7 +388,7 @@ prisma/seed-ai.ts     完整演示数据
 
 **必做线**
 
-1. Alex Morgan 登录,课表里只有 Alex 自己的课,看不到 Taylor Chen 的。
+1. Alex Morgan 登录(AI 联调数据创建之后),课表里只有 Alex 自己的课,看不到 Taylor Chen 的。
 2. Alex 对 AI 说"今天数学班 Jordan 到了,Sam 请假",出现逐人点名预览,此时出勤页没有变化。点确认后有 2 条出勤记录、1 条扣课记录(Jordan)。再点一次确认,不新增任何记录。
 3. Jordan Lee 登录,课程页只显示 Jordan 自己的课。
 4. Jordan 问资料里有答案的问题,回答带引用;Jordan 问二次函数顶点公式,回答"暂时没有"。

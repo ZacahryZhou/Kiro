@@ -75,7 +75,8 @@ Work is split between two owners (see [Team, tracks and workflow](#team-tracks-a
 | Email/password sign-in, role-based route protection, `requireActor()` | Done |
 | Read services (`src/services/read.ts`): courses, schedule, students, materials, student workspace | Done |
 | Teacher schedule page (this week / next week) | Done |
-| Student page, course detail page | Next up |
+| Student page (courses and the next 30 days of sessions) | Done |
+| Teacher course detail page, student course/materials page | Next up |
 | Write services (courses, enrollment, sessions, attendance, materials, reschedule) | Planned |
 | AI contracts (`src/contracts`), fake services, agent loop, proposals, AI panel | Planned |
 | `seed-ai.ts` full demo data | Planned |
@@ -174,17 +175,14 @@ npm run lint                         # lint
 
 ## Demo accounts and seed data
 
-`npm run db:seed` creates accounts only; there are no courses. Passwords live only in `prisma/seed.ts` and are never written in documentation, chat or logs.
+`npm run db:seed` creates exactly two baseline accounts and no courses. They share one demonstration password that lives only in `prisma/seed.ts`; it is never written in documentation, chat or logs. Re-seeding removes the older seed-only accounts when no data is linked to them.
 
 | Role | Name | Email |
 |---|---|---|
-| Teacher | Alex Morgan | `teacher1@example.test` |
-| Teacher | Taylor Chen | `teacher2@example.test` |
-| Student | Jordan Lee | `student1@example.test` |
-| Student | Sam Patel | `student2@example.test` |
-| Student | Casey Kim | `student3@example.test` |
+| Teacher | Demo Teacher | `t@example.test` |
+| Student | Demo Student | `s@example.test` |
 
-`npm run db:seed:demo` (planned) adds the full demo data on top of these accounts:
+The multi-person acceptance personas below (Alex Morgan, Taylor Chen, Jordan Lee, Sam Patel, Casey Kim) are **optional AI integration fixtures**, separate from the baseline logins. `npm run db:seed:demo` (planned) will add them with the full demo data:
 
 - **Course A, "Grade 8 Math Small Group"** (Alex; Jordan and Sam): two units with materials containing verifiable facts, deliberately **without** the quadratic vertex formula, to test the "not found" answer.
 - **Course B, "Grade 8 Physics 1:1"** (Alex; Jordan): one session overlaps Course A next Tuesday at 4 PM, to test conflict detection.
@@ -351,7 +349,7 @@ Rules:
 | Step | Scope |
 |---|---|
 | N1 | Scaffold, Docker, Prisma schema and migration, account seed, sign-in **(done)** |
-| N2 | Read services **(done)**, teacher schedule **(done)**, student page, teacher course detail skeleton |
+| N2 | Read services **(done)**, teacher schedule **(done)**, student page **(done)**, teacher course detail skeleton |
 | N3 | Write services (`createCourse`, `addExistingStudentToCourse`, `createSessions`, `checkConflicts`) and manual forms |
 | N4 | `confirmAttendance` with deductions, `listAttendance`, `listDeductions`, attendance UI |
 | N5 | Materials, rescheduling, and the one-line `<AiPanel/>` hook in both layouts |
@@ -390,7 +388,7 @@ All of these must pass for the project to count as complete.
 
 **Required line**
 
-1. Alex Morgan signs in; the schedule shows only Alex's courses, none of Taylor Chen's.
+1. Alex Morgan signs in (once the AI fixtures are seeded); the schedule shows only Alex's courses, none of Taylor Chen's.
 2. Alex tells the AI "Jordan attended math today; Sam is on leave"; a per-student preview appears and the attendance page is unchanged. After Confirm there are two attendance records and one deduction (Jordan). Confirming again adds nothing.
 3. Jordan Lee signs in; the course page shows only Jordan's courses.
 4. Jordan asks a question the materials answer, and the reply includes citations; Jordan asks for the quadratic vertex formula and the reply says it was not found.
