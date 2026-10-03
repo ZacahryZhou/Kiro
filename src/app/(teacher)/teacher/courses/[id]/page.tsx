@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AddStudentForm, CreateSessionsForm, MarkAttendanceForm, TeacherCourseMaterials } from "@/components/teacher-course-forms";
+import { AddStudentForm, CreateSessionsForm, MarkAttendanceForm, RescheduleSessionForm, TeacherCourseMaterials } from "@/components/teacher-course-forms";
 import { requireRole } from "@/lib/auth/actor";
 import { formatLocalDate, formatLocalTime, getLocalDateKey } from "@/lib/time";
 import { getCourseMaterials, getTeacherSchedule, listAttendance, listDeductions, listMyCourses, listMyStudents, type SessionView } from "@/services/read";
@@ -170,7 +170,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                           </Badge>
                         </div>
                         {(session.status === "SCHEDULED" || session.status === "RESCHEDULED") && studentsResult.ok && (
-                          <MarkAttendanceForm sessionId={session.id} students={studentsResult.data.students} />
+                          <>
+                            <RescheduleSessionForm courseId={id} sessionId={session.id} startAt={session.startAt} timeZone={timeZone} />
+                            <MarkAttendanceForm sessionId={session.id} students={studentsResult.data.students} />
+                          </>
                         )}
                       </li>
                     ))}

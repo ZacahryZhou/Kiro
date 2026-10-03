@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/actor";
-import { addExistingStudentToCourse, addMaterial, confirmAttendance, createCourse, createCourseUnit, createSessions } from "@/services/write";
+import { addExistingStudentToCourse, addMaterial, confirmAttendance, createCourse, createCourseUnit, createSessions, rescheduleSession } from "@/services/write";
 import type { ConflictView } from "@/contracts";
 
 type ActionState = { kind: "success" | "error" | null; message: string; details?: string[] };
@@ -218,4 +218,38 @@ export async function addMaterialAction(_previousState: ActionState, formData: F
   revalidatePath(`/teacher/courses/${courseId}`);
   revalidatePath(`/student/courses/${courseId}`);
   return { kind: "success", message: "Material added successfully." };
+}
+
+export async function rescheduleSessionAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const courseId = value(formData, "courseId");
+  const timeZone = process.env.APP_TZ || "America/Vancouver";
+  const newStartAt = localDateTimeToUtc(value(formData, "date"), value(formData, "time"), timeZone);
+  if (!newStartAt) {
+    return { kind: "error", message: `Choose a valid local date and time in ${timeZone}.` };
+  }
+  const result = await rescheduleSession(actor, {
+    sessionId: value(formData, "sessionId"),
+    newStartAt,
+  });
+  if (!result.ok) {
+    return {
+      kind: "error",
+      message: result.error.message,
+      details: result.error.code === "CONFLICT" ? formatConflicts(result.error.details, timeZone) : undefined,
+    };
+  }
+  revalidatePath("/teacher");
+  revalidatePath(`/teacher/courses/${courseId}`);
+  revalidatePath("/student");
+  revalidatePath(`/student/courses/${courseId}`);
+  const date = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(result.data.newStartAt));
+  return { kind: "success", message: `Session moved to ${date}.` };
 }

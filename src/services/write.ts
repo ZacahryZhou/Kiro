@@ -5,6 +5,7 @@ import {
   CreateUnitInput as CreateUnitInputSchema,
   CreateCourseInput as CreateCourseInputSchema,
   CreateSessionsInput as CreateSessionsInputSchema,
+  RescheduleInput as RescheduleInputSchema,
   ConfirmAttendanceInput as ConfirmAttendanceInputSchema,
   type AddStudentInput,
   type AddMaterialInput,
@@ -18,6 +19,7 @@ import {
   ok,
   type Result,
   type ConflictView,
+  type RescheduleInput,
 } from "@/contracts";
 import type { Actor } from "@/lib/auth/actor";
 import { prisma } from "@/lib/db/prisma";
@@ -154,6 +156,75 @@ export async function addMaterial(
     return ok({ materialId: material.id });
   } catch {
     return err("INTERNAL", "Could not add the course material. Please try again.");
+  }
+}
+
+export async function rescheduleSession(
+  actor: Actor,
+  input: RescheduleInput,
+): Promise<Result<{ sessionId: string; oldStartAt: string; newStartAt: string }>> {
+  if (actor.role !== "TEACHER") return err("FORBIDDEN", "Only teachers can reschedule sessions.");
+  const parsed = RescheduleInputSchema.safeParse(input);
+  if (!parsed.success) return err("VALIDATION", "Enter a valid session and new start time.");
+  try {
+    const session = await prisma.session.findUnique({
+      where: { id: parsed.data.sessionId },
+      select: {
+        id: true,
+        courseId: true,
+        startAt: true,
+        durationMin: true,
+        status: true,
+        originalStartAt: true,
+        course: { select: { teacherId: true } },
+      },
+    });
+    if (!session) return err("NOT_FOUND", "Session not found.");
+    if (session.course.teacherId !== actor.userId) return err("FORBIDDEN", "You do not have access to this session.");
+    if (session.status !== "SCHEDULED" && session.status !== "RESCHEDULED") {
+      return err("CONFLICT", "Only scheduled sessions can be rescheduled.");
+    }
+
+    const newStartAt = new Date(parsed.data.newStartAt);
+    const conflictResult = await checkConflicts(actor, {
+      courseId: session.courseId,
+      startAt: newStartAt.toISOString(),
+      durationMin: session.durationMin,
+      excludeSessionId: session.id,
+    });
+    if (!conflictResult.ok) return conflictResult;
+    if (conflictResult.data.conflicts.length > 0) {
+      return err("CONFLICT", "This session conflicts with another scheduled session.", conflictResult.data.conflicts);
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      const updated = await tx.session.updateMany({
+        where: { id: session.id, status: session.status, startAt: session.startAt },
+        data: {
+          startAt: newStartAt,
+          originalStartAt: session.originalStartAt ?? session.startAt,
+          status: "RESCHEDULED",
+        },
+      });
+      if (updated.count === 0) return err("CONFLICT", "This session changed while it was being rescheduled. Please try again.");
+      await tx.sessionChange.create({
+        data: {
+          sessionId: session.id,
+          changedById: actor.userId,
+          fromStatus: session.status,
+          toStatus: "RESCHEDULED",
+          oldStartAt: session.startAt,
+          newStartAt,
+        },
+      });
+      return ok({
+        sessionId: session.id,
+        oldStartAt: session.startAt.toISOString(),
+        newStartAt: newStartAt.toISOString(),
+      });
+    });
+  } catch {
+    return err("INTERNAL", "Could not reschedule the session. Please try again.");
   }
 }
 

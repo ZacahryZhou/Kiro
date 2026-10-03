@@ -21,6 +21,7 @@ import {
   createCourseAction,
   createCourseUnitAction,
   createSessionsAction,
+  rescheduleSessionAction,
 } from "@/app/(teacher)/teacher/courses/actions";
 import type { StudentView, UnitView } from "@/contracts";
 
@@ -194,6 +195,60 @@ export function MarkAttendanceForm({ sessionId, students }: { sessionId: string;
         </fieldset>
         <FormFeedback state={state} />
         <SubmitButton pending={pending || state.kind === "success"}>Save attendance</SubmitButton>
+      </form>
+    </details>
+  );
+}
+
+function getLocalDateTimeValues(iso: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(iso));
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return {
+    date: `${values.year}-${values.month}-${values.day}`,
+    time: `${values.hour}:${values.minute}`,
+  };
+}
+
+export function RescheduleSessionForm({
+  courseId,
+  sessionId,
+  startAt,
+  timeZone,
+}: {
+  courseId: string;
+  sessionId: string;
+  startAt: string;
+  timeZone: string;
+}) {
+  const [state, formAction, pending] = useActionState(rescheduleSessionAction, initialState);
+  const local = getLocalDateTimeValues(startAt, timeZone);
+  return (
+    <details className="basis-full rounded-lg border bg-slate-50 p-4">
+      <summary className="cursor-pointer font-medium">Reschedule session</summary>
+      <form action={formAction} className="mt-4 space-y-4">
+        <input type="hidden" name="courseId" value={courseId} />
+        <input type="hidden" name="sessionId" value={sessionId} />
+        <p className="text-sm text-muted-foreground">Choose the new start time in {timeZone}. The session length stays the same.</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor={`reschedule-date-${sessionId}`}>New date</Label>
+            <Input id={`reschedule-date-${sessionId}`} name="date" type="date" defaultValue={local.date} required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`reschedule-time-${sessionId}`}>New start time</Label>
+            <Input id={`reschedule-time-${sessionId}`} name="time" type="time" defaultValue={local.time} required />
+          </div>
+        </div>
+        <FormFeedback state={state} />
+        <SubmitButton pending={pending}>Save new time</SubmitButton>
       </form>
     </details>
   );
