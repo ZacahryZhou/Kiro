@@ -318,7 +318,9 @@ export function createState(now = new Date()): FakeState {
   return state;
 }
 
-export const store: FakeState = createState();
+// A global singleton, so every route handler in a dev server sees the same demo data.
+const globalForStore = globalThis as unknown as { __koraFakeStore?: FakeState };
+export const store: FakeState = (globalForStore.__koraFakeStore ??= createState());
 
 /** Restores the demo data (used by the check script between scenarios). */
 export function resetStore(now = new Date()): void {

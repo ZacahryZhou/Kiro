@@ -47,5 +47,9 @@ export const eduProposalHandlers: ProposalRegistry = {
   },
 };
 
-export const proposalStore = createMemoryProposalStore();
+// A global singleton in development, so every route handler sees the same pending proposals.
+const globalForProposals = globalThis as unknown as {
+  __koraProposalStore?: ReturnType<typeof createMemoryProposalStore>;
+};
+export const proposalStore = (globalForProposals.__koraProposalStore ??= createMemoryProposalStore());
 export const eduProposals = createProposalService(eduProposalHandlers, proposalStore);

@@ -68,7 +68,7 @@ async function main() {
       if (result.data.status === "failed") return `Failed: ${result.data.error?.message}`;
       const done = result.data.result as { attendance?: unknown[]; deductions?: unknown[]; sessionStatus?: string };
       return done.attendance
-        ? `Executed: ${done.attendance.length} attendance records, ${done.deductions?.length ?? 0} deductions, session ${done.sessionStatus}.`
+        ? `Executed: ${done.attendance.length} attendance records, ${done.deductions?.length ?? 0} deduction(s), session ${done.sessionStatus}.`
         : "Executed.";
     }
     if (name === "/discard") {
