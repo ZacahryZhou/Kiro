@@ -76,36 +76,38 @@ Work is split between two owners (see [Team, tracks and workflow](#team-tracks-a
 | Read services (`src/services/read.ts`): courses, schedule, students, materials, student workspace | Done |
 | Teacher schedule page (this week / next week) | Done |
 | Student page (courses and the next 30 days of sessions) | Done |
-| Teacher course detail page, student course/materials page | Next up |
-| Write services (courses, enrollment, sessions, attendance, materials, reschedule) | Planned |
-| AI contracts (`src/contracts`), fake services, agent loop, proposals, AI panel | Planned |
-| `seed-ai.ts` full demo data | Planned |
+| Teacher course management, student enrollment, session scheduling, attendance and deductions | Done |
+| Course units and materials (teacher editing; student reading) | Done |
+| Session rescheduling (teacher UI, conflict checks and change history) | Done |
+| Role-specific AI panel, chat API, read-only questions, verified material citations and proposal flows | Integrated; requires AI provider configuration for live model responses |
+| Full multi-person AI showcase fixture (`prisma/seed-ai.ts`) | Not available yet |
+| AI calendar behavior across the Nov 2026 daylight-saving fallback | Needs correction; two development checks currently fail |
 
-This table describes the code in the repository today; the roadmap below describes where it is going.
+The core teacher/student workflows and the required AI panel integration are implemented. Final AI scenario acceptance still depends on the missing showcase fixture and the daylight-saving fixes noted above.
 
 ## Features
 
 Each AI feature follows the same pattern: the teacher says one sentence, the AI reads data, shows a preview, the teacher confirms, and a service function writes. Tier A is required, B is next, C is a bonus.
 
-| # | Feature | Example request | Result | Tier |
+| # | Feature | Example request | Result | Tier / status |
 |---|---|---|---|---|
-| 1 | Schedule, student and attendance questions | "What classes do I have tomorrow?" | Direct answer (read-only) | A |
-| 2 | AI attendance | "Jordan attended math today; Sam is on leave" | `MARK_ATTENDANCE` preview, then attendance and deductions on confirm | A |
-| 3 | Student materials Q&A | (student) "What is the definition in chapter 2?" | Answer with verified citations, or "not found" | A |
-| 4 | AI course creation | "Create a weekend math group with Jordan and Sam" | `CREATE_COURSE` preview, then course and enrollments | B |
-| 5 | AI scheduling | "Schedule next Tuesday and Thursday, 60 minutes each" | `CREATE_SESSIONS` preview with per-session ✅/❌; conflicts block the proposal | B |
-| 6 | AI content entry | Paste text: "Create the first unit and add this" | `ADD_CONTENT` preview, then unit and materials | B |
-| 7 | Attendance trends | "How is Jordan's attendance lately?" | Code-computed numbers; fewer than 3 sessions → "Insufficient data to identify a trend." | B |
-| 8 | Student memory | "Remember Jordan is unavailable Tuesday and Thursday afternoons" | `ADD_STUDENT_NOTE` preview, then written to `AgentMemory` (teacher-only) | C |
-| 9 | Memory-aware scheduling | "Schedule next week for math" | Same as #5, candidate times avoid remembered gaps | C |
-| 10 | Lesson preparation | "Help me prepare tomorrow's math class" | `ADD_CONTENT` preview with a handout draft and 5 exercises | C |
-| 11 | Rescheduling | "Move the Oct 10 class to Oct 11 at 4 PM" | `RESCHEDULE` preview | C |
-| 12 | Student leave request | (student) "I need to take leave next Tuesday" | `STUDENT_REQUEST` pending for the teacher; schedule unchanged | C |
-| 13 | Tuition adjustment | "Add 3 sessions for Jordan" | Out of the current MVP; needs a new table, function and proposal type agreed in the contract | C |
+| 1 | Schedule, student and attendance questions | "What classes do I have tomorrow?" | Read-only tools are available; response needs a configured model | A · Integrated |
+| 2 | AI attendance | "Jordan attended math today; Sam is on leave" | `MARK_ATTENDANCE` preview, then attendance and deductions on confirm | A · Integrated; needs populated fixture data for the full demo |
+| 3 | Student materials Q&A | (student) "What is the definition in chapter 2?" | Answer with verified citations, or "not found" | A · Integrated; needs populated fixture data for cited answers |
+| 4 | AI course creation | "Create a weekend math group with Jordan and Sam" | `CREATE_COURSE` preview, then course and enrollments | B · Integrated |
+| 5 | AI scheduling | "Schedule next Tuesday and Thursday, 60 minutes each" | `CREATE_SESSIONS` preview with per-session ✅/❌; conflicts block the proposal | B · Integrated; DST fallback check needs correction |
+| 6 | AI content entry | Paste text: "Create the first unit and add this" | `ADD_CONTENT` preview, then unit and materials | B · Not implemented |
+| 7 | Attendance trends | "How is Jordan's attendance lately?" | Code-computed numbers; fewer than 3 sessions → "Insufficient data to identify a trend." | B · Not implemented |
+| 8 | Student memory | "Remember Jordan is unavailable Tuesday and Thursday afternoons" | `ADD_STUDENT_NOTE` preview, then written to `AgentMemory` (teacher-only) | C · Not implemented |
+| 9 | Memory-aware scheduling | "Schedule next week for math" | Same as #5, candidate times avoid remembered gaps | C · Not implemented |
+| 10 | Lesson preparation | "Help me prepare tomorrow's math class" | `ADD_CONTENT` preview with a handout draft and 5 exercises | C · Not implemented |
+| 11 | Rescheduling | "Move the Oct 10 class to Oct 11 at 4 PM" | Teacher can reschedule manually; AI `RESCHEDULE` proposal is not implemented | C · Manual workflow done; AI unavailable |
+| 12 | Student leave request | (student) "I need to take leave next Tuesday" | `STUDENT_REQUEST` pending for the teacher; schedule unchanged | C · Not implemented |
+| 13 | Tuition adjustment | "Add 3 sessions for Jordan" | Out of the current MVP; needs a new table, function and proposal type agreed in the contract | C · Out of scope |
 
-**Minimum demo line (what judges see):** feature 1 → 2 → 3 → access isolation. Features 4, 5 and 7 are shown if time allows.
+**Intended demo line:** feature 1 → 2 → 3 → access isolation. This requires a configured live model and the separate showcase fixture; `AI_MOCK=1` only returns a canned provider reply and does not exercise model tool selection.
 
-Manual forms (create course, add student by email, batch scheduling, take attendance, materials, reschedule) are also planned so the product works without the AI.
+Manual forms are available for creating courses, enrolling students, scheduling sessions, recording attendance, managing materials, and rescheduling sessions, so core workflows also work without the AI.
 
 ## Tech stack
 
@@ -167,7 +169,7 @@ npx tsc --noEmit                     # type check
 npm run lint                         # lint
 ```
 
-`npm run db:seed:demo` (full demo data from `prisma/seed-ai.ts`) is wired in `package.json` but the script is not written yet.
+The baseline seed creates accounts only. `prisma/seed-ai.ts` is not present, so the multi-person course, attendance, and material scenarios need a separate fixture before they can be rehearsed end to end.
 
 ### Clean-environment check
 
@@ -175,14 +177,14 @@ npm run lint                         # lint
 
 ## Demo accounts and seed data
 
-`npm run db:seed` creates exactly two baseline accounts and no courses. They share one demonstration password that lives only in `prisma/seed.ts`; it is never written in documentation, chat or logs. Re-seeding removes the older seed-only accounts when no data is linked to them.
+`npm run db:seed` creates exactly two baseline accounts and no courses. Their shared demonstration password is stored in `prisma/seed.ts` only. Re-seeding removes the older seed-only accounts when no data is linked to them.
 
 | Role | Name | Email |
 |---|---|---|
 | Teacher | Demo Teacher | `t@example.test` |
 | Student | Demo Student | `s@example.test` |
 
-The multi-person acceptance personas below (Alex Morgan, Taylor Chen, Jordan Lee, Sam Patel, Casey Kim) are **optional AI integration fixtures**, separate from the baseline logins. `npm run db:seed:demo` (planned) will add them with the full demo data:
+The multi-person acceptance personas below (Alex Morgan, Taylor Chen, Jordan Lee, Sam Patel, Casey Kim) are **required for the contract's complete AI acceptance scenarios**, separate from the baseline logins. The fixture seeder has not been delivered yet:
 
 - **Course A, "Grade 8 Math Small Group"** (Alex; Jordan and Sam): two units with materials containing verifiable facts, deliberately **without** the quadratic vertex formula, to test the "not found" answer.
 - **Course B, "Grade 8 Physics 1:1"** (Alex; Jordan): one session overlaps Course A next Tuesday at 4 PM, to test conflict detection.
@@ -190,7 +192,7 @@ The multi-person acceptance personas below (Alex Morgan, Taylor Chen, Jordan Lee
 - Completed sessions with attendance and deductions, plus scheduled sessions this week and next.
 - `AgentMemory` examples: Jordan unavailable Tuesday and Thursday afternoons; Sam struggles with functions.
 
-Both seed scripts are idempotent and refuse to run when `NODE_ENV=production`. The demo data is the backup for the live demo: if AI course creation fails on stage, one command restores a full dataset.
+The baseline account seed is idempotent and refuses to run when `NODE_ENV=production`. The optional AI fixture seed is not available yet.
 
 ## Architecture
 
@@ -298,28 +300,23 @@ Current:
 
 ```
 prisma/               schema.prisma, migrations, seed.ts
-src/app/              login, forbidden, (teacher)/teacher, (student)/student, api/auth
-src/components/       workspace-shell, login-form, ui/ (shadcn)
+src/contracts/        shared result, view, input, and proposal types (AI track)
+src/app/              login, forbidden, role workspaces, course routes, api/auth, api/ai
+src/components/       workspace-shell, course forms, login-form, ui/ (shadcn)
+src/features/ai-agent/ AiPanel, ProposalCard, MessageList
 src/lib/auth/         Auth.js config, requireActor / requireRole
 src/lib/db/           Prisma singleton
 src/lib/time.ts       APP_TZ week ranges and formatting
-src/services/read.ts  read-only service functions
+src/services/         read.ts and write.ts business services
+src/lib/ai/           provider, agent loop, education tools, proposal flows and checks
 docs/                 contract, roadmaps, handoff log, prompts, checklist
 docs/zachary/         original Chinese working documents (reference only)
 ```
 
-Planned (AI track):
+Not yet present:
 
 ```
-src/contracts/        common.ts  views.ts  inputs.ts  proposals.ts  index.ts
-src/lib/ai/
-  core/               provider, agent-loop, proposals, citations, memory (no education vocabulary)
-  domain/edu/         prompts, tools, proposal-types, labels (replaceable as a unit)
-  services.ts         single switch point: fake services now, real services later
-  dev/                fake-store, fake-services, chat.ts (terminal test entry)
-src/app/api/ai/       chat, proposals, proposals/[id]/confirm, proposals/[id]/discard
-src/features/ai-agent/ AiPanel, ProposalCard, MessageList
-prisma/seed-ai.ts     full demo data
+prisma/seed-ai.ts     full multi-person demo and acceptance data
 ```
 
 `src/lib/ai/core/` is generic and `domain/edu/` is the replaceable domain layer, so the agent can be re-skinned for another domain by changing only that directory.
@@ -349,11 +346,11 @@ Rules:
 | Step | Scope |
 |---|---|
 | N1 | Scaffold, Docker, Prisma schema and migration, account seed, sign-in **(done)** |
-| N2 | Read services **(done)**, teacher schedule **(done)**, student page **(done)**, teacher course detail skeleton |
-| N3 | Write services (`createCourse`, `addExistingStudentToCourse`, `createSessions`, `checkConflicts`) and manual forms |
-| N4 | `confirmAttendance` with deductions, `listAttendance`, `listDeductions`, attendance UI |
-| N5 | Materials, rescheduling, and the one-line `<AiPanel/>` hook in both layouts |
-| N6 | UI polish, final README, clean-environment check, acceptance scenarios 1–5 |
+| N2 | Read services, teacher schedule, student page, teacher course details **(done)** |
+| N3 | Course, enrollment, scheduling services and manual forms **(done)** |
+| N4 | Attendance, deductions, read views and attendance UI **(done)** |
+| N5 | Course materials, rescheduling and AI panel in both role layouts **(done)** |
+| N6 | README/status polish and isolated clean-environment check **(core complete; AI scenarios remain open)** |
 
 ### AI agent (Zachary)
 
@@ -361,14 +358,12 @@ Strategy: write **fake services** against the contract first and run the whole A
 
 | Step | Scope |
 |---|---|
-| S1 | Contract code in `src/contracts`, fake store and services, terminal chat entry point |
-| S2 | Model provider (native `fetch`, 30 s timeout, `AI_MOCK`), read-only tools, agent loop |
-| S3 | Proposal creation, atomic confirm and discard, proposal routes; first proposal is `MARK_ATTENDANCE` |
-| S4 | Student agent and verified-citation materials Q&A |
-| S5 | `/api/ai/chat` and the `AiPanel` UI with proposal cards (test page `/ai-dev`) |
-| S6 | `CREATE_COURSE` and `CREATE_SESSIONS` proposals, code-side time-zone conversion including DST (UTC-7 until Nov 1, UTC-8 after) |
-| S7 | Content entry, student memory, lesson prep, attendance trends, tuition adjustment (C, needs Nick's agreement) |
-| S8 | `seed-ai.ts`, scenario checklist, access-isolation and prompt-injection tests, demo rehearsal |
+| S1–S3 | Contracts, fake services, provider, agent loop and proposal routes **(done)** |
+| S4 | Student agent and verified-citation materials Q&A **(done)** |
+| S5 | `/api/ai/chat` and `AiPanel` with proposal cards; panel mounted in both workspaces **(done)** |
+| S6 | `CREATE_COURSE` and `CREATE_SESSIONS` proposals **(done; two DST fallback checks need correction)** |
+| S7 | Content entry, student memory, lesson prep and attendance trends **(not implemented)** |
+| S8 | Full `seed-ai.ts` fixture and complete multi-person demo rehearsal **(not implemented)** |
 
 Checkpoints: **H3** swap in the real read services; **H6** swap in the real write services and move proposals from memory to Prisma; **H7.5** is the last moment to finish the real-service integration; freeze new features two hours before the deadline.
 
@@ -401,7 +396,7 @@ All of these must pass for the project to count as complete.
 8. Paste text "Create the first unit and add this" → preview → confirm → the material appears and Jordan can ask about it.
 9. (Bonus) "Remember that Jordan is unavailable Tuesday and Thursday afternoons" → confirm; later scheduling avoids those times; when Jordan asks "What notes do you have about me?" no memory is returned.
 
-**Backup plan for demo day:** `AI_MOCK=1` for the main line, `npm run db:seed:demo` for one-command full data, a phone hotspot as network backup, and a code freeze two hours before the deadline.
+**Demo readiness:** `AI_MOCK=1` confirms the provider path without network access but returns a canned reply; it cannot demonstrate model-selected tools. The full multi-person fixture command is not available until `prisma/seed-ai.ts` is added. Configure a real AI provider and seed demo data before attempting contract scenarios 1–5 end to end.
 
 ## Documentation index
 
