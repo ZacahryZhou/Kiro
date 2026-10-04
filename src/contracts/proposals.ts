@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DashboardLayoutInput } from "./dashboard";
 import {
   AddStudentInput,
   AddStudentNoteInput,
@@ -21,6 +22,7 @@ export const PROPOSAL_TYPES = [
   "STUDENT_REQUEST",
   "ADD_STUDENT_NOTE",
   "ADD_STUDENT",
+  "DASHBOARD_LAYOUT",
 ] as const;
 export type ProposalType = (typeof PROPOSAL_TYPES)[number];
 
@@ -45,6 +47,7 @@ export const ProposalPayloadSchemas = {
   STUDENT_REQUEST: StudentRequestInput,
   ADD_STUDENT_NOTE: AddStudentNoteInput,
   ADD_STUDENT: AddStudentInput,
+  DASHBOARD_LAYOUT: DashboardLayoutInput,
 } satisfies Record<ProposalType, z.ZodType>;
 
 export type ProposalPayloads = {

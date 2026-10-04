@@ -7,6 +7,7 @@ import { eduProposals } from "../domain/edu/proposal-types";
 import * as services from "../services";
 import * as coreRead from "@/services/read";
 import * as coreWrite from "@/services/write";
+import * as dashboard from "@/services/dashboard";
 import type { Actor } from "@/contracts";
 
 async function main() {
@@ -211,6 +212,47 @@ async function main() {
     const hashAfter = (await prisma.user.findUniqueOrThrow({ where: { id: jordan.userId } })).passwordHash;
     check(changed.ok && hashAfter !== hashBefore, "the right current password lets a user change their own password");
     check((await prisma.user.findUniqueOrThrow({ where: { id: teacher.userId } })).passwordHash === teacherHashBefore, "changing one user's password never touches another account");
+
+    // ----- dashboard layouts -----
+    const bareLayout = { name: "Teaching day", theme: "ocean" as const, motion: "calm" as const, items: [{ id: "a", type: "TODAY_SESSIONS" as const, x: 0, y: 0, w: 6, h: 4 }, { id: "b", type: "STUDENT_FOCUS" as const, x: 6, y: 0, w: 6, h: 4, studentId: jordan.userId }] };
+    const noActive = await dashboard.getActiveLayout(teacher);
+    check(noActive.ok && noActive.data.layout === null, "a teacher with no saved layout gets the built-in Classic layout (null)");
+    const savedLayout = await dashboard.saveDashboardLayout(teacher, bareLayout);
+    check(savedLayout.ok && savedLayout.data.isActive && savedLayout.data.items.length === 2, "a teacher saves a layout and it becomes active");
+    const activeLayout = await dashboard.getActiveLayout(teacher);
+    check(activeLayout.ok && activeLayout.data.layout?.name === "Teaching day" && activeLayout.data.layout.theme === "ocean", "the active layout reads back with its theme");
+    const otherSees = await dashboard.listMyLayouts(otherTeacher);
+    check(otherSees.ok && otherSees.data.layouts.length === 0, "another teacher cannot see the layout");
+    const foreignStudent = await dashboard.saveDashboardLayout(otherTeacher, bareLayout);
+    check(!foreignStudent.ok && foreignStudent.error.code === "FORBIDDEN", "another teacher cannot pin a student who is not in their courses");
+    const foreignCourse = await dashboard.saveDashboardLayout(otherTeacher, { name: "Sneaky", theme: "kora", motion: "off", items: [{ id: "c", type: "ATTENDANCE_TREND", x: 0, y: 0, w: 6, h: 4, courseId: course.id }] });
+    check(!foreignCourse.ok && foreignCourse.error.code === "FORBIDDEN", "another teacher cannot point a widget at a course they do not teach");
+    const studentSave = await dashboard.saveDashboardLayout(jordan, bareLayout);
+    check(!studentSave.ok && studentSave.error.code === "FORBIDDEN", "a student cannot save a layout");
+    const studentList = await dashboard.listMyLayouts(jordan);
+    check(!studentList.ok && studentList.error.code === "FORBIDDEN", "a student cannot list layouts");
+    const noStudent = await dashboard.saveDashboardLayout(teacher, { name: "Broken", theme: "kora", motion: "calm", items: [{ id: "x", type: "STUDENT_FOCUS", x: 0, y: 0, w: 4, h: 3 }] });
+    check(!noStudent.ok && noStudent.error.code === "VALIDATION", "a student focus widget without a student is refused");
+    const tooWide = await dashboard.saveDashboardLayout(teacher, { name: "Wide", theme: "kora", motion: "calm", items: [{ id: "x", type: "STATS", x: 8, y: 0, w: 6, h: 3 }] });
+    check(!tooWide.ok && tooWide.error.code === "VALIDATION", "a widget past the right edge is refused");
+    const second = await dashboard.saveDashboardLayout(teacher, { name: "Prep evening", theme: "sunset", motion: "lively", items: [{ id: "m", type: "MONTH_CALENDAR", x: 0, y: 0, w: 12, h: 8 }] });
+    const afterSecond = await dashboard.listMyLayouts(teacher);
+    check(second.ok && afterSecond.ok && afterSecond.data.layouts.length === 2 && afterSecond.data.layouts[0].name === "Prep evening" && afterSecond.data.layouts[0].isActive, "saving a second layout activates it and keeps the first in history");
+    const resaved = await dashboard.saveDashboardLayout(teacher, { ...bareLayout, theme: "forest" });
+    const afterReplace = await dashboard.listMyLayouts(teacher);
+    check(resaved.ok && afterReplace.ok && afterReplace.data.layouts.length === 2 && afterReplace.data.layouts.find((l) => l.name === "Teaching day")?.theme === "forest", "saving under an existing name replaces that layout");
+    const switched = await dashboard.useDashboardLayout(teacher, { layoutId: second.ok ? second.data.id : "" });
+    const afterSwitch = await dashboard.getActiveLayout(teacher);
+    check(switched.ok && afterSwitch.ok && afterSwitch.data.layout?.name === "Prep evening", "a teacher switches back to an older layout");
+    const stolenSwitch = await dashboard.useDashboardLayout(otherTeacher, { layoutId: savedLayout.ok ? savedLayout.data.id : "" });
+    check(!stolenSwitch.ok && stolenSwitch.error.code === "NOT_FOUND", "another teacher cannot activate someone else's layout");
+    const stolenDelete = await dashboard.deleteDashboardLayout(otherTeacher, { layoutId: savedLayout.ok ? savedLayout.data.id : "" });
+    check(!stolenDelete.ok && stolenDelete.error.code === "NOT_FOUND" && (await prisma.dashboardLayout.count({ where: { teacherId: teacher.userId } })) === 2, "another teacher cannot delete someone else's layout");
+    const classic = await dashboard.useDashboardLayout(teacher, { layoutId: null });
+    const afterClassic = await dashboard.getActiveLayout(teacher);
+    check(classic.ok && afterClassic.ok && afterClassic.data.layout === null, "choosing Classic clears the active layout without deleting any");
+    const layoutRemoved = await dashboard.deleteDashboardLayout(teacher, { layoutId: savedLayout.ok ? savedLayout.data.id : "" });
+    check(layoutRemoved.ok && (await prisma.dashboardLayout.count({ where: { teacherId: teacher.userId } })) === 1, "a teacher deletes their own layout");
   } finally {
     // Leave the database in its pristine fixture state.
     await seedFixtures(prisma, { reset: true });

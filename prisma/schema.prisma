@@ -86,6 +86,7 @@ enum ProposalType {
   STUDENT_REQUEST
   ADD_STUDENT_NOTE
   ADD_STUDENT
+  DASHBOARD_LAYOUT
 }
 
 model User {
@@ -109,6 +110,7 @@ model User {
   resolvedRequests  StudentRequest[] @relation("RequestResolver")
   progressAsStudent ProgressRecord[] @relation("ProgressStudent")
   progressAsTeacher ProgressRecord[] @relation("ProgressTeacher")
+  dashboardLayouts  DashboardLayout[]
 }
 
 model Course {
@@ -304,4 +306,23 @@ model AgentMemory {
   teacher   User       @relation("TeacherMemories", fields: [teacherId], references: [id], onDelete: Restrict)
 
   @@index([teacherId, studentId])
+}
+
+/// A teacher's saved home-page arrangement ("wallpaper"). `items` holds the widget list as JSON
+/// validated by the DashboardLayoutInput contract; the most recently used layout is the active one.
+model DashboardLayout {
+  id         String    @id @default(cuid())
+  teacherId  String
+  name       String
+  theme      String
+  motion     String
+  items      Json
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  teacher User @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, name])
+  @@index([teacherId, lastUsedAt])
 }
