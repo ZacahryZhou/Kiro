@@ -2,8 +2,9 @@ import type { Actor, Citation, ProposalView, Role } from "@/contracts";
 import type { Policy } from "../domain/edu/policy";
 import { getSystemPrompt } from "../domain/edu/prompts";
 import { findTool, getToolsForRole } from "../domain/edu/tools";
+import { eduMockModel } from "../domain/edu/mock-model";
 import { chatCompletion } from "./provider";
-import { recordRunInMemory, type RunRecorder, type ToolCallLog } from "./runs";
+import { defaultRunRecorder, type RunRecorder, type ToolCallLog } from "./runs";
 import type { ChatMessage, ToolCall } from "./types";
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
@@ -46,9 +47,9 @@ const TIMEOUT_REPLY = "That took too long. Please try again, or ask for somethin
  * with the signed-in actor injected by code. Never throws; failures become a friendly reply.
  */
 export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise<AgentOutput> {
-  const complete = deps.chatCompletion ?? chatCompletion;
+  const complete: typeof chatCompletion = deps.chatCompletion ?? ((params, options) => chatCompletion(params, { mock: eduMockModel, ...options }));
   const now = deps.now ?? (() => new Date());
-  const record = deps.record ?? recordRunInMemory;
+  const record = deps.record ?? defaultRunRecorder;
   const maxRounds = deps.maxRounds ?? MAX_ROUNDS;
   const timeoutMs = deps.timeoutMs ?? TOTAL_TIMEOUT_MS;
 
@@ -58,16 +59,20 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
   const citations: Citation[] = [];
   let finalReply: string | undefined;
 
-  const finish = (reply: string, status: "OK" | "ERROR", error?: string): AgentOutput => {
-    record({
-      actorId: input.actor.userId,
-      role: input.role,
-      intentSummary: input.userMessage.slice(0, 200),
-      toolCalls: toolLog,
-      status,
-      error,
-      createdAt: new Date(startedAt).toISOString(),
-    });
+  const finish = async (reply: string, status: "OK" | "ERROR", error?: string): Promise<AgentOutput> => {
+    try {
+      await record({
+        actorId: input.actor.userId,
+        role: input.role,
+        intentSummary: input.userMessage.slice(0, 200),
+        toolCalls: toolLog,
+        status,
+        error,
+        createdAt: new Date(startedAt).toISOString(),
+      });
+    } catch {
+      // Logging must never break a reply.
+    }
     return { reply, toolCalls: toolLog, proposals, citations, status, error };
   };
 

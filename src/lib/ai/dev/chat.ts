@@ -45,7 +45,8 @@ async function main() {
     }
     const result = await runAgent({ actor, role: role as Role, userMessage: line, history });
     const used = result.toolCalls.map((c) => `${c.name}${c.ok ? "" : ` (${c.error ?? "failed"})`} ${c.ms}ms`);
-    const blocks = [used.length > 0 ? `[tools: ${used.join(", ")}]` : "", result.reply];
+    const titles = [...new Set(result.citations.map((c) => c.title))];
+    const blocks = [used.length > 0 ? `[tools: ${used.join(", ")}]` : "", result.reply, titles.length > 0 ? `Sources: ${titles.join("; ")}` : ""];
     for (const proposal of result.proposals) {
       const lines = await eduProposals.describe(actor, proposal.id);
       blocks.push(

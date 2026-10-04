@@ -4,10 +4,14 @@ import type { ChatMessage, Completion, ToolCall, ToolCallWire, ToolSpec } from "
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MOCK_REPLY = "This is a preset reply (AI_MOCK=1). The model was not called.";
 
+export type MockResponder = (params: { messages: ChatMessage[]; tools?: ToolSpec[] }) => Completion | Promise<Completion>;
+
 export type CompletionOptions = {
   /** Injectable for tests. */
   fetch?: typeof fetch;
   timeoutMs?: number;
+  /** Used instead of a model when AI_MOCK=1. Without one, a single preset reply is returned. */
+  mock?: MockResponder;
 };
 
 type WireToolCall = { id?: string; function?: { name?: string; arguments?: string } };
@@ -45,6 +49,7 @@ export async function chatCompletion(
   options: CompletionOptions = {},
 ): Promise<Result<Completion>> {
   if (process.env.AI_MOCK === "1") {
+    if (options.mock) return ok(await options.mock(params));
     return ok({
       content: MOCK_REPLY,
       toolCalls: [],

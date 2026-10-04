@@ -618,11 +618,11 @@ const answerFromCourseMaterials = defineTool({
     if (!answer.found) {
       return { ok: true, content: JSON.stringify({ found: false }), finalReply: NOT_FOUND_REPLY };
     }
-    const titles = [...new Set(answer.citations.map((c) => c.title))];
+    // The verified answer is returned as is; the panel and the terminal show the cited titles from `citations`.
     return {
       ok: true,
       content: JSON.stringify({ found: true }),
-      finalReply: `${answer.answer}\n\nSources: ${titles.join("; ")}`,
+      finalReply: answer.answer,
       citations: answer.citations,
     };
   },
@@ -716,6 +716,7 @@ const proposeCreateSessions = defineTool({
       startDate: { type: "string", description: "First day of a repeating pattern, YYYY-MM-DD (use with weekdays and weeks)." },
       weeks: { type: "integer", description: "How many weeks the repeating pattern runs (1 to 12)." },
       location: { type: "string" },
+      proceedDespitePreferences: { type: "boolean", description: "Set to true ONLY if the teacher has explicitly said to schedule even though it clashes with a student's recorded availability note." },
     },
     ["courseId", "time", "durationMin"],
   ),
@@ -729,6 +730,7 @@ const proposeCreateSessions = defineTool({
     startDate: dateText.optional(),
     weeks: z.number().int().min(1).max(12).optional(),
     location: z.string().max(120).optional(),
+    proceedDespitePreferences: z.boolean().optional(),
   }),
   async run(actor, args) {
     if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers can schedule sessions.");
@@ -770,14 +772,14 @@ const proposeCreateSessions = defineTool({
           : [];
       });
     });
-    if (preferenceConflicts.length > 0) {
+    if (preferenceConflicts.length > 0 && !args.proceedDespitePreferences) {
       return {
         ok: true,
         content: JSON.stringify({
           status: "MEMORY_PREFERENCE_CONFLICTS",
           course: course.name,
           preferences: preferenceConflicts,
-          note: "No proposal was created. These times conflict with teacher-recorded student availability preferences. Explain them and ask the teacher whether to choose another time or explicitly proceed.",
+          note: "No proposal was created. These times clash with teacher-recorded student availability notes, which are only a reference. Explain them and ask the teacher whether to choose another time. If the teacher explicitly says to go ahead anyway, call this tool again with proceedDespitePreferences set to true.",
         }),
       };
     }
@@ -807,7 +809,8 @@ const proposeCreateSessions = defineTool({
       };
     }
 
-    const summary = `${course.name}: ${marked.length} ${marked.length === 1 ? "session" : "sessions"} at ${args.time}, ${args.durationMin} min each`;
+    const overridden = preferenceConflicts.length > 0;
+    const summary = `${course.name}: ${marked.length} ${marked.length === 1 ? "session" : "sessions"} at ${args.time}, ${args.durationMin} min each${overridden ? " (teacher chose to proceed despite a recorded availability note)" : ""}`;
     const created = await eduProposals.create({
       actor,
       type: "CREATE_SESSIONS",
@@ -827,6 +830,7 @@ const proposeCreateSessions = defineTool({
         proposalId: created.data.id,
         summary,
         sessions: marked.map((r) => ({ localDate: r.localDate, weekday: r.weekday, localTime: r.localTime, ok: true })),
+        ...(overridden ? { acknowledgedPreferences: preferenceConflicts } : {}),
         note: "Nothing has been scheduled yet. Tell the teacher to review this and confirm.",
       }),
     };

@@ -86,7 +86,7 @@ async function main() {
     text(json({ found: true, answer: "A linear function has a straight-line graph.", citations: [{ materialId: "mat_a1_def", quote }] })),
   ]);
   let out = await t.done;
-  check("A supported question is answered with verified citations", out.status === "OK" && out.reply.startsWith("A linear function has a straight-line graph.") && out.reply.includes("Sources: Chapter 2: Definition of a linear function") && out.citations.length === 1 && out.citations[0].materialId === "mat_a1_def", out);
+  check("A supported question is answered with verified citations", out.status === "OK" && out.reply === "A linear function has a straight-line graph." && out.citations.length === 1 && out.citations[0].materialId === "mat_a1_def" && out.citations[0].title === "Chapter 2: Definition of a linear function", out);
   check("The verified answer is returned directly, not rewritten by a second model turn", t.model.requests.length === 2);
   check("The citation carries title, unit and quote for the UI", out.citations[0].unitId === "unit_a1" && out.citations[0].quote.length >= 8);
 

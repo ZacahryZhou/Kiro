@@ -4,10 +4,10 @@ import * as read from "@/services/read";
 import * as write from "@/services/write";
 import * as fake from "./dev/fake-services";
 import * as memory from "./core/memory";
+import { useRealBackend } from "./runtime";
 
 const realServices = { ...read, ...write, ...memory };
-const useRealServices = process.env.NODE_ENV === "development" || process.env.NODE_ENV === "production";
-const activeServices: typeof fake = useRealServices
+const activeServices: typeof fake = useRealBackend
   ? realServices as unknown as typeof fake
   : fake;
 

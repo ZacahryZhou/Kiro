@@ -14,7 +14,7 @@ import { findTool, getToolsForRole } from "../domain/edu/tools";
 import { eduProposals } from "../domain/edu/proposal-types";
 import { addMaterial } from "../services";
 import { actorFor, ids, resetStore, store } from "./fake-store";
-import { timeZoneDataProblem } from "./tz-sanity";
+import { timeZoneDataProblem, vancouverWinterRule } from "./tz-sanity";
 
 const alex = actorFor("teacher1@example.test")!;
 const taylor = actorFor("teacher2@example.test")!;
@@ -34,7 +34,8 @@ async function run(tool: string, actor = alex, args: unknown = {}) {
 
 async function main() {
   const tzProblem = timeZoneDataProblem();
-  check("Runtime time zone data keeps Vancouver at UTC-7 in winter", tzProblem === null, tzProblem);
+  check("Vancouver wall-clock times round-trip through UTC around the autumn change (any tz database version)", tzProblem === null, tzProblem);
+  console.info(`INFO  ${vancouverWinterRule()}`);
 
   // ----- tool sets -----
   const names = getToolsForRole("TEACHER").map((t) => t.name).sort();
@@ -49,7 +50,9 @@ async function main() {
   check("parseTimeOnly validates HH:mm", parseTimeOnly("24:00") === null && parseTimeOnly("9:00") === null && parseTimeOnly("16:30")?.minute === 30);
   const beforeDst = new Date("2026-10-28T19:00:00.000Z");
   const week = resolveWhen("this_week", beforeDst, "America/Vancouver");
-  check("this_week runs Monday to next Monday in local time; Vancouver stays UTC-7 after Nov 1, 2026", week.from.toISOString() === "2026-10-26T07:00:00.000Z" && week.to.toISOString() === "2026-11-02T07:00:00.000Z", week);
+  const weekEnd = describeInstant(week.to.toISOString(), "America/Vancouver");
+  const weekSpanHours = (week.to.getTime() - week.from.getTime()) / 3_600_000;
+  check("this_week runs local Monday 00:00 to next local Monday 00:00 across the autumn change (any tz database version)", week.from.toISOString() === "2026-10-26T07:00:00.000Z" && weekEnd.localDate === "2026-11-02" && weekEnd.localTime === "00:00" && Math.abs(weekSpanHours - 168) <= 1, { week, weekEnd, weekSpanHours });
   const tomorrow = resolveWhen("tomorrow", new Date("2026-10-08T06:30:00.000Z"), "America/Vancouver");
   check("tomorrow uses the local date (06:30Z is still Oct 7 in Vancouver)", tomorrow.from.toISOString() === "2026-10-08T07:00:00.000Z" && tomorrow.to.toISOString() === "2026-10-09T07:00:00.000Z", tomorrow);
   check("describeInstant gives local date, time and weekday", JSON.stringify(describeInstant("2026-10-08T23:00:00.000Z", "America/Vancouver")) === JSON.stringify({ localDate: "2026-10-08", localTime: "16:00", weekday: "Thu" }));

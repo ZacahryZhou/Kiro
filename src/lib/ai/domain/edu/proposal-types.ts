@@ -11,6 +11,7 @@ import { createMemoryProposalStore } from "../../core/proposal-store";
 import { prismaProposalStore } from "../../core/prisma-proposal-store";
 import { createProposalService, type ProposalRegistry } from "../../core/proposals";
 import { describeInstant } from "../../core/time";
+import { useRealBackend } from "../../runtime";
 import * as services from "../../services";
 
 // Maps each proposal type to its payload schema, the service function that runs on confirmation,
@@ -191,11 +192,15 @@ export const eduProposalHandlers: ProposalRegistry = {
   ADD_STUDENT_NOTE: {
     schema: ProposalPayloadSchemas.ADD_STUDENT_NOTE,
     execute: executeStudentNote,
-    describe: async (_actor, payload) => [
-      `${payload.kind === "AVAILABILITY" ? "Availability" : "Private note"} for student ${payload.studentId}`,
-      payload.content,
-      "This note is visible to the teacher only.",
-    ],
+    describe: async (actor, payload) => {
+      const roster = await services.listMyStudents(actor, { courseId: payload.courseId });
+      const student = roster.ok ? roster.data.students.find((s) => s.id === payload.studentId) : undefined;
+      return [
+        `${payload.kind === "AVAILABILITY" ? "Availability" : "Private note"} for ${student?.name ?? "the student"}`,
+        payload.content,
+        "This note is visible to the teacher only.",
+      ];
+    },
   },
 };
 
@@ -204,7 +209,6 @@ const globalForProposals = globalThis as unknown as {
   __koraProposalStore?: ReturnType<typeof createMemoryProposalStore>;
 };
 const memoryProposalStore = (globalForProposals.__koraProposalStore ??= createMemoryProposalStore());
-const usePrismaStore = process.env.NODE_ENV === "development" || process.env.NODE_ENV === "production";
 export const proposalStore = memoryProposalStore;
-const activeProposalStore = usePrismaStore ? prismaProposalStore : memoryProposalStore;
+const activeProposalStore = useRealBackend ? prismaProposalStore : memoryProposalStore;
 export const eduProposals = createProposalService(eduProposalHandlers, activeProposalStore);

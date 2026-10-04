@@ -1,6 +1,7 @@
 // Application-runtime smoke check. Run against an isolated migrated development database:
 // NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts
 import { prisma } from "@/lib/db/prisma";
+import { seedFixtures } from "../../../../prisma/seed-ai";
 import { findTool } from "../domain/edu/tools";
 import { eduProposals } from "../domain/edu/proposal-types";
 import * as services from "../services";
@@ -25,11 +26,10 @@ async function main() {
   const tool = findTool("TEACHER", "proposeAddContent");
   if (!tool) throw new Error("ADD_CONTENT proposal tool is unavailable.");
 
-  let createdUnitId: string | undefined;
   let createdMemoryId: string | undefined;
   const createdSessionIds: string[] = [];
   const smokeProposalIds: string[] = [];
-  const smokeSessionId = "kora-ai-session-real-check";
+  let smokeSessionId = "";
   let assertions = 0;
   const check = (condition: boolean, description: string) => {
     if (!condition) throw new Error(`FAIL: ${description}`);
@@ -37,10 +37,8 @@ async function main() {
     console.info(`PASS ${description}`);
   };
   try {
-    await prisma.deduction.deleteMany({ where: { sessionId: smokeSessionId } });
-    await prisma.attendance.deleteMany({ where: { sessionId: smokeSessionId } });
-    await prisma.sessionChange.deleteMany({ where: { sessionId: smokeSessionId } });
-    await prisma.session.deleteMany({ where: { id: smokeSessionId } });
+    // Start from pristine fixtures; the fixture seed owns all business-table writes.
+    await seedFixtures(prisma, { reset: true });
     const beforeUnits = await prisma.courseUnit.count({ where: { courseId: course.id } });
     const draft = await tool.run(teacher, {
       courseId: course.id,
@@ -56,7 +54,6 @@ async function main() {
     check(confirmed.ok && confirmed.data.status === "executed", "teacher confirmation executes the proposal through real write services");
     const unitId = (confirmed.ok ? confirmed.data.result as { unitId?: string } : {}).unitId;
     if (!unitId) throw new Error("Confirmed result did not include its created unit id.");
-    createdUnitId = unitId;
     const materials = await services.getCourseMaterials(teacher, { courseId: course.id });
     check(materials.ok && materials.data.units.some((unit) => unit.id === unitId && unit.materials.some((item) => item.title === "Acceptance Notes")), "confirmed unit and material are readable from the real course database");
     const studentView = await services.getStudentWorkspace(jordan, {
@@ -103,7 +100,9 @@ async function main() {
     check(scheduleConfirmation.ok && scheduleConfirmation.data.status === "executed" && scheduledIds.length === 1, "confirmation writes the session through the real conflict-checking service");
 
     const sessionTime = new Date(Date.now() + 4 * 60 * 60 * 1000);
-    await prisma.session.create({ data: { id: smokeSessionId, courseId: course.id, startAt: sessionTime, durationMin: 60, status: "SCHEDULED" } });
+    const scheduledForAttendance = await services.createSessions(teacher, { courseId: course.id, sessions: [{ startAt: sessionTime.toISOString(), durationMin: 60 }] });
+    if (!scheduledForAttendance.ok) throw new Error("Could not schedule the attendance smoke session.");
+    smokeSessionId = scheduledForAttendance.data.sessionIds[0];
     const roster = await services.listMyStudents(teacher, { courseId: course.id });
     if (!roster.ok) throw new Error("Could not load demo roster.");
     const markTool = findTool("TEACHER", "proposeMarkAttendance")!;
@@ -122,17 +121,8 @@ async function main() {
     await eduProposals.confirm(teacher, proposedAttendance.proposal!.id);
     check(await prisma.attendance.count({ where: { sessionId: smokeSessionId } }) === 2 && await prisma.deduction.count({ where: { sessionId: smokeSessionId } }) === 1, "reconfirming the database-backed attendance proposal creates no duplicate records");
   } finally {
-    if (createdUnitId) {
-      await prisma.material.deleteMany({ where: { unitId: createdUnitId } });
-      await prisma.courseUnit.deleteMany({ where: { id: createdUnitId } });
-    }
-    await prisma.deduction.deleteMany({ where: { sessionId: smokeSessionId } });
-    await prisma.attendance.deleteMany({ where: { sessionId: smokeSessionId } });
-    await prisma.sessionChange.deleteMany({ where: { sessionId: smokeSessionId } });
-    await prisma.session.deleteMany({ where: { id: smokeSessionId } });
-    if (createdSessionIds.length > 0) await prisma.session.deleteMany({ where: { id: { in: createdSessionIds } } });
-    if (createdMemoryId) await prisma.agentMemory.deleteMany({ where: { id: createdMemoryId } });
-    if (smokeProposalIds.length > 0) await prisma.agentProposal.deleteMany({ where: { id: { in: smokeProposalIds } } });
+    // Leave the database in its pristine fixture state.
+    await seedFixtures(prisma, { reset: true });
     await prisma.$disconnect();
   }
   console.info(`All ${assertions} real-service checks passed.`);

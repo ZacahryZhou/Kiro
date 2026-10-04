@@ -3,13 +3,13 @@
 // Run: npx tsx src/lib/ai/dev/schedule-check.ts
 import { ok, type Result } from "@/contracts";
 import { runAgent, type AgentDeps } from "../core/agent-loop";
-import { resolveSessions, resolveWhen, zonedTimeToUtc } from "../core/time";
+import { describeInstant, resolveSessions, resolveWhen, zonedTimeToUtc } from "../core/time";
 import type { Completion } from "../core/types";
 import { eduProposals, proposalStore } from "../domain/edu/proposal-types";
 import { findTool, getToolsForRole } from "../domain/edu/tools";
 import { createSessions, listMyCourses, listMyStudents } from "../services";
 import { actorFor, ids, resetStore, store } from "./fake-store";
-import { timeZoneDataProblem } from "./tz-sanity";
+import { timeZoneDataProblem, vancouverWinterRule } from "./tz-sanity";
 
 const TZ = "America/Vancouver"; // fixed, so these checks do not depend on the APP_TZ environment variable
 const alex = actorFor("teacher1@example.test")!;
@@ -31,7 +31,8 @@ const business = () => JSON.stringify({ c: store.courses.length, e: store.enroll
 
 async function main() {
   const tzProblem = timeZoneDataProblem();
-  check("Runtime time zone data keeps Vancouver at UTC-7 in winter", tzProblem === null, tzProblem);
+  check("Vancouver wall-clock times round-trip through UTC around the autumn change (any tz database version)", tzProblem === null, tzProblem);
+  console.info(`INFO  ${vancouverWinterRule()}`);
 
   // ----- resolveSessions (pure code) -----
   const thu = new Date("2026-10-08T19:30:00.000Z"); // Thursday 12:30 in Vancouver
@@ -40,7 +41,8 @@ async function main() {
   const thisWeek = resolveSessions({ weekdays: ["MON", "FRI"], when: "this_week", time: "09:30" }, thu, TZ);
   check("this_week uses Monday to Sunday of the current week", thisWeek.ok && thisWeek.sessions.map((s) => s.localDate).join() === "2026-10-05,2026-10-09");
   const dst = resolveSessions({ weekdays: ["TUE"], startDate: "2026-10-27", weeks: 2, time: "16:00" }, thu, TZ);
-  check("A weekly Tuesday 16:00 pattern remains 23:00Z after Vancouver adopts permanent UTC-7", dst.ok && dst.sessions.map((s) => s.startAt).join() === "2026-10-27T23:00:00.000Z,2026-11-03T23:00:00.000Z", dst);
+  const dstLocal = dst.ok ? dst.sessions.map((x) => describeInstant(x.startAt, TZ)) : [];
+  check("A weekly Tuesday 16:00 pattern keeps local 16:00 on both sides of the autumn change (any tz database version)", dst.ok && dst.sessions[0].startAt === "2026-10-27T23:00:00.000Z" && dstLocal.map((d) => `${d.localDate} ${d.localTime}`).join() === "2026-10-27 16:00,2026-11-03 16:00", dst);
   const explicit = resolveSessions({ dates: ["2026-12-02", "2026-12-01", "2026-12-01"], time: "18:15" }, thu, TZ);
   check("Explicit dates are de-duplicated and sorted", explicit.ok && explicit.sessions.map((s) => s.localDate).join() === "2026-12-01,2026-12-02");
   check("An impossible date is rejected", !resolveSessions({ dates: ["2026-02-30"], time: "10:00" }, thu).ok);

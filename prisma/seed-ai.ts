@@ -8,7 +8,6 @@ import { APP_TZ, zonedTimeToUtc } from "../src/lib/ai/core/time";
 // Idempotent local acceptance fixtures. Rows with kora-ai-* IDs belong to this seed only;
 // no unrelated user data is deleted. The shared demo password stays in this file.
 const demoPassword = "123456";
-const prisma = new PrismaClient();
 
 type Day = { year: number; month: number; day: number };
 const plusDays = (day: Day, by: number): Day => {
@@ -29,7 +28,10 @@ function nextWeekday(from: Day, weekday: number): Day {
   return plusDays(from, distance);
 }
 
-async function upsertSession(input: { id: string; courseId: string; startAt: Date; status: SessionStatus }) {
+async function upsertSession(prisma: PrismaClient, input: { id: string; courseId: string; startAt: Date; status: SessionStatus }) {
+  // A session that already has attendance was used in a demo; never contradict those records.
+  const used = await prisma.attendance.count({ where: { sessionId: input.id } });
+  if (used > 0) return;
   return prisma.session.upsert({
     where: { id: input.id },
     create: { ...input, durationMin: 60, location: "Online" },
@@ -37,8 +39,34 @@ async function upsertSession(input: { id: string; courseId: string; startAt: Dat
   });
 }
 
-async function main() {
+/** Removes everything the fixture teachers and students own or created (including data made by the AI). */
+export async function resetFixtures(prisma: PrismaClient): Promise<void> {
   if (process.env.NODE_ENV === "production") throw new Error("Demo seed data cannot be used in production.");
+  const users = await prisma.user.findMany({ where: { id: { startsWith: "kora-ai-" } }, select: { id: true, role: true } });
+  const userIds = users.map((user) => user.id);
+  const courseIds = (await prisma.course.findMany({ where: { teacherId: { in: userIds } }, select: { id: true } })).map((c) => c.id);
+  await prisma.$transaction([
+    prisma.agentProposal.deleteMany({ where: { actorId: { in: userIds } } }),
+    prisma.agentRun.deleteMany({ where: { actorId: { in: userIds } } }),
+    prisma.agentMemory.deleteMany({ where: { OR: [{ teacherId: { in: userIds } }, { studentId: { in: userIds } }, { courseId: { in: courseIds } }] } }),
+    prisma.deduction.deleteMany({ where: { courseId: { in: courseIds } } }),
+    prisma.attendance.deleteMany({ where: { session: { courseId: { in: courseIds } } } }),
+    prisma.sessionChange.deleteMany({ where: { session: { courseId: { in: courseIds } } } }),
+    prisma.session.deleteMany({ where: { courseId: { in: courseIds } } }),
+    prisma.material.deleteMany({ where: { unit: { courseId: { in: courseIds } } } }),
+    prisma.courseUnit.deleteMany({ where: { courseId: { in: courseIds } } }),
+    prisma.enrollment.deleteMany({ where: { courseId: { in: courseIds } } }),
+    prisma.course.deleteMany({ where: { id: { in: courseIds } } }),
+  ]);
+}
+
+/**
+ * Creates (or refreshes) the AI acceptance fixtures. With `reset`, first removes everything the
+ * fixture accounts own, so a demo can be repeated from a clean slate.
+ */
+export async function seedFixtures(prisma: PrismaClient, options: { reset?: boolean } = {}): Promise<void> {
+  if (process.env.NODE_ENV === "production") throw new Error("Demo seed data cannot be used in production.");
+  if (options.reset) await resetFixtures(prisma);
   const passwordHash = await hash(demoPassword, 12);
   const personas = [
     { key: "alex", name: "Alex Morgan", email: "t+alex@example.test", role: Role.TEACHER },
@@ -122,7 +150,7 @@ async function main() {
       status: SessionStatus.COMPLETED,
     });
   }
-  for (const plan of sessionPlans) await upsertSession(plan);
+  for (const plan of sessionPlans) await upsertSession(prisma, plan);
 
   // Seed 3 historical records per math student so trend analysis can distinguish enough data.
   for (const studentId of [jordan.id, sam.id]) {
@@ -154,10 +182,19 @@ async function main() {
     await prisma.agentMemory.upsert({ where: { id: memory.id }, create: memory, update: memory });
   }
 
-  console.info("Kora AI acceptance fixtures are ready: two teachers, three students, three courses, conflict sessions, materials, attendance and memories.");
 }
 
-main().catch(() => {
-  console.error("Failed to initialize AI acceptance fixtures. Check the database connection and migrations.");
-  process.exitCode = 1;
-}).finally(async () => prisma.$disconnect());
+// Run directly: `npx tsx prisma/seed-ai.ts` (add `--reset` for a clean slate before seeding).
+if (require.main === module) {
+  const prisma = new PrismaClient();
+  const reset = process.argv.includes("--reset");
+  seedFixtures(prisma, { reset })
+    .then(() => {
+      console.info(`Kora AI acceptance fixtures are ready${reset ? " (reset first)" : ""}: two teachers, three students, three courses, conflict sessions, materials, attendance and memories.`);
+    })
+    .catch(() => {
+      console.error("Failed to initialize AI acceptance fixtures. Check the database connection and migrations.");
+      process.exitCode = 1;
+    })
+    .finally(async () => prisma.$disconnect());
+}
