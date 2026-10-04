@@ -232,12 +232,11 @@ export async function uploadMaterialFileAction(_previousState: ActionState, form
   const courseId = value(formData, "courseId");
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { kind: "error", message: "Choose a file to upload." };
-  const result = await addMaterialsFromFile(actor, { unitId: value(formData, "unitId"), fileName: file.name, bytes: new Uint8Array(await file.arrayBuffer()), title: value(formData, "title") });
+  const result = await addMaterialsFromFile(actor, { unitId: value(formData, "unitId"), courseId, fileName: file.name, bytes: new Uint8Array(await file.arrayBuffer()), title: value(formData, "title") });
   if (!result.ok) return { kind: "error", message: result.error.message };
-  revalidatePath(`/teacher/courses/${courseId}`);
-  revalidatePath(`/student/courses/${courseId}`);
+  for (const path of [`/teacher/courses/${result.data.courseId}`, `/student/courses/${result.data.courseId}`, "/teacher/knowledge"]) revalidatePath(path);
   const { parts, characters, fileName } = result.data;
-  return { kind: "success", message: `Added ${fileName} (${characters.toLocaleString("en-US")} characters${parts > 1 ? `, split into ${parts} materials` : ""}).` };
+  return { kind: "success", message: `Added ${fileName} (${characters.toLocaleString("en-US")} characters${parts > 1 ? `, split into ${parts} materials` : ""}). Students in this course can now ask the course tutor about it.` };
 }
 
 export async function deleteMaterialAction(courseId: string, materialId: string): Promise<ActionState> {

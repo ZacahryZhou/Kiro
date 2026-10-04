@@ -1,12 +1,22 @@
 import { KnowledgeManager } from "@/components/knowledge-manager";
+import { KnowledgeUpload } from "@/components/knowledge-upload";
 import { ErrorAlert, PageHeader } from "@/components/page";
 import { requireRole } from "@/lib/auth/actor";
 import { listMyKnowledge } from "@/services/knowledge";
-import { listMyCourses } from "@/services/read";
+import { getCourseMaterials, listMyCourses } from "@/services/read";
 
 export default async function Page() {
   const actor = await requireRole("TEACHER");
   const [notes, courses] = await Promise.all([listMyKnowledge(actor), listMyCourses(actor)]);
+  // The units of each course, so a file can be filed under one of them.
+  const targets = courses.ok
+    ? await Promise.all(
+        courses.data.courses.map(async (course) => {
+          const materials = await getCourseMaterials(actor, { courseId: course.id });
+          return { id: course.id, name: course.name, units: materials.ok ? materials.data.units.map((unit) => ({ id: unit.id, title: unit.title })) : [] };
+        }),
+      )
+    : [];
   return (
     <section className="space-y-6">
       <PageHeader
@@ -19,7 +29,10 @@ export default async function Page() {
       ) : !courses.ok ? (
         <ErrorAlert message={courses.error.message} />
       ) : (
-        <KnowledgeManager entries={notes.data.entries} courses={courses.data.courses.map((c) => ({ id: c.id, name: c.name }))} />
+        <>
+          <KnowledgeUpload courses={targets} />
+          <KnowledgeManager entries={notes.data.entries} courses={courses.data.courses.map((c) => ({ id: c.id, name: c.name }))} />
+        </>
       )}
     </section>
   );

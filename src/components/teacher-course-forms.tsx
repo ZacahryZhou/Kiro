@@ -306,6 +306,8 @@ const formatSize = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 /
 
 /** Upload a .txt, .md, .pdf or .docx file; its text becomes one or more text materials in the unit. */
 export function UploadMaterialForm({ courseId, unitId }: { courseId: string; unitId: string }) {
+  // An empty unitId means "the Uploaded files unit"; the id suffix keeps element ids unique either way.
+  const idKey = unitId || `${courseId}-auto`;
   const [state, setState] = useState<FormState>(initialState);
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -355,7 +357,7 @@ export function UploadMaterialForm({ courseId, unitId }: { courseId: string; uni
       <input type="hidden" name="courseId" value={courseId} />
       <input type="hidden" name="unitId" value={unitId} />
       <label
-        htmlFor={`upload-file-${unitId}`}
+        htmlFor={`upload-file-${idKey}`}
         onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={(event) => { event.preventDefault(); setDragging(false); choose(event.dataTransfer.files[0] ?? null); }}
@@ -366,7 +368,7 @@ export function UploadMaterialForm({ courseId, unitId }: { courseId: string; uni
         <span className="text-xs text-muted-foreground">PDF, Word (.docx), .txt or .md, up to {formatSize(MAX_FILE_BYTES)}. Only the text is kept.</span>
         <input
           ref={inputRef}
-          id={`upload-file-${unitId}`}
+          id={`upload-file-${idKey}`}
           type="file"
           accept={ACCEPTED_EXTENSIONS.join(",")}
           className="sr-only"
@@ -386,8 +388,8 @@ export function UploadMaterialForm({ courseId, unitId }: { courseId: string; uni
       {problem && <p role="alert" className="text-sm text-destructive">{problem}</p>}
       {file && (
         <div className="space-y-2">
-          <Label htmlFor={`upload-title-${unitId}`}>Title <span className="font-normal text-muted-foreground">(optional, defaults to the file name)</span></Label>
-          <Input id={`upload-title-${unitId}`} name="title" maxLength={70} placeholder={file.name.replace(/\.[^.]+$/, "")} />
+          <Label htmlFor={`upload-title-${idKey}`}>Title <span className="font-normal text-muted-foreground">(optional, defaults to the file name)</span></Label>
+          <Input id={`upload-title-${idKey}`} name="title" maxLength={70} placeholder={file.name.replace(/\.[^.]+$/, "")} />
         </div>
       )}
       <FormFeedback state={state} />

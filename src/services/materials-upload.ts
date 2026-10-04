@@ -4,7 +4,17 @@ import type { Actor } from "@/lib/auth/actor";
 import { prisma } from "@/lib/db/prisma";
 import { extractText, MAX_MATERIAL_CHARS, MAX_PARTS, splitIntoParts, titleFromFileName } from "@/lib/file-text";
 
-const input = z.object({ unitId: z.string().min(1), fileName: z.string().min(1).max(200), title: z.string().trim().min(1).max(70).optional() });
+const input = z
+  .object({
+    unitId: z.string().min(1).optional(),
+    courseId: z.string().min(1).optional(),
+    fileName: z.string().min(1).max(200),
+    title: z.string().trim().min(1).max(70).optional(),
+  })
+  .refine((value) => value.unitId || value.courseId);
+
+/** Files uploaded without choosing a unit go into a unit with this title, created when first needed. */
+export const UPLOAD_UNIT_TITLE = "Uploaded files";
 
 export type UploadedMaterials = { materialIds: string[]; parts: number; characters: number; fileName: string };
 
@@ -14,15 +24,27 @@ export type UploadedMaterials = { materialIds: string[]; parts: number; characte
  */
 export async function addMaterialsFromFile(
   actor: Actor,
-  request: { unitId: string; fileName: string; bytes: Uint8Array; title?: string },
-): Promise<Result<UploadedMaterials>> {
+  request: { unitId?: string; courseId?: string; fileName: string; bytes: Uint8Array; title?: string },
+): Promise<Result<UploadedMaterials & { courseId: string }>> {
   if (actor.role !== "TEACHER") return err("FORBIDDEN", "Only teachers can add course materials.");
-  const parsed = input.safeParse({ unitId: request.unitId, fileName: request.fileName, title: request.title || undefined });
-  if (!parsed.success) return err("VALIDATION", "Choose a unit and a file.");
+  const parsed = input.safeParse({ unitId: request.unitId || undefined, courseId: request.courseId || undefined, fileName: request.fileName, title: request.title || undefined });
+  if (!parsed.success) return err("VALIDATION", "Choose a course (or a unit) and a file.");
   try {
-    const unit = await prisma.courseUnit.findUnique({ where: { id: parsed.data.unitId }, select: { id: true, course: { select: { teacherId: true } } } });
-    if (!unit) return err("NOT_FOUND", "Course unit not found.");
-    if (unit.course.teacherId !== actor.userId) return err("FORBIDDEN", "You do not have access to this course unit.");
+    let unit: { id: string; courseId: string; course: { teacherId: string } } | null;
+    if (parsed.data.unitId) {
+      unit = await prisma.courseUnit.findUnique({ where: { id: parsed.data.unitId }, select: { id: true, courseId: true, course: { select: { teacherId: true } } } });
+      if (!unit) return err("NOT_FOUND", "Course unit not found.");
+      if (unit.course.teacherId !== actor.userId) return err("FORBIDDEN", "You do not have access to this course unit.");
+    } else {
+      const course = await prisma.course.findUnique({ where: { id: parsed.data.courseId }, select: { id: true, teacherId: true } });
+      if (!course) return err("NOT_FOUND", "Course not found.");
+      if (course.teacherId !== actor.userId) return err("FORBIDDEN", "You do not have access to this course.");
+      unit = await prisma.courseUnit.findFirst({ where: { courseId: course.id, title: UPLOAD_UNIT_TITLE }, select: { id: true, courseId: true, course: { select: { teacherId: true } } } });
+      if (!unit) {
+        const last = await prisma.courseUnit.aggregate({ where: { courseId: course.id }, _max: { order: true } });
+        unit = await prisma.courseUnit.create({ data: { courseId: course.id, title: UPLOAD_UNIT_TITLE, order: (last._max.order ?? 0) + 1 }, select: { id: true, courseId: true, course: { select: { teacherId: true } } } });
+      }
+    }
 
     const extracted = await extractText(parsed.data.fileName, request.bytes);
     if (!extracted.ok) return extracted;
@@ -39,7 +61,7 @@ export async function addMaterialsFromFile(
         }),
       ),
     );
-    return ok({ materialIds: created.map((row) => row.id), parts: parts.length, characters: extracted.data.text.length, fileName: parsed.data.fileName });
+    return ok({ materialIds: created.map((row) => row.id), parts: parts.length, characters: extracted.data.text.length, fileName: parsed.data.fileName, courseId: unit.courseId });
   } catch {
     return err("INTERNAL", "Could not add the file. Please try again.");
   }
