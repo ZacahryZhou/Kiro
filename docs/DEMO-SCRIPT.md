@@ -24,13 +24,13 @@ Sign in as Alex. Point at the sidebar (the name and role are shown), the weekly 
 2. Show the preview card: "Review before anything changes", the per-student lines, "1 session deducted" for Jordan and none for Sam.
 3. Say: "Nothing has changed yet." Open the course page's Attendance tab in the background to show it is still empty (optional).
 4. Click **Confirm**. Show "Done. The change has been applied." and the attendance and deduction now on the course page.
-5. Click Confirm again or reload and confirm: nothing is applied twice.
+5. Reload the page: the Confirm button is gone, so nothing can be applied twice (the confirmation endpoint also refuses a second or parallel call).
 
 ## 4. Student: cited answers and a leave request (60 seconds)
 
 In the private window sign in as Jordan.
 
-1. Ask: `How do I solve 2x + 4 = 10?` (scripted mode answers from the demo materials). Show the answer with its **Sources** badge. Then ask something the materials do not cover, for example `What is the capital of France?`: the assistant says it could not find it in the course materials.
+1. Ask: `What is a linear equation?` (the showcase materials cover it). Show the answer with its **Sources** badge: "Solving Linear Equations". Then ask something the materials do not cover, for example `What is the capital of France?`: the assistant says it could not find it in the course materials.
 2. Type `I need leave next week for Physics`, show the preview ("only a note to your teacher") and confirm.
 3. Back as Alex, open **Requests**: the badge shows 1. Say: "Approving it is a note to the student; it never edits the schedule or attendance."
 
