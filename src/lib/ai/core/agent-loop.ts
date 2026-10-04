@@ -3,7 +3,7 @@ import type { Policy } from "../domain/edu/policy";
 import { getSystemPrompt } from "../domain/edu/prompts";
 import { findTool, getToolsForRole } from "../domain/edu/tools";
 import { eduMockModel } from "../domain/edu/mock-model";
-import { NOTHING_PREPARED_REPLY, PHANTOM_PROPOSAL_NOTE, claimsPendingProposal } from "../domain/edu/guards";
+import { NOTHING_PREPARED_REPLY, PHANTOM_PROPOSAL_NOTE, claimsPendingProposal, proposalFallbackReply } from "../domain/edu/guards";
 import { chatCompletion } from "./provider";
 import { defaultRunRecorder, type RunRecorder, type ToolCallLog } from "./runs";
 import { createTracer, filesForTool, type Tracer } from "../trace";
@@ -124,6 +124,8 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
     // A tool may supply an already-verified reply (materials Q&A); it is returned as is, not rewritten.
     if (finalReply !== undefined) return finish(finalReply, "OK");
   }
+  // The proposal exists even if the model never wrote its closing message: report it from code.
+  if (proposals.length > 0) return finish(proposalFallbackReply(proposals.map((p) => p.summary)), "OK");
   return finish(GIVE_UP_REPLY, "ERROR", "MAX_ROUNDS");
 
   async function runToolCall(call: ToolCall): Promise<string> {

@@ -169,6 +169,10 @@ async function main() {
         console.info(`         you: ${turn.text}`);
         console.info(`         tools: ${outs[i].toolCalls.map((c) => c.name).join(", ") || "none"}; proposals: ${proposalTypes(outs[i]).join(", ") || "none"}`);
         console.info(`         reply: ${outs[i].reply.replace(/\s+/g, " ").slice(0, 400)}`);
+        for (const proposal of outs[i].proposals) {
+          console.info(`         preview (${proposal.type}):`);
+          for (const line of (proposal.preview ?? [proposal.summary]).slice(0, 14)) console.info(`           - ${line.replace(/\s+/g, " ").slice(0, 220)}`);
+        }
       });
     }
   }

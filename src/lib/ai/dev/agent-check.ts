@@ -73,6 +73,15 @@ async function main() {
     const out = await ask(alex, "Jordan came", { chatCompletion: model.fn, record });
     check("Negated or conditional wording is left alone", model.requests.length === 1 && /Which session/.test(out.reply), out.reply);
   }
+  // 0b. Running out of rounds after a proposal exists still reports the proposal.
+  {
+    const { record } = setup();
+    const model = scripted((n) => n === 1
+      ? calls({ name: "proposeMarkAttendance", args: { sessionId: "s_a_today", records: [{ studentId: ids.jordan, status: "PRESENT" }, { studentId: ids.sam, status: "LEAVE" }] } })
+      : calls({ name: "listMyCourses", args: {} }));
+    const out = await ask(alex, "Jordan came, Sam is on leave", { chatCompletion: model.fn, record, maxRounds: 3 });
+    check("When rounds run out after a proposal was created, the reply reports it from code", out.proposals.length === 1 && out.status === "OK" && /waiting for your confirmation/.test(out.reply), out);
+  }
   // 1. Direct answer, no tools.
   {
     const { runs, record } = setup();

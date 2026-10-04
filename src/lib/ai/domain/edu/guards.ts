@@ -20,3 +20,9 @@ export function claimsPendingProposal(reply: string, proposalCount: number): boo
     .split(/(?<=[.!?:])\s+/)
     .some((sentence) => CLAIM.test(sentence) && !NEGATED_OR_CONDITIONAL.test(sentence));
 }
+
+/** When the model runs out of rounds after a proposal exists, say so from code instead of giving up. */
+export function proposalFallbackReply(summaries: string[]): string {
+  const list = summaries.map((summary) => `"${summary}"`).join("; ");
+  return `I prepared ${list}. It is waiting for your confirmation in the panel. Nothing has changed yet.`;
+}

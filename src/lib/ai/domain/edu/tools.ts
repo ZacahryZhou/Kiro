@@ -845,7 +845,7 @@ const proposeReschedule = defineTool({
   description:
     "Prepare a proposal to move one existing session to a new date and time. This does NOT move anything: the teacher must confirm. " +
     "Find the session with getTeacherSchedule first and pass its sessionId. Give the new time as HH:mm and EITHER a calendar date (newDate) OR a weekday (newWeekday, meaning that weekday of the same Monday-to-Sunday week as the session); the system works out the exact date and UTC time, never you. " +
-    "If the new time clashes with another session, no proposal is created: explain the clash and ask for another time.",
+    "This tool checks the clash itself, so do not call checkConflicts or read student notes first. If the new time clashes with another session, no proposal is created: explain the clash and ask for another time.",
   parameters: obj(
     {
       sessionId: { type: "string", description: "A session ID from getTeacherSchedule." },
@@ -1326,7 +1326,7 @@ const proposeStudentRequest = defineTool({
   description:
     "Prepare a request to the teacher for leave from, or a different time for, one of the student's own upcoming sessions. This does NOT send anything: the student must confirm. " +
     "Find the session with getStudentWorkspace first and pass its sessionId. The request is only a note to the teacher; it never changes the schedule or attendance. " +
-    "Give a preferred date and time only for a different-time request.",
+    "Give a preferred date and time only for a different-time request. Call this tool as soon as the session is identified: do not ask the student for permission or a reason first, because the preview it creates is what the student confirms.",
   parameters: obj(
     {
       sessionId: { type: "string", description: "A session ID from getStudentWorkspace." },
