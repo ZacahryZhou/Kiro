@@ -64,8 +64,8 @@ export const DashboardLayoutInput = z
   });
 export type DashboardLayoutInput = z.infer<typeof DashboardLayoutInput>;
 
-export const UseLayoutInput = z.object({ layoutId: id.nullable() });
-export type UseLayoutInput = z.infer<typeof UseLayoutInput>;
+export const ActivateLayoutInput = z.object({ layoutId: id.nullable() });
+export type ActivateLayoutInput = z.infer<typeof ActivateLayoutInput>;
 
 export const DeleteLayoutInput = z.object({ layoutId: id });
 export type DeleteLayoutInput = z.infer<typeof DeleteLayoutInput>;
@@ -87,9 +87,9 @@ export const CLASSIC_LAYOUT: Pick<DashboardLayoutInput, "name" | "theme" | "moti
   motion: "calm",
   items: [
     { id: "stats", type: "STATS", x: 0, y: 0, w: 12, h: 2 },
-    { id: "today", type: "TODAY_SESSIONS", x: 0, y: 2, w: 5, h: 6 },
-    { id: "week", type: "WEEK_SCHEDULE", x: 5, y: 2, w: 7, h: 6 },
-    { id: "requests", type: "PENDING_REQUESTS", x: 0, y: 8, w: 5, h: 4 },
-    { id: "courses", type: "COURSE_LIST", x: 5, y: 8, w: 7, h: 4 },
+    { id: "today", type: "TODAY_SESSIONS", x: 0, y: 2, w: 5, h: 5 },
+    { id: "week", type: "WEEK_SCHEDULE", x: 5, y: 2, w: 7, h: 5 },
+    { id: "requests", type: "PENDING_REQUESTS", x: 0, y: 7, w: 5, h: 4 },
+    { id: "courses", type: "COURSE_LIST", x: 5, y: 7, w: 7, h: 4 },
   ],
 };

@@ -16,5 +16,6 @@ export async function resolveRequestAction(_previous: ActionState, formData: For
   if (!result.ok) return { kind: "error", message: result.error.message };
   revalidatePath("/teacher/requests");
   revalidatePath("/teacher");
+  revalidatePath("/teacher/schedule");
   return { kind: "success", message: decision === "APPROVED" ? "Approved." : "Declined." };
 }

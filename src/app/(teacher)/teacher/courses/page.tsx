@@ -18,7 +18,7 @@ export default async function Page() {
   return (
     <section className="space-y-8">
       <PageHeader
-        back={{ href: "/teacher", label: "Back to schedule" }}
+        back={{ href: "/teacher/schedule", label: "Back to schedule" }}
         eyebrow="Teacher Workspace"
         title="Your courses"
         description="Create a course, enroll existing students, and set up a schedule."

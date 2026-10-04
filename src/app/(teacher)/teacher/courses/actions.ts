@@ -165,6 +165,7 @@ export async function createSessionsAction(_previousState: ActionState, formData
     };
   }
   revalidatePath("/teacher");
+  revalidatePath("/teacher/schedule");
   revalidatePath(`/teacher/courses/${courseId}`);
   return {
     kind: "success",
@@ -186,6 +187,7 @@ export async function confirmAttendanceAction(_previousState: ActionState, formD
   if (courseId) {
     revalidatePath(`/teacher/courses/${courseId}`);
     revalidatePath("/teacher");
+    revalidatePath("/teacher/schedule");
     revalidatePath("/student");
   }
   return {
@@ -240,6 +242,7 @@ export async function rescheduleSessionAction(_previousState: ActionState, formD
     };
   }
   revalidatePath("/teacher");
+  revalidatePath("/teacher/schedule");
   revalidatePath(`/teacher/courses/${courseId}`);
   revalidatePath("/student");
   revalidatePath(`/student/courses/${courseId}`);

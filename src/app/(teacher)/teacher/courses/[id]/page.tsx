@@ -68,7 +68,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   return (
     <section className="space-y-6">
       <PageHeader
-        back={{ href: "/teacher", label: "Back to schedule" }}
+        back={{ href: "/teacher/schedule", label: "Back to schedule" }}
         eyebrow="Course details"
         title={course.name}
         description={course.subject}

@@ -10,7 +10,8 @@ import { MobileNav, SidebarNav, type NavItem } from "@/components/sidebar-nav";
 import { Button } from "@/components/ui/button";
 
 const TEACHER_NAV: NavItem[] = [
-  { href: "/teacher", label: "Schedule", icon: "schedule" },
+  { href: "/teacher", label: "Home", icon: "home" },
+  { href: "/teacher/schedule", label: "Schedule", icon: "schedule" },
   { href: "/teacher/calendar", label: "Calendar", icon: "calendar" },
   { href: "/teacher/courses", label: "Courses", icon: "courses" },
   { href: "/teacher/students", label: "Students", icon: "students" },

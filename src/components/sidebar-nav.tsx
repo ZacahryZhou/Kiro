@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, CalendarDays, CalendarRange, GraduationCap, Inbox, LayoutDashboard, Settings, Users, Workflow } from "lucide-react";
+import { BookOpen, CalendarDays, House, CalendarRange, GraduationCap, Inbox, LayoutDashboard, Settings, Users, Workflow } from "lucide-react";
 
-export type NavItem = { href: string; label: string; icon: "schedule" | "calendar" | "courses" | "learning" | "agent" | "requests" | "students" | "settings"; badge?: number };
+export type NavItem = { href: string; label: string; icon: "home" | "schedule" | "calendar" | "courses" | "learning" | "agent" | "requests" | "students" | "settings"; badge?: number };
 
-const ICONS = { schedule: CalendarDays, calendar: CalendarRange, courses: BookOpen, learning: GraduationCap, agent: Workflow, requests: Inbox, students: Users, settings: Settings } as const;
+const ICONS = { home: House, schedule: CalendarDays, calendar: CalendarRange, courses: BookOpen, learning: GraduationCap, agent: Workflow, requests: Inbox, students: Users, settings: Settings } as const;
 
 function isActive(pathname: string, href: string) {
   // /teacher and /student are home pages; their sibling pages have their own menu entries.

@@ -4,7 +4,7 @@ import {
   DashboardLayoutInput as DashboardLayoutInputSchema,
   DeleteLayoutInput as DeleteLayoutInputSchema,
   MAX_LAYOUTS,
-  UseLayoutInput as UseLayoutInputSchema,
+  ActivateLayoutInput as ActivateLayoutInputSchema,
   err,
   ok,
   type DashboardItem,
@@ -14,7 +14,7 @@ import {
   type DashboardTheme,
   type DeleteLayoutInput,
   type Result,
-  type UseLayoutInput,
+  type ActivateLayoutInput,
 } from "@/contracts";
 import type { Actor } from "@/lib/auth/actor";
 import { prisma } from "@/lib/db/prisma";
@@ -113,9 +113,9 @@ export async function saveDashboardLayout(actor: Actor, input: DashboardLayoutIn
 }
 
 /** Makes one of the teacher's layouts active, or passes null to go back to the built-in Classic layout. */
-export async function useDashboardLayout(actor: Actor, input: UseLayoutInput): Promise<Result<{ activeLayoutId: string | null }>> {
+export async function activateDashboardLayout(actor: Actor, input: ActivateLayoutInput): Promise<Result<{ activeLayoutId: string | null }>> {
   if (actor.role !== "TEACHER") return err("FORBIDDEN", "Only teachers have a customisable home page.");
-  const parsed = UseLayoutInputSchema.safeParse(input);
+  const parsed = ActivateLayoutInputSchema.safeParse(input);
   if (!parsed.success) return err("VALIDATION", "Choose a layout.");
   try {
     if (parsed.data.layoutId === null) {

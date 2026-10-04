@@ -241,14 +241,14 @@ async function main() {
     const resaved = await dashboard.saveDashboardLayout(teacher, { ...bareLayout, theme: "forest" });
     const afterReplace = await dashboard.listMyLayouts(teacher);
     check(resaved.ok && afterReplace.ok && afterReplace.data.layouts.length === 2 && afterReplace.data.layouts.find((l) => l.name === "Teaching day")?.theme === "forest", "saving under an existing name replaces that layout");
-    const switched = await dashboard.useDashboardLayout(teacher, { layoutId: second.ok ? second.data.id : "" });
+    const switched = await dashboard.activateDashboardLayout(teacher, { layoutId: second.ok ? second.data.id : "" });
     const afterSwitch = await dashboard.getActiveLayout(teacher);
     check(switched.ok && afterSwitch.ok && afterSwitch.data.layout?.name === "Prep evening", "a teacher switches back to an older layout");
-    const stolenSwitch = await dashboard.useDashboardLayout(otherTeacher, { layoutId: savedLayout.ok ? savedLayout.data.id : "" });
+    const stolenSwitch = await dashboard.activateDashboardLayout(otherTeacher, { layoutId: savedLayout.ok ? savedLayout.data.id : "" });
     check(!stolenSwitch.ok && stolenSwitch.error.code === "NOT_FOUND", "another teacher cannot activate someone else's layout");
     const stolenDelete = await dashboard.deleteDashboardLayout(otherTeacher, { layoutId: savedLayout.ok ? savedLayout.data.id : "" });
     check(!stolenDelete.ok && stolenDelete.error.code === "NOT_FOUND" && (await prisma.dashboardLayout.count({ where: { teacherId: teacher.userId } })) === 2, "another teacher cannot delete someone else's layout");
-    const classic = await dashboard.useDashboardLayout(teacher, { layoutId: null });
+    const classic = await dashboard.activateDashboardLayout(teacher, { layoutId: null });
     const afterClassic = await dashboard.getActiveLayout(teacher);
     check(classic.ok && afterClassic.ok && afterClassic.data.layout === null, "choosing Classic clears the active layout without deleting any");
     const layoutRemoved = await dashboard.deleteDashboardLayout(teacher, { layoutId: savedLayout.ok ? savedLayout.data.id : "" });
