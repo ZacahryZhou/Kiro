@@ -33,3 +33,5 @@ export const rescheduleSession = activeServices.rescheduleSession;
 export const submitStudentRequest = activeServices.submitStudentRequest;
 export const listStudentRequests = activeServices.listStudentRequests;
 export const resolveStudentRequest = activeServices.resolveStudentRequest;
+export const saveProgressRecord = activeServices.saveProgressRecord;
+export const listProgressRecords = activeServices.listProgressRecords;

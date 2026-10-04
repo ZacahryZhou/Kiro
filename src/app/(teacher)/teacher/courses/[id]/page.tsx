@@ -3,10 +3,11 @@ import { FileText, MapPin, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorAlert, Initial, PageHeader, SectionHeading } from "@/components/page";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AddStudentForm, CreateSessionsForm, MarkAttendanceForm, RescheduleSessionForm, TeacherCourseMaterials } from "@/components/teacher-course-forms";
+import { AddStudentForm, CreateSessionsForm, MarkAttendanceForm, ProgressForm, RescheduleSessionForm, TeacherCourseMaterials } from "@/components/teacher-course-forms";
+import { NEXT_ACTION_LABELS } from "@/lib/progress";
 import { requireRole } from "@/lib/auth/actor";
 import { formatLocalDate, formatLocalTime, getLocalDateKey } from "@/lib/time";
-import { getCourseMaterials, getTeacherSchedule, listAttendance, listDeductions, listMyCourses, listMyStudents, type SessionView } from "@/services/read";
+import { getCourseMaterials, getTeacherSchedule, listAttendance, listDeductions, listMyCourses, listMyStudents, listProgressRecords, type SessionView } from "@/services/read";
 
 const statusLabels = {
   SCHEDULED: "Scheduled",
@@ -35,7 +36,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   if (!course) notFound();
 
   const timeZone = process.env.APP_TZ || "America/Vancouver";
-  const [studentsResult, scheduleResult, attendanceResult, deductionsResult, materialsResult] = await Promise.all([
+  const [studentsResult, scheduleResult, attendanceResult, deductionsResult, materialsResult, progressResult] = await Promise.all([
     listMyStudents(actor, { courseId: id }),
     getTeacherSchedule(actor, {
       from: "1970-01-01T00:00:00.000Z",
@@ -45,6 +46,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     listAttendance(actor, { courseId: id }),
     listDeductions(actor, { courseId: id }),
     getCourseMaterials(actor, { courseId: id }),
+    listProgressRecords(actor, { courseId: id }),
   ]);
 
   const sessionsByDate = new Map<string, SessionView[]>();
@@ -54,6 +56,14 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       sessionsByDate.set(dateKey, [...(sessionsByDate.get(dateKey) ?? []), session]);
     }
   }
+
+  const renderedAt = new Date().getTime();
+  const startedSessions = scheduleResult.ok
+    ? scheduleResult.data.sessions
+        .filter((session) => session.status !== "CANCELLED" && new Date(session.startAt).getTime() <= renderedAt)
+        .sort((a, b) => Date.parse(b.startAt) - Date.parse(a.startAt))
+        .map((session) => ({ id: session.id, label: `${formatLocalDate(new Date(session.startAt), timeZone)}, ${formatLocalTime(new Date(session.startAt), timeZone)}` }))
+    : [];
 
   return (
     <section className="space-y-6">
@@ -71,11 +81,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       </div>
 
       <Tabs defaultValue="students" className="space-y-5">
-        <TabsList className="grid h-auto w-full grid-cols-2 sm:w-[min(100%,36rem)] sm:grid-cols-4">
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:w-[min(100%,44rem)] sm:grid-cols-5">
           <TabsTrigger value="students">Students</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
           <TabsTrigger value="materials">Materials</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
+          <TabsTrigger value="progress">Progress</TabsTrigger>
         </TabsList>
 
         <TabsContent value="students" className="space-y-4">
@@ -200,6 +211,31 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                 </tbody>
               </table>
             </div>
+          )}
+        </TabsContent>
+        <TabsContent value="progress" className="space-y-4">
+          <SectionHeading title="Progress" description="What each student worked on, session by session." />
+          {studentsResult.ok && <ProgressForm courseId={id} students={studentsResult.data.students} sessions={startedSessions} />}
+          {!progressResult.ok ? (
+            <ErrorAlert message={progressResult.error.message} />
+          ) : progressResult.data.records.length === 0 ? (
+            <EmptyState title="No progress records yet" description="Saved records appear here and are visible to the student (except your private note)." />
+          ) : (
+            <ul className="space-y-3">
+              {progressResult.data.records.map((record) => (
+                <li key={record.id} className="kora-card space-y-2 p-5" data-testid="progress-record">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium">{record.studentName}</p>
+                    <span className="text-sm text-muted-foreground">{formatLocalDate(new Date(record.sessionStartAt), timeZone)}</span>
+                  </div>
+                  <p className="text-sm"><span className="text-muted-foreground">Goal: </span>{record.goal}</p>
+                  <p className="text-sm"><span className="text-muted-foreground">Produced: </span>{record.output}</p>
+                  {record.issue && <p className="text-sm"><span className="text-muted-foreground">Difficulty: </span>{record.issue}</p>}
+                  <p className="text-sm"><span className="text-muted-foreground">Next step: </span>{NEXT_ACTION_LABELS[record.nextAction]}</p>
+                  {record.note && <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm"><span className="text-muted-foreground">Private note: </span>{record.note}</p>}
+                </li>
+              ))}
+            </ul>
           )}
         </TabsContent>
       </Tabs>

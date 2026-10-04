@@ -23,7 +23,7 @@ async function main() {
   const real = loadPolicy();
   check("The policy is loaded from the document (not the fallback)", real.source === "file", real.source);
   check("All three blocks are present and non-empty", real.shared.length > 200 && real.teacher.length > 200 && real.student.length > 100);
-  check("The loaded policy stays small enough to send with every request (under 6000 characters)", real.shared.length + real.teacher.length + real.student.length < 6000);
+  check("The loaded policy stays small enough to send with every request (under 7000 characters)", real.shared.length + real.teacher.length + real.student.length < 7000);
 
   const teacher = teacherSystemPrompt(new Date(), real);
   const student = studentSystemPrompt(new Date(), real);

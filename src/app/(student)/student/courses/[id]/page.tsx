@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { BookOpen, ExternalLink } from "lucide-react";
 import { EmptyState, ErrorAlert, PageHeader } from "@/components/page";
 import { requireRole } from "@/lib/auth/actor";
-import { getCourseMaterials, listMyCourses } from "@/services/read";
+import { NEXT_ACTION_LABELS } from "@/lib/progress";
+import { formatLocalDate } from "@/lib/time";
+import { getCourseMaterials, listMyCourses, listProgressRecords } from "@/services/read";
 
 function safeExternalUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -27,7 +29,9 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
   const course = coursesResult.data.courses.find((item) => item.id === id);
   if (!course) notFound();
 
-  const materialsResult = await getCourseMaterials(actor, { courseId: id });
+  const [materialsResult, progressResult] = await Promise.all([getCourseMaterials(actor, { courseId: id }), listProgressRecords(actor, { courseId: id })]);
+  const timeZone = process.env.APP_TZ || "America/Vancouver";
+  const progress = progressResult.ok ? progressResult.data.records : [];
   return (
     <section className="space-y-6">
       <PageHeader
@@ -81,6 +85,23 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
             </li>
           ))}
         </ol>
+      )}
+
+      {progress.length > 0 && (
+        <section aria-labelledby="progress-heading" className="space-y-3">
+          <h2 id="progress-heading" className="text-lg font-semibold tracking-tight sm:text-xl">Your progress notes</h2>
+          <ul className="space-y-3">
+            {progress.map((record) => (
+              <li key={record.id} className="kora-card space-y-1.5 p-5">
+                <p className="text-sm text-muted-foreground">{formatLocalDate(new Date(record.sessionStartAt), timeZone)}</p>
+                <p className="text-sm"><span className="text-muted-foreground">Goal: </span>{record.goal}</p>
+                <p className="text-sm"><span className="text-muted-foreground">What you produced: </span>{record.output}</p>
+                {record.issue && <p className="text-sm"><span className="text-muted-foreground">Difficulty: </span>{record.issue}</p>}
+                <p className="text-sm"><span className="text-muted-foreground">Next step: </span>{NEXT_ACTION_LABELS[record.nextAction]}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </section>
   );

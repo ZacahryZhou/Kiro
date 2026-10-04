@@ -69,6 +69,13 @@ enum StudentRequestStatus {
   DECLINED
 }
 
+enum ProgressNextAction {
+  PRACTICE
+  REVIEW
+  EXTRA_MATERIAL
+  RECAP_NEXT
+}
+
 enum ProposalType {
   CREATE_COURSE
   CREATE_SESSIONS
@@ -88,18 +95,20 @@ model User {
   role         Role
   passwordHash String
 
-  courses          Course[]
-  enrollments      Enrollment[]
-  sessionChanges   SessionChange[]
-  attendance       Attendance[]     @relation("StudentAttendance")
-  markedAttendance Attendance[]     @relation("MarkedAttendance")
-  deductions       Deduction[]
-  agentRuns        AgentRun[]
-  agentProposals   AgentProposal[]
-  studentMemories  AgentMemory[]    @relation("StudentMemories")
-  teacherMemories  AgentMemory[]    @relation("TeacherMemories")
-  studentRequests  StudentRequest[] @relation("RequestStudent")
-  resolvedRequests StudentRequest[] @relation("RequestResolver")
+  courses           Course[]
+  enrollments       Enrollment[]
+  sessionChanges    SessionChange[]
+  attendance        Attendance[]     @relation("StudentAttendance")
+  markedAttendance  Attendance[]     @relation("MarkedAttendance")
+  deductions        Deduction[]
+  agentRuns         AgentRun[]
+  agentProposals    AgentProposal[]
+  studentMemories   AgentMemory[]    @relation("StudentMemories")
+  teacherMemories   AgentMemory[]    @relation("TeacherMemories")
+  studentRequests   StudentRequest[] @relation("RequestStudent")
+  resolvedRequests  StudentRequest[] @relation("RequestResolver")
+  progressAsStudent ProgressRecord[] @relation("ProgressStudent")
+  progressAsTeacher ProgressRecord[] @relation("ProgressTeacher")
 }
 
 model Course {
@@ -146,6 +155,7 @@ model Session {
   attendance      Attendance[]
   deductions      Deduction[]
   studentRequests StudentRequest[]
+  progressRecords ProgressRecord[]
 
   @@index([courseId, startAt])
 }
@@ -181,6 +191,27 @@ model StudentRequest {
 
   @@index([studentId, createdAt])
   @@index([sessionId, status])
+}
+
+/// A teacher's note on what a student worked on in one session. One record per session and student; saving again replaces it.
+model ProgressRecord {
+  id         String             @id @default(cuid())
+  sessionId  String
+  studentId  String
+  teacherId  String
+  goal       String
+  output     String
+  issue      String?
+  nextAction ProgressNextAction
+  note       String?
+  createdAt  DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime           @updatedAt @db.Timestamptz(3)
+  session    Session            @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  student    User               @relation("ProgressStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  teacher    User               @relation("ProgressTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, studentId])
+  @@index([studentId, createdAt])
 }
 
 model Attendance {

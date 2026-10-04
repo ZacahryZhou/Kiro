@@ -39,11 +39,11 @@ async function main() {
 
   // ----- tool sets -----
   const names = getToolsForRole("TEACHER").map((t) => t.name).sort();
-  check("Teacher has 12 read-only tools plus eight proposal tools", JSON.stringify(names) === JSON.stringify(["checkConflicts", "findMyStudent", "getAttendanceTrends", "getCourseMaterials", "getMyProfile", "getStudentMemory", "getTeacherSchedule", "listAttendance", "listDeductions", "listMyCourses", "listMyStudents", "listStudentRequests", "proposeAddContent", "proposeAddStudent", "proposeAddStudentNote", "proposeCreateCourse", "proposeCreateSessions", "proposeLessonPrep", "proposeMarkAttendance", "proposeReschedule"]), names);
-  check("Students get exactly three read tools, a request list and one proposal tool (leave requests to their own teacher)", JSON.stringify(getToolsForRole("STUDENT").map((t) => t.name).sort()) === JSON.stringify(["answerFromCourseMaterials", "getMyProfile", "getStudentWorkspace", "listStudentRequests", "proposeStudentRequest"]));
+  check("Teacher has 13 read-only tools plus nine proposal tools", JSON.stringify(names) === JSON.stringify(["checkConflicts", "findMyStudent", "getAttendanceTrends", "getCourseMaterials", "getMyProfile", "getStudentMemory", "getTeacherSchedule", "listAttendance", "listDeductions", "listMyCourses", "listMyStudents", "listProgressRecords", "listStudentRequests", "proposeAddContent", "proposeAddStudent", "proposeAddStudentNote", "proposeCreateCourse", "proposeCreateSessions", "proposeLessonPrep", "proposeMarkAttendance", "proposeProgressRecord", "proposeReschedule"]), names);
+  check("Students get three read tools, a request list, a progress list and one proposal tool (leave requests to their own teacher)", JSON.stringify(getToolsForRole("STUDENT").map((t) => t.name).sort()) === JSON.stringify(["answerFromCourseMaterials", "getMyProfile", "getStudentWorkspace", "listProgressRecords", "listStudentRequests", "proposeStudentRequest"]));
   const schemaText = JSON.stringify(getToolsForRole("TEACHER").map((t) => t.parameters));
   check("No tool parameter is called userId or role", !/"userId"|"role"/.test(schemaText));
-  check("No tool can write directly (eight propose* tools only prepare pending proposals)", getToolsForRole("TEACHER").every((t) => !/^(create|add|confirm|reschedule|delete|update|discard)/.test(t.name)) && getToolsForRole("TEACHER").filter((t) => t.name.startsWith("propose")).length === 8);
+  check("No tool can write directly (nine propose* tools only prepare pending proposals)", getToolsForRole("TEACHER").every((t) => !/^(create|add|confirm|reschedule|delete|update|discard)/.test(t.name)) && getToolsForRole("TEACHER").filter((t) => t.name.startsWith("propose")).length === 9);
 
   // ----- calendar helpers -----
   check("parseDateOnly rejects 2026-02-30", parseDateOnly("2026-02-30") === null && parseDateOnly("2026-2-3") === null && parseDateOnly("2026-02-28") !== null);

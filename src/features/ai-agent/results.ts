@@ -25,6 +25,9 @@ export function resultLines(type: ProposalType, result: unknown): string[] {
   if (type === "CREATE_SESSIONS" && Array.isArray(data.sessionIds)) {
     return [plural(data.sessionIds.length, "session scheduled", "sessions scheduled")];
   }
+  if (type === "PROGRESS_RECORD" && typeof data.studentName === "string") {
+    return [`Progress saved for ${data.studentName}`];
+  }
   if (type === "RESCHEDULE" && typeof data.newStartAt === "string") {
     return ["Session moved"];
   }

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/actor";
-import { addExistingStudentToCourse, addMaterial, confirmAttendance, createCourse, createCourseUnit, createSessions, rescheduleSession } from "@/services/write";
+import { addExistingStudentToCourse, addMaterial, confirmAttendance, createCourse, createCourseUnit, createSessions, rescheduleSession, saveProgressRecord } from "@/services/write";
 import type { ConflictView } from "@/contracts";
 
 type ActionState = { kind: "success" | "error" | null; message: string; details?: string[] };
@@ -252,4 +252,27 @@ export async function rescheduleSessionAction(_previousState: ActionState, formD
     minute: "2-digit",
   }).format(new Date(result.data.newStartAt));
   return { kind: "success", message: `Session moved to ${date}.` };
+}
+
+const NEXT_ACTIONS = ["PRACTICE", "REVIEW", "EXTRA_MATERIAL", "RECAP_NEXT"] as const;
+
+export async function saveProgressAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const courseId = value(formData, "courseId");
+  const nextAction = NEXT_ACTIONS.find((item) => item === value(formData, "nextAction"));
+  if (!nextAction) return { kind: "error", message: "Choose a next step." };
+  const issue = value(formData, "issue");
+  const note = value(formData, "note");
+  const result = await saveProgressRecord(actor, {
+    sessionId: value(formData, "sessionId"),
+    studentId: value(formData, "studentId"),
+    goal: value(formData, "goal"),
+    output: value(formData, "output"),
+    nextAction,
+    ...(issue ? { issue } : {}),
+    ...(note ? { note } : {}),
+  });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidatePath(`/teacher/courses/${courseId}`);
+  return { kind: "success", message: `Progress saved for ${result.data.studentName}.` };
 }

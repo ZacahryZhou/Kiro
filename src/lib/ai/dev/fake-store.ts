@@ -85,6 +85,19 @@ export type FakeRequest = {
   resolvedAt?: string;
 };
 
+export type FakeProgress = {
+  id: string;
+  sessionId: string;
+  studentId: string;
+  teacherId: string;
+  goal: string;
+  output: string;
+  issue?: string;
+  nextAction: "PRACTICE" | "REVIEW" | "EXTRA_MATERIAL" | "RECAP_NEXT";
+  note?: string;
+  updatedAt: string;
+};
+
 export type FakeState = {
   users: FakeUser[];
   courses: FakeCourse[];
@@ -97,6 +110,7 @@ export type FakeState = {
   materials: FakeMaterial[];
   memories: FakeMemory[];
   requests: FakeRequest[];
+  progress: FakeProgress[];
 };
 
 export const ids = {
@@ -191,6 +205,7 @@ export function createState(now = new Date()): FakeState {
     materials: [],
     memories: [],
     requests: [],
+    progress: [],
   };
 
   const session = (

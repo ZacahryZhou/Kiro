@@ -8,6 +8,7 @@ import {
   RescheduleInput as RescheduleInputSchema,
   ConfirmAttendanceInput as ConfirmAttendanceInputSchema,
   ResolveStudentRequestInput as ResolveStudentRequestInputSchema,
+  SaveProgressInput as SaveProgressInputSchema,
   StudentRequestInput as StudentRequestInputSchema,
   type AddStudentInput,
   type AddMaterialInput,
@@ -22,7 +23,9 @@ import {
   type Result,
   type ConflictView,
   type RescheduleInput,
+  type ProgressRecordView,
   type ResolveStudentRequestInput,
+  type SaveProgressInput,
   type StudentRequestInput,
   type StudentRequestView,
 } from "@/contracts";
@@ -565,5 +568,61 @@ export async function resolveStudentRequest(actor: Actor, input: ResolveStudentR
     return ok(requestView(row));
   } catch {
     return err("INTERNAL", "Could not save the decision. Please try again.");
+  }
+}
+
+// ---------- progress records ----------
+
+/**
+ * A teacher records what one enrolled student worked on in a session that has started.
+ * There is one record per session and student: saving again replaces it. Nothing else changes.
+ */
+export async function saveProgressRecord(actor: Actor, input: SaveProgressInput): Promise<Result<ProgressRecordView>> {
+  if (actor.role !== "TEACHER") return err("FORBIDDEN", "Only teachers can save progress records.");
+  const parsed = SaveProgressInputSchema.safeParse(input);
+  if (!parsed.success) return err("VALIDATION", "Enter a goal, an outcome and a next step.");
+  const data = parsed.data;
+  try {
+    const session = await prisma.session.findFirst({
+      where: { id: data.sessionId, course: { teacherId: actor.userId } },
+      select: { id: true, startAt: true, status: true, course: { select: { id: true, name: true, enrollments: { where: { studentId: data.studentId }, select: { id: true }, take: 1 } } } },
+    });
+    if (!session) return err("FORBIDDEN", "You do not have access to this session.");
+    if (session.course.enrollments.length === 0) return err("NOT_FOUND", "That student is not enrolled in this course.");
+    if (session.status === "CANCELLED") return err("CONFLICT", "This session was cancelled.");
+    if (session.startAt.getTime() > Date.now() && session.status !== "COMPLETED") {
+      return err("CONFLICT", "Progress can be saved once the session has started.");
+    }
+    const values = {
+      teacherId: actor.userId,
+      goal: data.goal.trim(),
+      output: data.output.trim(),
+      issue: data.issue?.trim() || null,
+      nextAction: data.nextAction,
+      note: data.note?.trim() || null,
+    };
+    const row = await prisma.progressRecord.upsert({
+      where: { sessionId_studentId: { sessionId: data.sessionId, studentId: data.studentId } },
+      create: { sessionId: data.sessionId, studentId: data.studentId, ...values },
+      update: values,
+      include: { student: { select: { name: true } } },
+    });
+    return ok({
+      id: row.id,
+      sessionId: row.sessionId,
+      courseId: session.course.id,
+      courseName: session.course.name,
+      sessionStartAt: session.startAt.toISOString(),
+      studentId: row.studentId,
+      studentName: row.student.name,
+      goal: row.goal,
+      output: row.output,
+      ...(row.issue ? { issue: row.issue } : {}),
+      nextAction: row.nextAction,
+      ...(row.note ? { note: row.note } : {}),
+      updatedAt: row.updatedAt.toISOString(),
+    });
+  } catch {
+    return err("INTERNAL", "Could not save the progress record. Please try again.");
   }
 }

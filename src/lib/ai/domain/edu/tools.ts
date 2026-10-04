@@ -1385,6 +1385,106 @@ const proposeStudentRequest = defineTool({
   },
 });
 
+const NEXT_ACTIONS = ["PRACTICE", "REVIEW", "EXTRA_MATERIAL", "RECAP_NEXT"] as const;
+
+const listProgressRecords = defineTool({
+  name: "listProgressRecords",
+  description:
+    "List progress records (what a student worked on in a session). A teacher sees the records of their own courses; a student sees only their own. " +
+    "Optionally narrow by course; a teacher may also narrow by student.",
+  parameters: obj({ courseId: { type: "string" }, studentId: { type: "string", description: "Teachers only." } }),
+  schema: z.object({ courseId: id.optional(), studentId: id.optional() }),
+  async run(actor, args) {
+    const result = await services.listProgressRecords(actor, { courseId: args.courseId, ...(actor.role === "TEACHER" ? { studentId: args.studentId } : {}) });
+    if (!result.ok) return serviceFailure(result.error);
+    return succeed({
+      total: result.data.records.length,
+      records: result.data.records.slice(0, 20).map((record) => ({
+        course: record.courseName,
+        ...(actor.role === "TEACHER" ? { student: record.studentName, studentId: record.studentId } : {}),
+        session: pick(describeInstant(record.sessionStartAt)),
+        goal: record.goal,
+        output: record.output,
+        ...(record.issue ? { issue: record.issue } : {}),
+        nextAction: record.nextAction,
+        ...(record.note ? { privateNote: record.note } : {}),
+      })),
+    });
+  },
+});
+
+const proposeProgressRecord = defineTool({
+  name: "proposeProgressRecord",
+  description:
+    "Prepare a progress record: what one student worked on in one session that has already started. This does NOT save anything: the teacher must confirm. " +
+    "Fill goal, output, issue and note only from what the teacher said, in short factual words; never invent scores, grades or praise. If the goal, the output or the next step is missing, ask the teacher instead of guessing. " +
+    "Find the session with getTeacherSchedule and the student with listMyStudents or findMyStudent. Saving again for the same session and student replaces the earlier record.",
+  parameters: obj(
+    {
+      sessionId: { type: "string", description: "A session ID from getTeacherSchedule (the session must have started)." },
+      studentId: { type: "string", description: "An enrolled student's ID." },
+      goal: { type: "string", description: "What the session aimed to cover." },
+      output: { type: "string", description: "What the student produced or achieved." },
+      issue: { type: "string", description: "A difficulty the student had, if the teacher mentioned one." },
+      nextAction: { type: "string", enum: [...NEXT_ACTIONS], description: "PRACTICE, REVIEW, EXTRA_MATERIAL or RECAP_NEXT." },
+      note: { type: "string", description: "A private note for the teacher, if requested." },
+    },
+    ["sessionId", "studentId", "goal", "output", "nextAction"],
+  ),
+  schema: z.object({
+    sessionId: id,
+    studentId: id,
+    goal: z.string().trim().min(1).max(200),
+    output: z.string().trim().min(1).max(500),
+    issue: z.string().trim().max(300).optional(),
+    nextAction: z.enum(NEXT_ACTIONS),
+    note: z.string().trim().max(300).optional(),
+  }),
+  async run(actor, args) {
+    if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers can record progress.");
+    const now = Date.now();
+    const schedule = await services.getTeacherSchedule(actor, {
+      from: new Date(now - 365 * 86_400_000).toISOString(),
+      to: new Date(now + 1095 * 86_400_000).toISOString(),
+    });
+    if (!schedule.ok) return serviceFailure(schedule.error);
+    const session = schedule.data.sessions.find((x) => x.id === args.sessionId);
+    if (!session) return failed("NOT_FOUND", "That session was not found among your sessions.");
+    if (session.status === "CANCELLED") return failed("CONFLICT", "That session was cancelled.");
+    if (Date.parse(session.startAt) > now && session.status !== "COMPLETED") {
+      return failed("CONFLICT", "That session has not started yet. Progress can be recorded after it starts.");
+    }
+    const roster = await services.listMyStudents(actor, { courseId: session.courseId });
+    if (!roster.ok) return serviceFailure(roster.error);
+    const student = roster.data.students.find((x) => x.id === args.studentId);
+    if (!student) return failed("NOT_FOUND", "That student is not enrolled in this course.");
+    const existing = await services.listProgressRecords(actor, { sessionId: session.id, studentId: student.id });
+    const replaces = existing.ok && existing.data.records.length > 0;
+
+    const when = describeInstant(session.startAt);
+    const summary = `Progress for ${student.name}, ${session.courseName} on ${when.weekday} ${when.localDate}`;
+    const created = await eduProposals.create({
+      actor,
+      type: "PROGRESS_RECORD",
+      payload: { sessionId: session.id, studentId: student.id, goal: args.goal, output: args.output, ...(args.issue ? { issue: args.issue } : {}), nextAction: args.nextAction, ...(args.note ? { note: args.note } : {}) },
+      courseId: session.courseId,
+      summary,
+    });
+    if (!created.ok) return serviceFailure(created.error);
+    return {
+      ok: true,
+      proposal: created.data,
+      content: JSON.stringify({
+        status: "PENDING_CONFIRMATION",
+        proposalId: created.data.id,
+        summary,
+        ...(replaces ? { warnings: ["A progress record already exists for this student and session; confirming replaces it. Tell the teacher."] } : {}),
+        note: "Nothing has been saved yet. Tell the teacher to review this and confirm. The student will be able to read everything except the private note.",
+      }),
+    };
+  },
+});
+
 // ---------- tool sets ----------
 
 const TEACHER_TOOLS: Tool[] = [
@@ -1400,18 +1500,20 @@ const TEACHER_TOOLS: Tool[] = [
   getMyProfile,
   findMyStudent,
   listStudentRequests,
+  listProgressRecords,
   proposeMarkAttendance,
   proposeCreateCourse,
   proposeCreateSessions,
   proposeAddContent,
   proposeAddStudent,
   proposeReschedule,
+  proposeProgressRecord,
   proposeAddStudentNote,
   proposeLessonPrep,
 ];
 
 /** Students get no write or memory tools. The one proposal they can make is a leave or different-time request to their own teacher. */
-const STUDENT_TOOLS: Tool[] = [getStudentWorkspace, answerFromCourseMaterials, getMyProfile, listStudentRequests, proposeStudentRequest];
+const STUDENT_TOOLS: Tool[] = [getStudentWorkspace, answerFromCourseMaterials, getMyProfile, listStudentRequests, listProgressRecords, proposeStudentRequest];
 
 export function getToolsForRole(role: Role): Tool[] {
   return role === "TEACHER" ? TEACHER_TOOLS : STUDENT_TOOLS;

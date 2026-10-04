@@ -22,8 +22,10 @@ import {
   createCourseUnitAction,
   createSessionsAction,
   rescheduleSessionAction,
+  saveProgressAction,
 } from "@/app/(teacher)/teacher/courses/actions";
 import type { StudentView, UnitView } from "@/contracts";
+import { NEXT_ACTION_LABELS } from "@/lib/progress";
 
 type FormState = { kind: "success" | "error" | null; message: string; details?: string[] };
 const initialState: FormState = { kind: null, message: "" };
@@ -344,5 +346,70 @@ export function TeacherCourseMaterials({ courseId, units }: { courseId: string; 
         </ol>
       )}
     </div>
+  );
+}
+
+const selectClass = "h-9 w-full rounded-lg border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+/** Records what a student worked on in a session that has started. Saving again replaces the earlier record. */
+export function ProgressForm({
+  courseId,
+  students,
+  sessions,
+}: {
+  courseId: string;
+  students: StudentView[];
+  sessions: { id: string; label: string }[];
+}) {
+  const [state, formAction, pending] = useActionState(saveProgressAction, initialState);
+  if (students.length === 0 || sessions.length === 0) {
+    return <p className="text-sm text-muted-foreground">Progress can be recorded once the course has students and a session that has started.</p>;
+  }
+  return (
+    <form action={formAction} className="space-y-4 rounded-2xl border bg-card p-4 shadow-sm">
+      <input type="hidden" name="courseId" value={courseId} />
+      <div>
+        <h3 className="font-medium">Record progress</h3>
+        <p className="text-sm text-muted-foreground">One record per student and session. Saving again replaces it. Students can read everything except your private note.</p>
+      </div>
+      <fieldset disabled={pending} className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="progress-session">Session</Label>
+          <select id="progress-session" name="sessionId" required className={selectClass}>
+            {sessions.map((session) => <option key={session.id} value={session.id}>{session.label}</option>)}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="progress-student">Student</Label>
+          <select id="progress-student" name="studentId" required className={selectClass}>
+            {students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}
+          </select>
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="progress-goal">Goal of the session</Label>
+          <Input id="progress-goal" name="goal" required maxLength={200} />
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="progress-output">What the student produced</Label>
+          <Textarea id="progress-output" name="output" required maxLength={500} rows={2} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="progress-issue">Difficulty (optional)</Label>
+          <Input id="progress-issue" name="issue" maxLength={300} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="progress-next">Next step</Label>
+          <select id="progress-next" name="nextAction" required defaultValue="PRACTICE" className={selectClass}>
+            {Object.entries(NEXT_ACTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="progress-note">Private note for you (optional)</Label>
+          <Textarea id="progress-note" name="note" maxLength={300} rows={2} />
+        </div>
+      </fieldset>
+      <FormFeedback state={state} />
+      <SubmitButton pending={pending}>Save progress</SubmitButton>
+    </form>
   );
 }

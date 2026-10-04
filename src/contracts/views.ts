@@ -79,3 +79,20 @@ export type StudentRequestView = {
   createdAt: string;
   resolvedAt?: string;
 };
+
+/** A teacher's note on what a student worked on in one session. `note` is the teacher's private remark and is never shown to students. */
+export type ProgressRecordView = {
+  id: string;
+  sessionId: string;
+  courseId: string;
+  courseName: string;
+  sessionStartAt: string;
+  studentId: string;
+  studentName: string;
+  goal: string;
+  output: string;
+  issue?: string;
+  nextAction: "PRACTICE" | "REVIEW" | "EXTRA_MATERIAL" | "RECAP_NEXT";
+  note?: string;
+  updatedAt: string;
+};

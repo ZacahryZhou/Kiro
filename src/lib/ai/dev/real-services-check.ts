@@ -167,6 +167,31 @@ async function main() {
     const answeredAgain = await services.resolveStudentRequest(teacher, { requestId, decision: "DECLINED" });
     check(!answeredAgain.ok && answeredAgain.error.code === "CONFLICT", "an answered request cannot be answered again");
     check(await prisma.attendance.count() === attendanceBefore && (await prisma.session.findUniqueOrThrow({ where: { id: mathSession.id } })).startAt.toISOString() === startBefore, "approving a request still changes neither attendance nor the schedule");
+
+    // ----- progress records -----
+    const caseyUser = await prisma.user.findUniqueOrThrow({ where: { email: "s+casey@example.test" } });
+    const progressInput = { sessionId: pastSession.id, studentId: jordan.userId, goal: "Linear equations", output: "Solved 8 of 10 correctly", issue: "Sign errors", nextAction: "PRACTICE" as const, note: "Needs a calmer pace" };
+    const saved = await services.saveProgressRecord(teacher, progressInput);
+    check(saved.ok && saved.data.note === "Needs a calmer pace" && saved.data.nextAction === "PRACTICE", "a teacher saves a progress record for an enrolled student");
+    const replaced = await services.saveProgressRecord(teacher, { ...progressInput, goal: "Linear equations, part 2", issue: undefined });
+    check(replaced.ok && await prisma.progressRecord.count({ where: { sessionId: pastSession.id, studentId: jordan.userId } }) === 1 && replaced.data.goal === "Linear equations, part 2" && replaced.data.issue === undefined, "saving again replaces the record instead of adding another");
+    const ownRecords = await services.listProgressRecords(jordan, {});
+    check(ownRecords.ok && ownRecords.data.records.length === 1 && !("note" in ownRecords.data.records[0]), "a student sees their own record without the teacher's private note");
+    const samRecords = await services.listProgressRecords(sam, {});
+    const taylorRecords = await services.listProgressRecords(otherTeacher, {});
+    check(samRecords.ok && samRecords.data.records.length === 0 && taylorRecords.ok && taylorRecords.data.records.length === 0, "another student and another teacher see none of it");
+    const alexRecords = await services.listProgressRecords(teacher, { courseId: course.id });
+    check(alexRecords.ok && alexRecords.data.records.length === 1 && alexRecords.data.records[0].note === "Needs a calmer pace", "the course teacher sees the record with the note");
+    const taylorSave = await services.saveProgressRecord(otherTeacher, progressInput);
+    check(!taylorSave.ok && taylorSave.error.code === "FORBIDDEN", "another teacher cannot save progress for this session");
+    const notEnrolled = await services.saveProgressRecord(teacher, { ...progressInput, studentId: caseyUser.id });
+    check(!notEnrolled.ok && notEnrolled.error.code === "NOT_FOUND", "progress cannot be saved for a student who is not enrolled");
+    const byStudent = await services.saveProgressRecord(jordan as unknown as Actor, progressInput);
+    check(!byStudent.ok && byStudent.error.code === "FORBIDDEN", "a student cannot save progress records");
+    const future = await services.saveProgressRecord(teacher, { ...progressInput, sessionId: mathSession.id });
+    check(!future.ok && future.error.code === "CONFLICT", "progress cannot be saved for a session that has not started");
+    const blank = await services.saveProgressRecord(teacher, { ...progressInput, goal: "" });
+    check(!blank.ok && blank.error.code === "VALIDATION", "a record needs a goal");
   } finally {
     // Leave the database in its pristine fixture state.
     await seedFixtures(prisma, { reset: true });

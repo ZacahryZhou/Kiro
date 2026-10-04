@@ -216,7 +216,36 @@ async function describeStudentRequest(actor: Actor, payload: ProposalPayloads["S
   ];
 }
 
+const NEXT_ACTION_TEXT = {
+  PRACTICE: "Practice more",
+  REVIEW: "Review the topic",
+  EXTRA_MATERIAL: "Send extra material",
+  RECAP_NEXT: "Recap at the next lesson",
+} as const;
+
+async function describeProgress(actor: Actor, payload: ProposalPayloads["PROGRESS_RECORD"]): Promise<string[]> {
+  const session = await findSession(actor, payload.sessionId);
+  const roster = session ? await services.listMyStudents(actor, { courseId: session.courseId }) : undefined;
+  const student = roster?.ok ? roster.data.students.find((x) => x.id === payload.studentId) : undefined;
+  const when = session ? describeInstant(session.startAt) : undefined;
+  return [
+    `Progress for ${student?.name ?? "the student"}`,
+    session && when ? `${session.courseName}, ${when.weekday} ${when.localDate} ${when.localTime}` : "A session",
+    `Goal: ${payload.goal}`,
+    `Produced: ${payload.output}`,
+    ...(payload.issue ? [`Difficulty: ${payload.issue}`] : []),
+    `Next step: ${NEXT_ACTION_TEXT[payload.nextAction]}`,
+    ...(payload.note ? [`Private note (teacher only): ${payload.note}`] : []),
+    "The student can read this record, except the private note.",
+  ];
+}
+
 export const eduProposalHandlers: ProposalRegistry = {
+  PROGRESS_RECORD: {
+    schema: ProposalPayloadSchemas.PROGRESS_RECORD,
+    execute: (actor, payload) => services.saveProgressRecord(actor, payload),
+    describe: describeProgress,
+  },
   STUDENT_REQUEST: {
     schema: ProposalPayloadSchemas.STUDENT_REQUEST,
     execute: (actor, payload) => services.submitStudentRequest(actor, payload),

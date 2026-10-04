@@ -174,6 +174,35 @@ function teacherFlow(text: string, messages: ChatMessage[]): Completion {
     return say(proposalReply(done[2].data));
   }
 
+  // Record what a student worked on in the most recent session of a course.
+  const progress = /^\s*(?:[Rr]ecord|[Ss]ave|[Aa]dd)\s+progress\s+for\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\b([^]*)$/.exec(text);
+  if (progress) {
+    const field = (name: RegExp) => name.exec(progress[2])?.[1]?.trim();
+    const goal = field(/goal:\s*([^;]+)/i);
+    const output = field(/(?:output|produced|result):\s*([^;]+)/i);
+    const issue = field(/(?:issue|difficulty):\s*([^;]+)/i);
+    const nextWord = field(/next(?: step)?:\s*(practice|review|extra|recap)/i)?.toLowerCase();
+    const nextAction = nextWord ? ({ practice: "PRACTICE", review: "REVIEW", extra: "EXTRA_MATERIAL", recap: "RECAP_NEXT" } as const)[nextWord as "practice"] : undefined;
+    const missing = [!goal && "the goal", !output && "what the student produced", !nextAction && "the next step (practice, review, extra material or recap)"].filter(Boolean);
+    if (missing.length > 0) return say(`To record progress I still need ${missing.join(", ")}. For example: "Record progress for Jordan: goal: fractions; output: solved 8 of 10; next: practice".`);
+    if (step === 0) return call("findMyStudent", { query: progress[1].trim() }, 1);
+    const matches = ((first?.matches as { studentId: string; name: string; courses: { courseId: string; name: string }[] }[]) ?? []);
+    if (matches.length === 0) return say(`I couldn't find a student called "${progress[1].trim()}" in your courses.`);
+    if (matches.length > 1) return say(`More than one student matches "${progress[1].trim()}": ${matches.map((m) => m.name).join(", ")}. Which one do you mean?`);
+    const student = matches[0];
+    const named = student.courses.filter((c) => words(text).some((w) => w.length > 3 && c.name.toLowerCase().includes(w)));
+    const course = student.courses.length === 1 ? student.courses[0] : named.length === 1 ? named[0] : undefined;
+    if (!course) return say(`${student.name} is in ${student.courses.map((c) => c.name).join(" and ")}. Which course is this for?`);
+    const today = new Date();
+    if (step === 1) return call("getTeacherSchedule", { courseId: course.courseId, startDate: new Date(today.getTime() - 60 * 86_400_000).toISOString().slice(0, 10), endDate: today.toISOString().slice(0, 10) }, 2);
+    const started = ((done[1].data.sessions as { sessionId: string; startAt: string; status: string }[]) ?? [])
+      .filter((x) => x.status !== "CANCELLED" && Date.parse(x.startAt) <= today.getTime())
+      .sort((a, b) => Date.parse(b.startAt) - Date.parse(a.startAt));
+    if (started.length === 0) return say(`I don't see a session of ${course.name} that has already started.`);
+    if (step === 2) return call("proposeProgressRecord", { sessionId: started[0].sessionId, studentId: student.studentId, goal, output, ...(issue ? { issue } : {}), nextAction }, 3);
+    return say(proposalReply(done[2].data));
+  }
+
   // Move one session to a new date and time (dates as YYYY-MM-DD).
   const move = /\b(?:move|reschedule)\b[^]*?(\d{4}-\d{2}-\d{2})[^]*?\bto\b\s*(\d{4}-\d{2}-\d{2})([^]*)$/i.exec(text);
   if (move) {

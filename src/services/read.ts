@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CheckConflictsInput, type AttendanceView, type ConflictView, type CourseView, type DeductionView, type SessionView, type StudentRequestView, type StudentView, type UnitView, type Result, err, ok } from "@/contracts";
+import { CheckConflictsInput, type AttendanceView, type ConflictView, type CourseView, type DeductionView, type SessionView, type ProgressRecordView, type StudentRequestView, type StudentView, type UnitView, type Result, err, ok } from "@/contracts";
 import type { Actor } from "@/lib/auth/actor";
 import { prisma } from "@/lib/db/prisma";
 
@@ -11,6 +11,7 @@ export type {
   ErrorCode,
   Result,
   ServiceError,
+  ProgressRecordView,
   SessionView,
   StudentRequestView,
   StudentView,
@@ -525,5 +526,58 @@ export async function listStudentRequests(
     });
   } catch {
     return failure("INTERNAL", "Could not load requests. Please try again.");
+  }
+}
+
+const progressListInput = z.object({ courseId: id.optional(), studentId: id.optional(), sessionId: id.optional() });
+
+/** Teachers see the records they wrote; students see only their own, without the teacher's private note. */
+export async function listProgressRecords(
+  actor: Actor,
+  input: { courseId?: string; studentId?: string; sessionId?: string } = {},
+): Promise<Result<{ records: ProgressRecordView[] }>> {
+  if (actor.role !== "TEACHER" && actor.role !== "STUDENT") return failure("FORBIDDEN", "You do not have permission to view progress records.");
+  const parsed = progressListInput.safeParse(input);
+  if (!parsed.success) return failure("VALIDATION", "Enter valid progress filters.");
+  try {
+    if (parsed.data.courseId) {
+      const access = await canReadCourse(actor, parsed.data.courseId);
+      if (!access.ok) return access;
+    }
+    const rows = await prisma.progressRecord.findMany({
+      where: {
+        sessionId: parsed.data.sessionId,
+        studentId: actor.role === "STUDENT" ? actor.userId : parsed.data.studentId,
+        session: {
+          courseId: parsed.data.courseId,
+          course: actor.role === "TEACHER" ? { teacherId: actor.userId } : { enrollments: { some: { studentId: actor.userId } } },
+        },
+      },
+      include: {
+        student: { select: { name: true } },
+        session: { select: { startAt: true, courseId: true, course: { select: { name: true } } } },
+      },
+      orderBy: [{ session: { startAt: "desc" } }, { id: "asc" }],
+      take: limit,
+    });
+    return success({
+      records: rows.map((row) => ({
+        id: row.id,
+        sessionId: row.sessionId,
+        courseId: row.session.courseId,
+        courseName: row.session.course.name,
+        sessionStartAt: row.session.startAt.toISOString(),
+        studentId: row.studentId,
+        studentName: row.student.name,
+        goal: row.goal,
+        output: row.output,
+        ...(row.issue ? { issue: row.issue } : {}),
+        nextAction: row.nextAction,
+        ...(actor.role === "TEACHER" && row.note ? { note: row.note } : {}),
+        updatedAt: row.updatedAt.toISOString(),
+      })),
+    });
+  } catch {
+    return failure("INTERNAL", "Could not load progress records. Please try again.");
   }
 }

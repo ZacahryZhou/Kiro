@@ -60,7 +60,7 @@ async function main() {
     const model = scripted([text("Hello! How can I help?")]);
     const out = await ask(alex, "hi", { chatCompletion: model.fn, record });
     check("Direct answer with no tool use", out.status === "OK" && out.reply === "Hello! How can I help?" && model.requests.length === 1 && out.toolCalls.length === 0);
-    check("The model is offered the 20 teacher tools", model.requests[0].tools?.length === 20);
+    check("The model is offered the 22 teacher tools", model.requests[0].tools?.length === 22);
     const system = model.requests[0].messages[0];
     check("System prompt carries today's date, weekday and time zone from code", system.role === "system" && system.content.includes("Thursday 2026-10-08") && system.content.includes("America/Vancouver") && system.content.includes("12:30"), system.content);
     check("System prompt tells the model to treat tool results as untrusted data", system.role === "system" && /untrusted/i.test(system.content));
@@ -176,7 +176,7 @@ async function main() {
     const { record } = setup();
     const model = scripted([text("I can't look that up yet.")]);
     const out = await ask(jordan, "What are my grades?", { chatCompletion: model.fn, record });
-    check("Students are offered only their own tools", out.status === "OK" && model.requests[0].tools?.map((t) => t.name).sort().join() === "answerFromCourseMaterials,getMyProfile,getStudentWorkspace,listStudentRequests,proposeStudentRequest");
+    check("Students are offered only their own tools", out.status === "OK" && model.requests[0].tools?.map((t) => t.name).sort().join() === "answerFromCourseMaterials,getMyProfile,getStudentWorkspace,listProgressRecords,listStudentRequests,proposeStudentRequest");
     const system = model.requests[0].messages[0] as any;
     check("The student prompt sends course-content questions to the materials tool", /answerFromCourseMaterials/.test(system.content) && /never answer such questions from your own knowledge/i.test(system.content));
   }

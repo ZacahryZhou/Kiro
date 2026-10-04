@@ -9,6 +9,7 @@ import {
   CreateUnitInput,
   RescheduleInput,
   ResolveStudentRequestInput,
+  SaveProgressInput,
   StudentRequestInput,
   err,
   ok,
@@ -20,6 +21,7 @@ import {
   type ErrorCode,
   type Result,
   type SessionView,
+  type ProgressRecordView,
   type StudentRequestView,
   type StudentView,
   type UnitView,
@@ -827,4 +829,88 @@ export async function resolveStudentRequest(
   request.status = parsed.data.decision;
   request.resolvedAt = new Date().toISOString();
   return ok(requestView(request)!);
+}
+
+// ---------- progress records ----------
+
+function progressView(record: (typeof store.progress)[number], includeNote: boolean): ProgressRecordView | undefined {
+  const session = store.sessions.find((s) => s.id === record.sessionId);
+  const course = session && store.courses.find((c) => c.id === session.courseId);
+  const student = store.users.find((u) => u.id === record.studentId);
+  if (!session || !course || !student) return undefined;
+  return {
+    id: record.id,
+    sessionId: session.id,
+    courseId: course.id,
+    courseName: course.name,
+    sessionStartAt: session.startAt,
+    studentId: student.id,
+    studentName: student.name,
+    goal: record.goal,
+    output: record.output,
+    ...(record.issue ? { issue: record.issue } : {}),
+    nextAction: record.nextAction,
+    ...(includeNote && record.note ? { note: record.note } : {}),
+    updatedAt: record.updatedAt,
+  };
+}
+
+export async function saveProgressRecord(
+  actor: Actor,
+  input: z.input<typeof SaveProgressInput>,
+): Promise<Result<ProgressRecordView>> {
+  if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers can save progress records.");
+  const parsed = SaveProgressInput.safeParse(input);
+  if (!parsed.success) return fail("VALIDATION", validationMessage);
+  const data = parsed.data;
+  const session = store.sessions.find((s) => s.id === data.sessionId);
+  const course = session && store.courses.find((c) => c.id === session.courseId);
+  if (!session || !course || course.teacherId !== actor.userId) return fail("FORBIDDEN", "You do not have access to this session.");
+  if (!store.enrollments.some((e) => e.courseId === course.id && e.studentId === data.studentId)) {
+    return fail("NOT_FOUND", "That student is not enrolled in this course.");
+  }
+  if (session.status === "CANCELLED") return fail("CONFLICT", "This session was cancelled.");
+  if (Date.parse(session.startAt) > Date.now() && session.status !== "COMPLETED") {
+    return fail("CONFLICT", "Progress can be saved once the session has started.");
+  }
+  const values = {
+    goal: data.goal.trim(),
+    output: data.output.trim(),
+    ...(data.issue?.trim() ? { issue: data.issue.trim() } : {}),
+    nextAction: data.nextAction,
+    ...(data.note?.trim() ? { note: data.note.trim() } : {}),
+    updatedAt: new Date().toISOString(),
+  };
+  const existing = store.progress.find((p) => p.sessionId === data.sessionId && p.studentId === data.studentId);
+  let record = existing;
+  if (existing) {
+    delete existing.issue;
+    delete existing.note;
+    Object.assign(existing, values);
+  } else {
+    record = { id: nextId("prog"), sessionId: data.sessionId, studentId: data.studentId, teacherId: actor.userId, ...values };
+    store.progress.push(record);
+  }
+  return ok(progressView(record!, true)!);
+}
+
+export async function listProgressRecords(
+  actor: Actor,
+  input: { courseId?: string; studentId?: string; sessionId?: string } = {},
+): Promise<Result<{ records: ProgressRecordView[] }>> {
+  const rows = store.progress.filter((record) => {
+    if (input.studentId && actor.role === "TEACHER" && record.studentId !== input.studentId) return false;
+    if (input.sessionId && record.sessionId !== input.sessionId) return false;
+    const session = store.sessions.find((s) => s.id === record.sessionId);
+    const course = session && store.courses.find((c) => c.id === session.courseId);
+    if (!course) return false;
+    if (input.courseId && course.id !== input.courseId) return false;
+    return actor.role === "STUDENT" ? record.studentId === actor.userId : course.teacherId === actor.userId;
+  });
+  return ok({
+    records: rows
+      .map((record) => progressView(record, actor.role === "TEACHER"))
+      .filter((v): v is ProgressRecordView => v !== undefined)
+      .sort((a, b) => Date.parse(b.sessionStartAt) - Date.parse(a.sessionStartAt)),
+  });
 }
