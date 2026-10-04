@@ -406,6 +406,7 @@ All of these must pass for the project to count as complete.
 |---|---|
 | `CLAUDE.md` | Rules for every AI coding session; read first |
 | `docs/api-contract.md` | The interface contract between the two tracks; wins over `CLAUDE.md` on conflict |
+| `docs/AI-REPLY-POLICY.md` | The reply rules loaded into teacher and student AI prompts |
 | `docs/ROADMAP-nick.md` | Core product roadmap (N1–N6) |
 | `docs/HANDOFF.md` | Append-only message board between the two owners |
 | `docs/PROMPTS.md` | Opening prompts for each owner's AI assistant |

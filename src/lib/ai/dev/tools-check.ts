@@ -34,7 +34,7 @@ async function run(tool: string, actor = alex, args: unknown = {}) {
 
 async function main() {
   const tzProblem = timeZoneDataProblem();
-  check("Runtime time zone data knows the Nov 1 2026 clock change (America/Vancouver)", tzProblem === null, tzProblem);
+  check("Runtime time zone data keeps Vancouver at UTC-7 in winter", tzProblem === null, tzProblem);
 
   // ----- tool sets -----
   const names = getToolsForRole("TEACHER").map((t) => t.name).sort();

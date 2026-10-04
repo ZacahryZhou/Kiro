@@ -1,5 +1,4 @@
-// Sanity check for the runtime's time zone data. If this fails, the Node/ICU build is wrong or outdated
-// and every daylight-saving check below it will fail for that reason, not because of the code under test.
+// Sanity check that the runtime applies B.C.'s permanent UTC-7 rule after Nov 1, 2026.
 export function timeZoneDataProblem(): string | null {
   const local = (iso: string) =>
     new Intl.DateTimeFormat("en-US", {
@@ -7,12 +6,9 @@ export function timeZoneDataProblem(): string | null {
       hour: "numeric",
       minute: "2-digit",
       hourCycle: "h23",
-      timeZoneName: "short",
     }).format(new Date(iso));
-  const summer = local("2026-10-13T23:00:00.000Z"); // 16:00 PDT
-  const winter = local("2026-11-04T00:00:00.000Z"); // 16:00 PST, after the Nov 1 clock change
-  if (summer.startsWith("16:00") && summer.endsWith("PDT") && winter.startsWith("16:00") && winter.endsWith("PST")) {
-    return null;
-  }
-  return `This Node build's time zone data is wrong: expected "16:00 PDT" and "16:00 PST", got "${summer}" and "${winter}" (node ${process.version}, tz ${process.versions.tz ?? "unknown"}).`;
+  const summer = local("2026-10-13T23:00:00.000Z"); // 16:00 at UTC-7
+  const winter = local("2026-11-04T23:00:00.000Z"); // also 16:00 at UTC-7 after the transition
+  if (summer === "16:00" && winter === "16:00") return null;
+  return `This Node build's time zone data does not apply permanent UTC-7 in B.C.: expected 16:00 at both instants, got "${summer}" and "${winter}" (node ${process.version}, tz ${process.versions.tz ?? "unknown"}).`;
 }

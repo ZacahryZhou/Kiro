@@ -31,7 +31,7 @@ const business = () => JSON.stringify({ c: store.courses.length, e: store.enroll
 
 async function main() {
   const tzProblem = timeZoneDataProblem();
-  check("Runtime time zone data knows the Nov 1 2026 clock change (America/Vancouver)", tzProblem === null, tzProblem);
+  check("Runtime time zone data keeps Vancouver at UTC-7 in winter", tzProblem === null, tzProblem);
 
   // ----- resolveSessions (pure code) -----
   const thu = new Date("2026-10-08T19:30:00.000Z"); // Thursday 12:30 in Vancouver
