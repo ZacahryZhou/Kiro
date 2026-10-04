@@ -17,13 +17,17 @@ const NEGATED_OR_CONDITIONAL = /\b(nothing|not|no|never|none|n't|if you|once you
 const FAKE_PREVIEW =
   /(\bthis is (only )?a preview\b|\b(here'?s|here is) the [^.]{0,80}\b(request|proposal|preview|record)\b[^.]{0,40}\bI('ve| have)? prepared\b|\bconfirm sending\b)/i;
 
+// "Nothing has been created yet" is the model's own reassurance next to a claim, not a denial of it.
+const REASSURANCE =
+  /\bnothing (has|have|is|was|will be|would be) (been )?(created|changed|saved|written|done|updated)( yet)?\b|\bno (data|changes?) (has|have|was|were) (been )?(changed|made|saved)( yet)?\b/gi;
+
 /** True when the reply says a change is pending although the run created no proposal. */
 export function claimsPendingProposal(reply: string, proposalCount: number): boolean {
   if (proposalCount > 0) return false;
   if (FAKE_PREVIEW.test(reply)) return true;
   return reply
     .split(/(?<=[.!?:])\s+/)
-    .some((sentence) => CLAIM.test(sentence) && !NEGATED_OR_CONDITIONAL.test(sentence));
+    .some((sentence) => CLAIM.test(sentence) && !NEGATED_OR_CONDITIONAL.test(sentence.replace(REASSURANCE, "")));
 }
 
 /** When the model runs out of rounds after a proposal exists, say so from code instead of giving up. */
