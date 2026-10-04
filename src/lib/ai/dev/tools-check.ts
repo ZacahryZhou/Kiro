@@ -39,11 +39,11 @@ async function main() {
 
   // ----- tool sets -----
   const names = getToolsForRole("TEACHER").map((t) => t.name).sort();
-  check("Teacher has 11 read-only tools plus six proposal tools", JSON.stringify(names) === JSON.stringify(["checkConflicts", "findMyStudent", "getAttendanceTrends", "getCourseMaterials", "getMyProfile", "getStudentMemory", "getTeacherSchedule", "listAttendance", "listDeductions", "listMyCourses", "listMyStudents", "proposeAddContent", "proposeAddStudentNote", "proposeCreateCourse", "proposeCreateSessions", "proposeLessonPrep", "proposeMarkAttendance"]), names);
+  check("Teacher has 11 read-only tools plus seven proposal tools", JSON.stringify(names) === JSON.stringify(["checkConflicts", "findMyStudent", "getAttendanceTrends", "getCourseMaterials", "getMyProfile", "getStudentMemory", "getTeacherSchedule", "listAttendance", "listDeductions", "listMyCourses", "listMyStudents", "proposeAddContent", "proposeAddStudent", "proposeAddStudentNote", "proposeCreateCourse", "proposeCreateSessions", "proposeLessonPrep", "proposeMarkAttendance"]), names);
   check("Students get exactly three read-only tools", JSON.stringify(getToolsForRole("STUDENT").map((t) => t.name).sort()) === JSON.stringify(["answerFromCourseMaterials", "getMyProfile", "getStudentWorkspace"]));
   const schemaText = JSON.stringify(getToolsForRole("TEACHER").map((t) => t.parameters));
   check("No tool parameter is called userId or role", !/"userId"|"role"/.test(schemaText));
-  check("No tool can write directly (six propose* tools only prepare pending proposals)", getToolsForRole("TEACHER").every((t) => !/^(create|add|confirm|reschedule|delete|update|discard)/.test(t.name)) && getToolsForRole("TEACHER").filter((t) => t.name.startsWith("propose")).length === 6);
+  check("No tool can write directly (seven propose* tools only prepare pending proposals)", getToolsForRole("TEACHER").every((t) => !/^(create|add|confirm|reschedule|delete|update|discard)/.test(t.name)) && getToolsForRole("TEACHER").filter((t) => t.name.startsWith("propose")).length === 7);
 
   // ----- calendar helpers -----
   check("parseDateOnly rejects 2026-02-30", parseDateOnly("2026-02-30") === null && parseDateOnly("2026-2-3") === null && parseDateOnly("2026-02-28") !== null);
@@ -97,6 +97,21 @@ async function main() {
   check("Adding a private note creates a proposal without writing memory", note.ok && note.data.status === "PENDING_CONFIRMATION" && store.memories.length === memoryCount);
   const noteConfirmation = await eduProposals.confirm(alex, noteId);
   check("Confirming a private note writes teacher-only memory", noteConfirmation.ok && noteConfirmation.data.status === "executed" && store.memories.length === memoryCount + 1);
+  // ----- add an existing student to a course (by name or email) -----
+  const enrollmentsBefore = store.enrollments.length;
+  const byName = await run("proposeAddStudent", alex, { courseId: ids.courseB, studentName: "Sam" });
+  check("Adding a student by name resolves the email from the teacher's own roster and writes nothing yet", byName.ok && byName.data.status === "PENDING_CONFIRMATION" && byName.data.email === "student2@example.test" && store.enrollments.length === enrollmentsBefore, byName.data);
+  const addConfirm = await eduProposals.confirm(alex, byName.data.proposalId as string);
+  check("Confirming enrolls the student exactly once", addConfirm.ok && addConfirm.data.status === "executed" && store.enrollments.length === enrollmentsBefore + 1);
+  const addAgain = await run("proposeAddStudent", alex, { courseId: ids.courseB, studentName: "Sam" });
+  check("A student who is already enrolled gets no proposal", addAgain.ok && addAgain.data.status === "ALREADY_ENROLLED");
+  const unknownName = await run("proposeAddStudent", alex, { courseId: ids.courseB, studentName: "Casey" });
+  check("A name that is not in the teacher's own courses asks for an email instead of guessing", !unknownName.ok && unknownName.data.error?.code === "NOT_FOUND");
+  const ambiguousName = await run("proposeAddStudent", alex, { courseId: ids.courseA, studentName: "student" });
+  check("An ambiguous name returns candidates instead of a proposal", ambiguousName.ok && ambiguousName.data.status === "AMBIGUOUS" && ambiguousName.data.candidates.length >= 2, ambiguousName.data);
+  const otherTeacherCourse = await run("proposeAddStudent", taylor, { courseId: ids.courseA, studentEmail: "student1@example.test" });
+  check("A teacher cannot add students to someone else's course", !otherTeacherCourse.ok && otherTeacherCourse.data.error?.code === "NOT_FOUND");
+  check("A student has no add-student tool", !findTool("STUDENT", "proposeAddStudent"));
   const attendance = await run("listAttendance", alex, { courseId: ids.courseA });
   check("Attendance summary is computed by code (3 present, 1 leave, 4 total)", attendance.ok && attendance.data.summary.present === 3 && attendance.data.summary.leave === 1 && attendance.data.summary.absent === 0 && attendance.data.summary.total === 4, attendance.data.summary);
   const absentOnly = await run("listAttendance", alex, { status: "LEAVE" });

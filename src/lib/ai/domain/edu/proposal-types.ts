@@ -168,7 +168,23 @@ async function executeStudentNote(
   return services.saveStudentMemory(actor, payload);
 }
 
+async function executeAddStudent(
+  actor: Actor,
+  payload: ProposalPayloads["ADD_STUDENT"],
+): Promise<Result<{ enrollmentId: string; alreadyJoined: boolean }>> {
+  return services.addExistingStudentToCourse(actor, payload);
+}
+
 export const eduProposalHandlers: ProposalRegistry = {
+  ADD_STUDENT: {
+    schema: ProposalPayloadSchemas.ADD_STUDENT,
+    execute: executeAddStudent,
+    describe: async (actor, payload) => [
+      `Add a student to ${(await courseName(actor, payload.courseId)) ?? "the course"}`,
+      `Student email: ${payload.email}`,
+      "The student is added only if they already have a student account.",
+    ],
+  },
   MARK_ATTENDANCE: {
     schema: ProposalPayloadSchemas.MARK_ATTENDANCE,
     execute: (actor, payload) => services.confirmAttendance(actor, payload),

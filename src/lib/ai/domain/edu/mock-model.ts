@@ -166,6 +166,74 @@ function teacherFlow(text: string, messages: ChatMessage[]): Completion {
     return say(proposalReply(done[2].data));
   }
 
+  // Add course content (a unit with one text material).
+  const content = /\badd\s+(?:a\s+)?unit\s+(?:called|titled|named)\s+"?([^":]+?)"?\s+to\s+(?:my\s+|the\s+)?([A-Za-z0-9 ]+?)\s*(?:course|class)?\s*[:\-]\s*([\s\S]+)$/i.exec(text);
+  if (content) {
+    if (step === 0) return call("listMyCourses", {}, 1);
+    const courses = ((first?.courses as { courseId: string; name: string }[]) ?? []);
+    const match = courses.filter((c) => words(content[2]).some((w) => w.length > 3 && c.name.toLowerCase().includes(w)));
+    if (match.length !== 1) return say(match.length === 0 ? `Which course is this for: ${courses.map((c) => c.name).join(" or ")}?` : `Which course do you mean: ${match.map((c) => c.name).join(" or ")}?`);
+    const title = content[1].trim();
+    if (step === 1) return call("proposeAddContent", { courseId: match[0].courseId, unitTitle: title, materials: [{ title, kind: "TEXT", content: content[3].trim() }] }, 2);
+    return say(proposalReply(done[1].data));
+  }
+
+  // Remember a private note or availability for a student.
+  const note = /^\s*(?:[Pp]lease\s+)?(?:[Rr]emember|[Mm]ake a note|[Ss]ave a note)\s+(?:that\s+)?([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+(.+)$/.exec(text);
+  if (note) {
+    const kind = /\b(unavailable|available|can't|cannot|busy|not free|free on)\b/i.test(note[2]) ? "AVAILABILITY" : "NOTE";
+    if (step === 0) return call("findMyStudent", { query: note[1] }, 1);
+    const matches = ((first?.matches as { studentId: string; name: string; courses: { courseId: string; name: string }[] }[]) ?? []);
+    if (matches.length === 0) return say(`I couldn't find a student called "${note[1]}" in your courses.`);
+    if (matches.length > 1) return say(`More than one student matches "${note[1]}": ${matches.map((m) => m.name).join(", ")}. Which one do you mean?`);
+    const student = matches[0];
+    const named = student.courses.filter((c) => words(text).some((w) => w.length > 3 && c.name.toLowerCase().includes(w)));
+    const course = student.courses.length === 1 ? student.courses[0] : named.length === 1 ? named[0] : undefined;
+    if (!course) return say(`${student.name} is in ${student.courses.map((c) => c.name).join(" and ")}. Which course is this note for?`);
+    if (step === 1) return call("proposeAddStudentNote", { courseId: course.courseId, studentId: student.studentId, kind, content: `${note[1]} ${note[2]}`.trim().slice(0, 500) }, 2);
+    return say(proposalReply(done[1].data));
+  }
+
+  // Attendance trend for one student.
+  const trend = /\b(?:[Hh]ow is|[Hh]ow's|[Hh]ow has)\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\b.*\b(doing|attending|attendance)|\battendance (?:trend|pattern)s? (?:for|of)\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/.exec(text);
+  if (trend) {
+    const who = (trend[1] ?? trend[3]).trim();
+    if (step === 0) return call("findMyStudent", { query: who }, 1);
+    const matches = ((first?.matches as { studentId: string; name: string; courses: { courseId: string; name: string }[] }[]) ?? []);
+    if (matches.length === 0) return say(`I couldn't find a student called "${who}" in your courses.`);
+    if (matches.length > 1) return say(`More than one student matches "${who}": ${matches.map((m) => m.name).join(", ")}. Which one do you mean?`);
+    const student = matches[0];
+    const named = student.courses.filter((c) => words(text).some((w) => w.length > 3 && c.name.toLowerCase().includes(w)));
+    const course = student.courses.length === 1 ? student.courses[0] : named.length === 1 ? named[0] : undefined;
+    if (!course) return say(`${student.name} is in ${student.courses.map((c) => c.name).join(" and ")}. Which course do you mean?`);
+    if (step === 1) return call("getAttendanceTrends", { courseId: course.courseId, studentId: student.studentId }, 2);
+    const rows = ((done[1].data.trends as { studentName: string; sessions: number; present: number; absent: number; leave: number; attendanceRate: number | null; consecutiveAbsences: number; enoughData: boolean }[]) ?? []);
+    const row = rows[0];
+    if (!row) return say(errorLine(done[1].data) ?? "I couldn't load the attendance records.");
+    if (!row.enoughData) return say("Insufficient data to identify a trend.");
+    return say(`${row.studentName} attended ${row.present} of ${row.sessions} recorded sessions (${row.attendanceRate}%), with ${row.absent} absent and ${row.leave} on leave${row.consecutiveAbsences >= 2 ? `, and ${row.consecutiveAbsences} absences in a row` : ""}.`);
+  }
+
+  // Add an existing student to an existing course.
+  const addStudent = /\badd\s+(?:the\s+)?(?:student\s+)?([\w.+-]+@[\w-]+\.[\w.]+|[A-Za-z]{2,}(?:\s[A-Za-z]{2,})?)\s+(?:to|into)\s+(?:the\s+|my\s+)?(.+?)\s*(?:course|class)?\s*$/i.exec(text);
+  if (addStudent && !/\bnew\s+course\b|\bcreate\b/i.test(text)) {
+    const who = addStudent[1].trim();
+    const isEmail = who.includes("@");
+    if (step === 0) return call("listMyCourses", {}, 1);
+    const courses = ((first?.courses as { courseId: string; name: string }[]) ?? []);
+    const match = courses.filter((c) => words(addStudent[2]).some((w) => w.length > 3 && c.name.toLowerCase().includes(w)));
+    if (match.length !== 1) return say(match.length === 0 ? `Which course should ${who} join: ${courses.map((c) => c.name).join(" or ")}?` : `Which course do you mean: ${match.map((c) => c.name).join(" or ")}?`);
+    if (step === 1) return call("proposeAddStudent", { courseId: match[0].courseId, ...(isEmail ? { studentEmail: who } : { studentName: who }) }, 2);
+    const data = done[1].data;
+    if (errorLine(data)) return say(`I couldn't do that: ${errorLine(data)}`);
+    if (data.status === "AMBIGUOUS") {
+      const rows = (data.candidates as { name: string; email: string }[]) ?? [];
+      return say(`More than one student matches "${who}": ${rows.map((r) => `${r.name} (${r.email})`).join("; ")}. Which one do you mean?`);
+    }
+    if (data.status === "ALREADY_ENROLLED") return say(String(data.note));
+    return say(proposalReply(data));
+  }
+
   // Create a course.
   if (/\b(create|new|add)\b.*\bcourse\b|\bcourse\b.*\b(create|called|named)\b/i.test(text)) {
     const name = /(?:called|named)\s+"?([^",.$]+?)"?(?=,|\.|\s+(?:for|small|group|one-on-one|one on one|1:1|private|price|priced)\b|\s+\$|$)/i.exec(text)?.[1]?.trim();

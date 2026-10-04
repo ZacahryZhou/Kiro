@@ -25,5 +25,8 @@ export function resultLines(type: ProposalType, result: unknown): string[] {
   if (type === "CREATE_SESSIONS" && Array.isArray(data.sessionIds)) {
     return [plural(data.sessionIds.length, "session scheduled", "sessions scheduled")];
   }
+  if (type === "ADD_STUDENT") {
+    return [data.alreadyJoined === true ? labels.result.studentAlreadyJoined : labels.result.studentAdded];
+  }
   return [];
 }

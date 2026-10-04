@@ -67,6 +67,7 @@ enum ProposalType {
   PROGRESS_RECORD
   STUDENT_REQUEST
   ADD_STUDENT_NOTE
+  ADD_STUDENT
 }
 
 model User {

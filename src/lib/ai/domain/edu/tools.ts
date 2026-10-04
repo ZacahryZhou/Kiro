@@ -1089,6 +1089,30 @@ const getMyProfile = defineTool({
   },
 });
 
+type RosterMatch = { studentId: string; name: string; email: string; courses: { courseId: string; name: string }[] };
+
+/** Searches the signed-in teacher's own rosters by name or email. Never looks outside them. */
+async function searchOwnRosters(
+  actor: Parameters<typeof services.listMyCourses>[0],
+  query: string,
+): Promise<{ ok: true; matches: RosterMatch[] } | { ok: false; error: { code: ErrorCode; message: string } }> {
+  const courses = await services.listMyCourses(actor);
+  if (!courses.ok) return { ok: false, error: courses.error };
+  const needle = query.toLowerCase();
+  const found = new Map<string, RosterMatch>();
+  for (const course of courses.data.courses.slice(0, 50)) {
+    const roster = await services.listMyStudents(actor, { courseId: course.id });
+    if (!roster.ok) continue;
+    for (const student of roster.data.students) {
+      if (!student.name.toLowerCase().includes(needle) && !student.email.toLowerCase().includes(needle)) continue;
+      const entry = found.get(student.id) ?? { studentId: student.id, name: student.name, email: student.email, courses: [] };
+      entry.courses.push({ courseId: course.id, name: course.name });
+      found.set(student.id, entry);
+    }
+  }
+  return { ok: true, matches: [...found.values()] };
+}
+
 const findMyStudent = defineTool({
   name: "findMyStudent",
   description:
@@ -1098,26 +1122,89 @@ const findMyStudent = defineTool({
   schema: z.object({ query: z.string().trim().min(2).max(80) }),
   async run(actor, args) {
     if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers can look up students.");
-    const courses = await services.listMyCourses(actor);
-    if (!courses.ok) return serviceFailure(courses.error);
-    const needle = args.query.toLowerCase();
-    const found = new Map<string, { studentId: string; name: string; email: string; courses: { courseId: string; name: string }[] }>();
-    for (const course of courses.data.courses.slice(0, 50)) {
-      const roster = await services.listMyStudents(actor, { courseId: course.id });
-      if (!roster.ok) continue;
-      for (const student of roster.data.students) {
-        if (!student.name.toLowerCase().includes(needle) && !student.email.toLowerCase().includes(needle)) continue;
-        const entry = found.get(student.id) ?? { studentId: student.id, name: student.name, email: student.email, courses: [] };
-        entry.courses.push({ courseId: course.id, name: course.name });
-        found.set(student.id, entry);
-      }
-    }
-    const matches = [...found.values()];
+    const result = await searchOwnRosters(actor, args.query);
+    if (!result.ok) return serviceFailure(result.error);
+    const { matches } = result;
     return succeed({
       matches: matches.slice(0, 10),
       total: matches.length,
       ...(matches.length === 0 ? { note: "No student with that name or email is enrolled in your courses." } : {}),
     });
+  },
+});
+
+const proposeAddStudent = defineTool({
+  name: "proposeAddStudent",
+  description:
+    "Prepare a proposal to add an existing student to one of the teacher's existing courses. This does NOT add anyone: the teacher must confirm. " +
+    "Give the course ID and either the student's email or the student's name. A name is matched only against students already in the teacher's other courses; " +
+    "if it matches nobody or more than one person, ask the teacher for the email instead of guessing.",
+  parameters: obj(
+    {
+      courseId: { type: "string", description: "ID of the course to add the student to (from listMyCourses)." },
+      studentEmail: { type: "string", description: "The student's email address, if the teacher gave one." },
+      studentName: { type: "string", description: "The student's name, if no email was given." },
+    },
+    ["courseId"],
+  ),
+  schema: z.object({
+    courseId: z.string().trim().min(1),
+    studentEmail: z.string().trim().toLowerCase().email().optional(),
+    studentName: z.string().trim().min(2).max(80).optional(),
+  }),
+  async run(actor, args) {
+    if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers can add students to courses.");
+    if (!args.studentEmail && !args.studentName) {
+      return failed("INVALID_ARGUMENTS", "Provide the student's email or name. Ask the teacher which student to add.");
+    }
+    const courses = await services.listMyCourses(actor);
+    if (!courses.ok) return serviceFailure(courses.error);
+    const course = courses.data.courses.find((c) => c.id === args.courseId);
+    if (!course) return failed("NOT_FOUND", "That course was not found among your courses.");
+
+    let email = args.studentEmail;
+    let displayName = args.studentEmail;
+    if (!email) {
+      const result = await searchOwnRosters(actor, args.studentName!);
+      if (!result.ok) return serviceFailure(result.error);
+      if (result.matches.length === 0) {
+        return failed("NOT_FOUND", `No student named "${args.studentName}" is in your courses. Ask the teacher for the student's email.`);
+      }
+      if (result.matches.length > 1) {
+        return succeed({
+          status: "AMBIGUOUS",
+          candidates: result.matches.slice(0, 5).map((m) => ({ name: m.name, email: m.email })),
+          note: "More than one student matches. Ask the teacher which one, then call this tool again with that email.",
+        });
+      }
+      email = result.matches[0].email;
+      displayName = result.matches[0].name;
+    }
+
+    const roster = await services.listMyStudents(actor, { courseId: course.id });
+    if (roster.ok && roster.data.students.some((s) => s.email.toLowerCase() === email)) {
+      return succeed({ status: "ALREADY_ENROLLED", note: `${displayName} is already in ${course.name}. Nothing to propose.` });
+    }
+
+    const summary = `Add ${displayName} to "${course.name}"`;
+    const created = await eduProposals.create({
+      actor,
+      type: "ADD_STUDENT",
+      payload: { courseId: course.id, email: email! },
+      summary,
+    });
+    if (!created.ok) return serviceFailure(created.error);
+    return {
+      ok: true,
+      proposal: created.data,
+      content: JSON.stringify({
+        status: "PENDING_CONFIRMATION",
+        proposalId: created.data.id,
+        summary,
+        email,
+        note: "Nobody has been added yet. Tell the teacher to review this and confirm. The student is added only if they have a student account.",
+      }),
+    };
   },
 });
 
@@ -1139,6 +1226,7 @@ const TEACHER_TOOLS: Tool[] = [
   proposeCreateCourse,
   proposeCreateSessions,
   proposeAddContent,
+  proposeAddStudent,
   proposeAddStudentNote,
   proposeLessonPrep,
 ];

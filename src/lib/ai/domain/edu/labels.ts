@@ -10,6 +10,8 @@ export const labels = {
   you: "You",
   assistant: "Kora",
   failure: "Something went wrong. Please try again.",
+  pendingRestored: (count: number) =>
+    `You have ${count} ${count === 1 ? "change" : "changes"} waiting for your decision. Nothing has been applied yet.`,
   sources: "Sources",
   result: {
     studentAdded: "added to the course",

@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
-import type { Role } from "@/contracts";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import type { ProposalView, Role } from "@/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { labels } from "@/lib/ai/domain/edu/labels";
@@ -14,6 +14,30 @@ export function AiPanel({ role }: { role: Role }) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const nextId = useRef(1);
+
+  // After a reload, bring back changes the assistant prepared earlier that still wait for a decision.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/ai/proposals?status=pending");
+        if (!response.ok) return;
+        const body = (await response.json()) as { proposals?: ProposalView[] };
+        const pending = body.proposals ?? [];
+        if (cancelled || pending.length === 0) return;
+        setMessages((m) =>
+          m.length > 0
+            ? m
+            : [{ id: nextId.current++, role: "assistant", content: labels.pendingRestored(pending.length), proposals: pending }],
+        );
+      } catch {
+        // Restoring is a convenience; the panel works without it.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function send(event: FormEvent) {
     event.preventDefault();
