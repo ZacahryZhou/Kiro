@@ -13,6 +13,7 @@ import {
 import { findTool, getToolsForRole } from "../domain/edu/tools";
 import { addMaterial } from "../services";
 import { actorFor, ids, resetStore, store } from "./fake-store";
+import { timeZoneDataProblem } from "./tz-sanity";
 
 const alex = actorFor("teacher1@example.test")!;
 const taylor = actorFor("teacher2@example.test")!;
@@ -31,6 +32,9 @@ async function run(tool: string, actor = alex, args: unknown = {}) {
 }
 
 async function main() {
+  const tzProblem = timeZoneDataProblem();
+  check("Runtime time zone data knows the Nov 1 2026 clock change (America/Vancouver)", tzProblem === null, tzProblem);
+
   // ----- tool sets -----
   const names = getToolsForRole("TEACHER").map((t) => t.name).sort();
   check("Teacher has the 7 read-only tools plus three proposal tools", JSON.stringify(names) === JSON.stringify(["checkConflicts", "getCourseMaterials", "getTeacherSchedule", "listAttendance", "listDeductions", "listMyCourses", "listMyStudents", "proposeCreateCourse", "proposeCreateSessions", "proposeMarkAttendance"]), names);

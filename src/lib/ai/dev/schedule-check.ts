@@ -9,7 +9,9 @@ import { eduProposals, proposalStore } from "../domain/edu/proposal-types";
 import { findTool, getToolsForRole } from "../domain/edu/tools";
 import { createSessions, listMyCourses, listMyStudents } from "../services";
 import { actorFor, ids, resetStore, store } from "./fake-store";
+import { timeZoneDataProblem } from "./tz-sanity";
 
+const TZ = "America/Vancouver"; // fixed, so these checks do not depend on the APP_TZ environment variable
 const alex = actorFor("teacher1@example.test")!;
 const taylor = actorFor("teacher2@example.test")!;
 const jordan = actorFor("student1@example.test")!;
@@ -28,23 +30,26 @@ async function call(tool: string, actor: typeof alex, args: unknown) {
 const business = () => JSON.stringify({ c: store.courses.length, e: store.enrollments.length, s: store.sessions.length });
 
 async function main() {
+  const tzProblem = timeZoneDataProblem();
+  check("Runtime time zone data knows the Nov 1 2026 clock change (America/Vancouver)", tzProblem === null, tzProblem);
+
   // ----- resolveSessions (pure code) -----
   const thu = new Date("2026-10-08T19:30:00.000Z"); // Thursday 12:30 in Vancouver
-  const nextWeek = resolveSessions({ weekdays: ["TUE", "THU"], when: "next_week", time: "16:00" }, thu);
+  const nextWeek = resolveSessions({ weekdays: ["TUE", "THU"], when: "next_week", time: "16:00" }, thu, TZ);
   check("next_week Tue+Thu from Thursday Oct 8 -> Oct 13 and Oct 15, 16:00 PDT = 23:00Z", nextWeek.ok && nextWeek.sessions.map((s) => s.localDate).join() === "2026-10-13,2026-10-15" && nextWeek.sessions[0].startAt === "2026-10-13T23:00:00.000Z" && nextWeek.sessions[0].weekday === "Tue", nextWeek);
-  const thisWeek = resolveSessions({ weekdays: ["MON", "FRI"], when: "this_week", time: "09:30" }, thu);
+  const thisWeek = resolveSessions({ weekdays: ["MON", "FRI"], when: "this_week", time: "09:30" }, thu, TZ);
   check("this_week uses Monday to Sunday of the current week", thisWeek.ok && thisWeek.sessions.map((s) => s.localDate).join() === "2026-10-05,2026-10-09");
-  const dst = resolveSessions({ weekdays: ["TUE"], startDate: "2026-10-27", weeks: 2, time: "16:00" }, thu);
+  const dst = resolveSessions({ weekdays: ["TUE"], startDate: "2026-10-27", weeks: 2, time: "16:00" }, thu, TZ);
   check("A weekly pattern across the Nov 1 clock change keeps local 16:00 (23:00Z, then 00:00Z)", dst.ok && dst.sessions.map((s) => s.startAt).join() === "2026-10-27T23:00:00.000Z,2026-11-04T00:00:00.000Z", dst);
-  const explicit = resolveSessions({ dates: ["2026-12-02", "2026-12-01", "2026-12-01"], time: "18:15" }, thu);
+  const explicit = resolveSessions({ dates: ["2026-12-02", "2026-12-01", "2026-12-01"], time: "18:15" }, thu, TZ);
   check("Explicit dates are de-duplicated and sorted", explicit.ok && explicit.sessions.map((s) => s.localDate).join() === "2026-12-01,2026-12-02");
   check("An impossible date is rejected", !resolveSessions({ dates: ["2026-02-30"], time: "10:00" }, thu).ok);
   check("A bad time is rejected", !resolveSessions({ dates: ["2026-12-01"], time: "4pm" }, thu).ok);
   check("Weekdays without when/startDate are rejected", !resolveSessions({ weekdays: ["TUE"], time: "10:00" }, thu).ok);
   check("No pattern at all is rejected", !resolveSessions({ time: "10:00" }, thu).ok);
-  const tooMany = resolveSessions({ weekdays: ["MON", "TUE", "WED"], startDate: "2026-12-01", weeks: 12, time: "10:00" }, thu);
+  const tooMany = resolveSessions({ weekdays: ["MON", "TUE", "WED"], startDate: "2026-12-01", weeks: 12, time: "10:00" }, thu, TZ);
   check("More than 30 sessions is rejected (contract limit)", !tooMany.ok && /30/.test((tooMany as any).message), tooMany);
-  check("zonedTimeToUtc matches resolveSessions", zonedTimeToUtc({ year: 2026, month: 10, day: 13, hour: 16 }).toISOString() === "2026-10-13T23:00:00.000Z");
+  check("zonedTimeToUtc matches resolveSessions", zonedTimeToUtc({ year: 2026, month: 10, day: 13, hour: 16 }, TZ).toISOString() === "2026-10-13T23:00:00.000Z");
 
   // ----- scheduling proposals -----
   reset();
