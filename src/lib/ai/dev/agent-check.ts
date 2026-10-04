@@ -73,6 +73,17 @@ async function main() {
     const out = await ask(alex, "Jordan came", { chatCompletion: model.fn, record });
     check("Negated or conditional wording is left alone", model.requests.length === 1 && /Which session/.test(out.reply), out.reply);
   }
+  // 0a. A preview written out in chat (found with a real model) is treated like a false claim.
+  {
+    const { record } = setup();
+    const model = scripted([
+      text("Here's the leave request I've prepared for your math session: Course: Math, Tuesday 16:00. This is only a preview and nothing has been sent yet. Would you like to confirm sending it?"),
+      calls({ name: "proposeMarkAttendance", args: { sessionId: "s_a_today", records: [{ studentId: ids.jordan, status: "PRESENT" }, { studentId: ids.sam, status: "LEAVE" }] } }),
+      text("The proposal is waiting for your confirmation."),
+    ]);
+    const out = await ask(alex, "Jordan came, Sam is on leave", { chatCompletion: model.fn, record });
+    check("A preview described in chat triggers one correction, after which the real proposal is created", out.proposals.length === 1 && model.requests.length === 3 && /waiting for your confirmation/.test(out.reply), out.reply);
+  }
   // 0b. Running out of rounds after a proposal exists still reports the proposal.
   {
     const { record } = setup();
