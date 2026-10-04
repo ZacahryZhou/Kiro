@@ -1,88 +1,95 @@
 # Kora: Project Story
 
-> Text for the submission form. It describes what the repository does today and what the demo shows; the one thing it cannot show on its own is the live language model, which needs your own `AI_API_KEY` (the scripted demo mode needs none).
+> Text for the Devpost submission form. It describes what the repository does today. The one thing it cannot show on its own is a live language model, which needs your own `AI_API_KEY` (the scripted demo mode needs none).
+
+**Elevator pitch:** An AI agent that runs a tutor's admin from one sentence (attendance, rescheduling, quizzes, tutoring) and never changes your data until you confirm.
 
 ## Inspiration
 
-Small tutoring providers (one-to-one lessons and small classes) run on spreadsheets, chat threads and memory. A teacher finishes a lesson and then has to open a schedule, mark who came, work out whose lesson balance goes down, and find a new slot for the student who was on leave, all without double-booking anyone. None of it is hard, but all of it is repetitive, and a single slip means a wrong charge or a student who turns up to an empty room.
+Small tutoring providers run on spreadsheets, chat threads and memory. After a lesson the teacher has to open a schedule, mark who came, work out whose lesson balance goes down, and find a new slot for the student who was on leave, all without double-booking anyone.
 
-AI assistants look like the obvious fix: just tell the assistant "Jordan came today, Sam is on leave." But the moment an assistant can write to a real schedule or a real lesson balance, trust becomes the problem. A model that misreads a name can charge the wrong family. We wanted to see how far an AI-first product could go while making it structurally impossible for the AI to change anything the teacher has not approved.
+An AI assistant looks like the obvious fix: just say "Jordan came today, Sam is on leave." But the moment an assistant can write to a real schedule or a real lesson balance, trust becomes the problem. A model that misreads a name can charge the wrong family. We wanted to see how capable an agent could be if it was never allowed to write on its own.
 
 ## What it does
 
-Kora is a teaching collaboration platform for small tutoring providers. Teachers and students sign in and see their own schedules, courses, materials and attendance. On top of that sits an AI agent that understands natural language.
+Kora is a teaching platform for one-to-one lessons and small classes, built around an **AI agent with tools**. Teachers and students each get their own agent. It reads their real data, prepares changes, shows exactly what would happen, and waits for a person to say yes.
 
-The rule that defines the product: **the AI never writes business data on its own.** Every teacher write follows the same path:
+**Say it, see it, confirm it.** Every teacher write follows the same path:
 
-1. The teacher says one sentence, for example "Jordan attended math today; Sam is on leave."
-2. The AI reads the relevant data through read-only functions and saves a **proposal**.
-3. The page shows a preview of exactly what would happen, and nothing has changed yet.
+1. The teacher says one sentence: "Jordan attended math today; Sam is on leave."
+2. The agent reads the roster and schedule with read-only tools and saves a **proposal**.
+3. The page shows a preview of exactly what would happen. Nothing has changed yet.
 4. The teacher clicks Confirm, and only then does an ordinary, permission-checked service function write the attendance and the lesson deduction.
 
-Students get a different, smaller agent. It can only read their own workspace and answer questions from their course materials, and every answer carries citations that code has verified against the source text. If the materials do not contain the answer, it says so instead of guessing.
+**What the teacher's agent can do**
 
-What the assistant can do today, all with the same preview-then-confirm rule:
+- Take attendance by sentence, with lesson deductions calculated by code.
+- Create courses, schedule sessions and reschedule them. Conflicts are checked against the teacher and every enrolled student, so a clash writes nothing and is explained.
+- **Read a photo.** Attach a picture of a timetable or a worksheet and say "add these classes to my calendar." A vision model reads the picture and the agent turns it into proposals.
+- **Write quizzes from your own materials.** Ask for 8 questions, a mix of types and difficulties, and some topics. Code plans the mix and keeps only the questions backed by a word-for-word quote from a material. You review the answer key before students see it.
+- **Build teaching notes** (summaries, key points, common mistakes, FAQs, teaching style) from dictation or from uploaded files.
+- Add students, enter course content, draft progress records from the teacher's own words, and report attendance trends that refuse to guess with fewer than three records.
+- **Design the home page.** "Today, my requests and Jordan's progress, in ocean colours": the agent picks the widgets and code places them on a drag-and-resize grid.
 
-- **Attendance by sentence**, with lesson deductions calculated by code.
-- **Verified answers from course materials** for students: every citation is checked against the source text, or the assistant says it could not find the answer.
-- **Course creation, scheduling and rescheduling**, with conflict checks before a proposal exists and again at confirmation. A clash writes nothing and is explained.
-- **Adding students to a course**, **course content entry**, **progress records** drafted from the teacher's own words, **attendance trends** that refuse to guess with fewer than three records, and **teacher-only student notes** that help with scheduling.
-- **Student leave requests**: a student asks in plain language, confirms the preview, and the teacher sees a pending request. It never edits the schedule or attendance by itself.
+**What the student's agent can do.** It is a smaller agent with no write tools. It answers from the student's own workspace, **tutors from the teacher's own notes** with step-by-step explanations, and prepares a leave or different-time request that the student confirms and the teacher decides on. Every answer from course content carries citations that code has checked against the source, or it says the teacher has not covered that.
 
-- **A customisable home page**: the teacher drags and resizes widgets (today, requests, a student's focus card, attendance trend and more), picks colours and motion, and keeps a history of layouts; or says "design my home page" and the assistant picks the widgets while code places them.
-- **Course files**: drop a PDF, Word, text or Markdown file on a unit and its text becomes an ordinary material, so student questions and citations work on it.
-- **Quizzes written from the materials**: the teacher asks for a number of questions, types, difficulties and topics. Code plans the mix and keeps only the questions whose answer is backed by a word-for-word quote from a material; the teacher reviews the answer key, publishes it, and students practise it.
-- **A teaching knowledge base and a student tutor**: the teacher's own lesson summaries, key points, mistakes, examples and teaching style (kept separate from the private student memory). Students ask the assistant to explain a topic and get a step-by-step explanation with verified sources, or an honest "your teacher has not covered that".
+**Conversations that feel like a product.** One centred pop-up opens with Ctrl/Cmd+K on any page. Start a new chat any time or reopen an earlier one from the history; every chat keeps its own context, and a dot marks chats waiting for your decision. Each course page also has its own assistant, locked to that course in code, so a student can ask the course tutor without mixing it up with the general assistant.
 
-Around the assistant is a normal product: sign-in, weekly schedule and month calendar, courses, materials, attendance, a Requests inbox, a Students page, account settings, and a live Agent Console that shows each step of the agent and the files it uses.
+Around the agent is a normal product: sign-in, weekly schedule and month calendar, courses, materials with file upload (PDF, Word, text, Markdown), full edit and delete for courses, units, sessions and enrolments, a Requests inbox, student pages, account settings, and a live **Agent Console** that lights up each step of a request and the files it touches.
 
 ## How we built it
 
-**Stack:** Next.js (App Router) with strict TypeScript, Tailwind and shadcn/ui, PostgreSQL with Prisma, Auth.js email/password sign-in, Zod for validation, and Docker Compose so the whole thing runs locally with one command. The model is any OpenAI-compatible API (DeepSeek by default), called with plain `fetch`, with a mock mode for offline demos.
+**The agent.** One model-and-tool loop (at most six rounds, with a timeout) runs in two configurations: **29 teacher tools** (16 read-only, 13 that prepare proposals) and **7 student tools** (6 read-only, 1 proposal). The model decides which tool to call next; everything around it is fixed code. Proposals move through an atomic state machine (pending, confirmed, executed or failed), so clicking Confirm twice, or from two tabs, writes once.
 
-**Two tracks, one contract.** The work is split between two people. One owns the core product (database, sign-in, services, pages); the other owns the AI agent. We agreed on a written API contract first: every service function, input type, return type, error code and permission rule. Each side builds against the contract and neither edits the other's directories.
-
-**Fake services first.** The AI track did not wait for the real services. We wrote in-memory services that follow the contract exactly, including permission checks, time-overlap conflict detection and the attendance and deduction rules, and ran the whole agent flow in a terminal against them. A single file decides whether the agent talks to the fake or the real services, so switching is one import change. Scripts check that the fakes behave the way the contract says, and a second set runs the same flows against the real database.
-
-**Trust is enforced by design, not by prompts:**
+**Trust is enforced by design, not by prompts.**
 - Identity comes only from the signed-in session. No function accepts a user ID or role from the browser or from the model.
-- The AI may only call read-only functions and write its own proposal, run and memory tables. It cannot touch business tables.
-- Confirmation is an atomic status change plus database unique constraints, so clicking Confirm twice cannot deduct twice.
-- Code does the arithmetic: deductions, attendance rates, and date and time-zone conversion (including daylight saving). The model only interprets intent and writes text.
-- Student messages and course materials are treated as untrusted text, so instructions hidden inside them cannot change what the agent does.
-- Scheduling checks conflicts twice, before the proposal exists and again at confirmation. A batch with any conflict writes nothing, and the teacher is told why.
+- The agent may call read-only functions and write only its own tables (proposals, runs, memory, chats). It cannot touch business tables, which we audit with a grep over the agent's code.
+- Code does the facts: deductions, attendance rates, dates, time zones (including daylight saving) and conflicts. The model interprets intent and writes the words.
+- **The model drafts, code decides what is kept.** Quiz questions, teaching notes and tutor answers survive only if their quote is a word-for-word substring of a real material.
+- Student messages, course materials and text read from photos are untrusted data. Instructions hidden in them cannot change which tools run or for whom.
+- Every chat belongs to one user and the server reads its history itself. In a course assistant, any tool that takes a course is forced to that course in code, whatever the model asks for.
+
+**Photos.** The main model reads text only, so a separate vision model turns each photo into plain text. Pictures are checked by their first bytes (not their file names), limited to four per message, shrunk in the browser, read once and never stored. The text it returns reaches the agent between marker lines with a reminder that it is data.
+
+**Two tracks, one contract.** One person owned the core product and the other the agent. We wrote the API contract first (every function, input type, error code and permission rule) and neither side edited the other's code. The agent track built against in-memory fake services that follow the contract exactly, so it never waited, and switching to the real services was an import change.
+
+**Stack:** Next.js (App Router), React, strict TypeScript, Tailwind and shadcn/ui, PostgreSQL with Prisma, Auth.js, Zod and Docker Compose. The model is any OpenAI-compatible API (DeepSeek by default) called with plain `fetch`, with a scripted mock mode for offline demos.
 
 ## Challenges we ran into
 
-- **Making an AI product that is safe to trust.** The hard part was not getting the model to act, it was deciding what it must never be able to do, and then arranging the code so those things are impossible rather than discouraged.
-- **Building two halves in parallel.** The agent depends on services that did not exist yet. The contract plus fake services let both sides move independently, but they only work if the fakes are exact, so we tested them against the contract's rules.
-- **Time zones.** "Thursday at 4 PM" means different UTC times either side of the autumn clock change. We convert in code and verified the conversion across both offsets.
-- **Keeping documents honest.** Contract and handbook details drifted between languages and versions, so we reconciled them and recorded assumptions in a shared handoff log instead of guessing.
+- **Deciding what the agent must never be able to do,** and then arranging the code so those things are impossible instead of merely discouraged.
+- **The assistant that disagreed with the calendar.** A student asked for their next class and the agent answered "Monday"; the calendar said Tuesday. The date conversion was right. The bug was that the tool looked at "this week" and the model invented a date when it found nothing. We made code supply the current time and the next session in every schedule result, added an "upcoming" range, and wrote a regression test.
+- **Prompt injection through new doors.** Each new input (student text, uploaded files, photos) is a place for hidden instructions. We treat all of them as data inside marked blocks and keep tool access in code.
+- **Time zones.** "Thursday at 4 PM" means different UTC times either side of the autumn clock change. We convert in code and verified both offsets.
+- **Building two halves in parallel.** Fake services only help if they behave exactly like the real ones, so we tested the fakes against the contract's rules.
 
 ## Accomplishments that we're proud of
 
-- A complete product around the AI: containerised app and database, a 14-table schema with migrations, idempotent demo seeding that refuses to run in production, role-based sign-in, per-user isolation on every read and write, and teacher and student workspaces.
-- A written contract that two people (and their coding assistants) could build against without stepping on each other.
-- Fake services that behave like the real ones, with a repeatable check script covering access isolation, conflicts, attendance and rescheduling rules.
-- The headline result: a teacher says one sentence, sees a preview, and confirms once. Confirming twice or in parallel writes once, and the real-database checks (54 of them, plus 400 offline checks) prove it, along with cross-account denial for every new feature.
-- A live Agent Console that makes the agent legible: each step lights up, and so does every file it touches.
+- The headline behaviour works end to end: one sentence, one preview, one confirmation, one write. Confirming twice or in parallel writes once.
+- An agent with 29 tools that still cannot write a single business row on its own.
+- Grounded generation: quizzes, notes and tutor answers are kept only when code can find their quote in the teacher's own material.
+- A student tutor that teaches in the teacher's voice from the teacher's notes, and says "I couldn't find that" when it is not there.
+- 640 offline checks across 23 scripts, real-database checks for permissions and cross-account denial, and a real-model checklist you can run with your own key.
+- A complete product around it that starts with one command, including a mock mode that needs no key and no network.
 
 ## What we learned
 
-- For AI products, the interesting engineering is the harness around the model: tool design, permissions, validation and confirmation matter more than the prompt.
-- Writing the contract before the code removed most integration surprises.
+- For AI products the interesting engineering is the harness around the model: tool design, permissions, validation and confirmation matter more than the prompt.
 - "Propose, then confirm" is a small idea that changes how much you can safely let an assistant do.
+- Let the model draft and let code decide. It is the simplest way to make generated content trustworthy.
+- Writing the contract before the code removed most integration surprises.
 
 ## What's next for Kora
 
+- Meet teachers where they already are: a chat-app front end (Telegram first) that reuses the same agent and the same confirm-first rule, and a calendar feed for Google and Apple Calendar.
 - Self-service registration, password reset by email, and notifications.
-- OCR for scanned PDFs, retrieval for materials longer than the assistant can read at once, and recording quiz attempts.
-- Assignments and lesson-pack balances (tuition changes were left out on purpose until they can follow the same confirm-first rule).
-- Safe corrections to attendance after submission.
-- A broader trial with real tutors and a live-model evaluation of the assistant's wording.
+- OCR for scanned PDFs, retrieval for materials longer than the agent can read at once, and recording quiz attempts.
+- Agent proposals for editing and deleting courses, assignments, and lesson-pack balances (tuition changes were left out on purpose until they can follow the same confirm-first rule).
 
 ## Built with
 
-Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, react-grid-layout, PostgreSQL, Prisma, Auth.js, Zod, unpdf, mammoth, Docker, DeepSeek (OpenAI-compatible API).
+Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, PostgreSQL, Prisma, Auth.js, Zod, Docker Compose, react-grid-layout, DeepSeek (any OpenAI-compatible model API), a vision model for photos, unpdf, mammoth.
 
-Repository: https://github.com/ZacahryZhou/Kora
+## Try it
+
+Clone the repository, copy `.env.example` to `.env`, run `docker compose up --build`, then create the demo data with the two seed commands in the README. With `AI_MOCK=1` the scripted demo model runs the main flow with no API key and no network. `docs/DEMO-SCRIPT.md` walks through the demo line: attendance by sentence, a conflict, a verified answer from course materials, a student tutor, and access isolation between accounts.

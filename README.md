@@ -2,9 +2,9 @@
 
 # Kora
 
-**An AI-first teaching collaboration platform for small tutoring providers (one-to-one and small classes).**
+**An AI agent that does the admin of a tutoring business, and never changes your data without asking.**
 
-Teachers and students can ask questions or give instructions to an AI agent in natural language. The product's defining rule is trust: **the AI never writes business data on its own.** Every teacher write goes through *AI proposal → teacher confirmation → service function*.
+Kora is a teaching platform for small tutoring providers (one-to-one lessons and small classes). Teachers and students talk to an AI agent in plain language: take attendance, move a class, write a quiz, explain a topic from the teacher's own notes. The product's defining rule is trust: **the AI never writes business data on its own.** Every teacher write goes through *AI proposal → teacher confirmation → service function*.
 
 > Kora was previously named EduSync. A few internal identifiers (for example the local database name `edusync`) keep the old name.
 
@@ -12,22 +12,55 @@ Teachers and students can ask questions or give instructions to an AI agent in n
 
 ## Table of contents
 
-1. [How it works](#how-it-works)
-2. [Project status](#project-status)
-3. [Features](#features)
-4. [Tech stack](#tech-stack)
-5. [Getting started](#getting-started)
-6. [Demo accounts and seed data](#demo-accounts-and-seed-data)
-7. [Architecture](#architecture)
-8. [The AI agent](#the-ai-agent)
-9. [Access control](#access-control)
-10. [Repository layout](#repository-layout)
-11. [Team, tracks and workflow](#team-tracks-and-workflow)
-12. [Development roadmap](#development-roadmap)
-13. [Acceptance scenarios](#acceptance-scenarios)
-14. [Documentation index](#documentation-index)
+1. [The AI agent at a glance](#the-ai-agent-at-a-glance)
+2. [How it works](#how-it-works)
+3. [Project status](#project-status)
+4. [Features](#features)
+5. [Tech stack](#tech-stack)
+6. [Getting started](#getting-started)
+7. [Demo accounts and seed data](#demo-accounts-and-seed-data)
+8. [Architecture](#architecture)
+9. [The AI agent](#the-ai-agent)
+10. [Access control](#access-control)
+11. [Repository layout](#repository-layout)
+12. [Team, tracks and workflow](#team-tracks-and-workflow)
+13. [Development roadmap](#development-roadmap)
+14. [Acceptance scenarios](#acceptance-scenarios)
+15. [Documentation index](#documentation-index)
 
 ---
+
+## The AI agent at a glance
+
+Kora's assistant is an **agent with tools**, not a chat box bolted onto a calendar. It reads your real data, prepares changes, shows exactly what would happen, and waits for a person to say yes. Teachers and students each get their own agent, tuned and restricted for their role.
+
+| You say | The agent does | What keeps it safe |
+|---|---|---|
+| "Jordan attended math today; Sam is on leave." | Finds the session and the roster, prepares attendance and the lesson deductions | Code computes the deductions. Nothing is written until you confirm |
+| "Move Friday's class to Saturday at 4 PM." | Checks the teacher's and every enrolled student's schedule, previews the old and new time | A clash blocks the proposal and says what it clashes with |
+| 📷 *a photo of a timetable* + "Add these classes to my calendar." | A vision model reads the photo; the agent turns it into session proposals | Text read from a photo is data, never instructions |
+| "Make an 8-question quiz on slope: 5 multiple choice, 3 easy, 3 medium, 2 hard." | Code plans the mix; a constrained model call drafts from your materials | Code keeps only questions backed by a word-for-word quote |
+| "Create teaching notes from my math materials." | Drafts lesson summaries, key points, common mistakes and FAQs | Grounded the same way; you review before anything is saved |
+| "Design my home page: today, requests and Jordan's progress, in ocean colours." | Picks the widgets; code places them on the grid | Every student and course is validated; you preview first |
+| (student) "Explain how the balance method works." | Teaches step by step from the teacher's own notes and the course materials | Every citation is checked against its source, or the answer is "I couldn't find that" |
+| (student) "When is my next class?" | Reads the student's own schedule | The date and time come from code, never from the model |
+
+### What makes it trustworthy
+
+- **Propose, never write.** The AI can read and it can propose. Business data changes only after a person confirms, through the same permission-checked service functions the manual forms use.
+- **Code does the facts.** Deductions, attendance rates, dates, time zones, conflicts and citations are computed or verified by code. The model interprets intent and writes the words.
+- **Grounded or silent.** Answers from materials carry quotes that code checks against the source text. If the quote is not there, the assistant says it could not find it.
+- **Untrusted input stays data.** Student messages, course materials and text read from photos can never change which tools run or for whom.
+- **Isolated by identity.** Who is asking comes only from the signed-in session. Teachers see only their own courses, students only their own data, private student notes never reach a student's agent, and every chat belongs to one user.
+- **Visible.** A live Agent Console lights up each step of a request and the files it touches.
+
+### Talking to it
+
+- **One pop-up, many conversations.** Press Ctrl/Cmd+K anywhere. Start a new chat whenever you like, or reopen an earlier one from the history list. Every chat keeps its own context, and a dot marks chats that are waiting for your decision.
+- **An assistant on every course.** Each course page has its own assistant, locked to that course in code and with its own history, so a student can ask the course tutor about the material while the global assistant stays general.
+- **Photos for teachers.** Attach, paste or drop up to four photos (a timetable, a worksheet, a whiteboard). They are read once and never stored.
+
+**By the numbers:** 29 teacher tools (16 read-only, 13 that prepare proposals) and 7 student tools · 12 proposal types · a model-and-tool loop of at most 6 rounds · 640 offline checks across 23 scripts, plus real-database and real-model checks.
 
 ## How it works
 
@@ -70,7 +103,7 @@ Work is split between two owners (see [Team, tracks and workflow](#team-tracks-a
 | Area | Status |
 |---|---|
 | Next.js scaffold, Docker Compose, PostgreSQL | Done |
-| Prisma schema (18 tables) and migrations | Done |
+| Prisma schema (20 tables) and migrations | Done |
 | Demo account seed (idempotent, refuses to run in production) | Done |
 | Email/password sign-in, role-based route protection, `requireActor()` | Done |
 | Read services (`src/services/read.ts`): courses, schedule, students, materials, student workspace | Done |
@@ -121,7 +154,11 @@ Each AI feature follows the same pattern: the teacher says one sentence, the AI 
 | 16 | Course files | Drop a PDF, Word, .txt or .md file on a unit | The text is extracted on the server and stored as ordinary text materials (long files are split into numbered parts), so student Q&A and citations work unchanged | C · Integrated (no OCR for scanned PDFs) |
 | 17 | AI-written quizzes | "Create a quiz of 8 questions for my math course: 5 multiple choice, 2 true/false, 1 short answer; 3 easy, 3 medium, 2 hard; covering slope" | `QUIZ` preview. Code plans the mix; a separate step drafts the questions; code keeps only questions whose answer is backed by a word-for-word quote from a material. Saved as a draft; the teacher publishes it for students to practise | C · Integrated |
 | 18 | Teaching knowledge and student tutor | (teacher) "Create teaching notes from the materials of my math course"; (student) "Explain how the balance method works" | `KNOWLEDGE` preview, then notes the students' tutor teaches from; the student gets a step-by-step explanation with verified citations, or an honest "not covered" reply. Kept apart from the private student memory | C · Integrated |
-| 19 | Tuition adjustment | "Add 3 sessions for Jordan" | Out of the current MVP; needs a new table, function and proposal type agreed in the contract | C · Out of scope |
+| 19 | Chats with history | Press Ctrl/Cmd+K, start a new chat, or reopen one from the list | A centred pop-up; every chat keeps its own context; a dot marks chats waiting for a decision | C · Integrated |
+| 20 | Course assistants | Open a course and ask "What did we cover last week?" (teacher) or "Explain this unit" (student) | An assistant locked to that course in code, with its own history | C · Integrated |
+| 21 | Photos in the chat | (teacher) attach a photo of a timetable: "Add these classes to my calendar" | A vision model reads the photo and the agent prepares proposals; the text is treated as untrusted data and the picture is never stored | C · Integrated; needs `AI_VISION_MODEL` for real reading |
+| 22 | Course management | Edit or delete a course, unit, material or session; remove a student; upload files from the Teaching knowledge page | Manual teacher forms; deleting a course needs its name typed and lists what goes with it | C · Integrated (not an AI proposal yet) |
+| 23 | Tuition adjustment | "Add 3 sessions for Jordan" | Out of the current MVP; needs a new table, function and proposal type agreed in the contract | C · Out of scope |
 
 **Intended demo line:** feature 1 → 2 → 3 → access isolation, on the showcase fixture. It runs with a live model (`AI_API_KEY`, `AI_MODEL`) or, with no network or key, in the scripted demo mode (`AI_MOCK=1`), which understands a few plain requests and drives the same real tools, proposals, confirmation and database (it is not a language model, so it does not show how a real model chooses tools).
 
@@ -238,7 +275,7 @@ Run all offline AI checks (fake services, no key) with `npx tsx src/lib/ai/dev/r
 
 ### What is tested
 
-- **Offline checks** (`npm run check:ai`): 20 scripts, 550 checks, no network or key, on in-memory fake services.
+- **Offline checks** (`npm run check:ai`): 23 scripts, 640 checks, no network or key, on in-memory fake services.
 - **Real-database checks** (`NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts`, inside the app container): 134 checks covering services, permissions, cross-account denial and the confirm path.
 - **Real-model checks** (`npm run check:live`): 20 scenarios against your own provider key; prints PASS, FAIL or REVIEW.
 - Every feature was also run in a browser with two or more accounts (see `docs/DEMO-SCRIPT.md`).
@@ -268,9 +305,11 @@ The baseline account seed and AI fixture seed are idempotent and refuse to run w
 ```
 Browser
  ├─ Teacher / student pages (src/app/**) ── call ──▶ src/services/** ──▶ Prisma ──▶ PostgreSQL
- └─ <AiPanel/>
-      │ POST /api/ai/chat
+ └─ AI pop-up (Ctrl/Cmd+K) and one assistant on each course page
+      │ POST /api/ai/chat  { message, conversationId?, courseId?, images? }
       ▼
+   chat handler: identity from the session → this chat's last 10 messages (AgentConversation / AgentMessage)
+                 → teachers' photos read into untrusted text by a vision model
    src/app/api/ai/chat → src/lib/ai/core/agent-loop (model ↔ tool loop, max 6 rounds, timeout, server-only)
       ├─ Read-only tools ─▶ src/services/read.ts
       ├─ Proposal tools  ─▶ write AgentProposal(pending) ─▶ return preview
@@ -328,6 +367,12 @@ These three features follow the same rule as the rest of the agent: **the model 
 - **Quizzes.** `proposeQuiz` turns the request into one slot per question in code (how many of each type and difficulty, topics shared out, easy to hard). A separate, constrained model call writes the questions from the course's text materials. Code then keeps a question only if it fits its slot, has valid options and answer, and carries a `sourceQuote` that is a word-for-word substring of the cited material. If some cannot be backed, the proposal says so (for example "7 of the 8 questions you asked for"). The teacher reviews the answer key and sources, then publishes the draft; students practise it with instant marking of multiple-choice and true/false, and the key is revealed only after they submit. Nothing is stored about their attempts.
 - **Teaching knowledge.** Teachers keep lesson summaries, key points, common mistakes, worked examples, FAQs and a teaching style in the Knowledge page, dictate them, or have the assistant build them from uploaded materials (grounded the same way as quizzes). The notes are written for students to read and live in their own table: they are never mixed with the private student memory (`AgentMemory`), which stays teacher-only.
 - **Student tutor.** `explainWithTeacherNotes` explains a topic using only the notes and course materials of the courses the student is enrolled in. The teaching style is passed as data, never as a citable source. The explanation must cite notes or materials with quotes that code verifies; otherwise the student gets "I couldn't find that in your teacher's notes or the course materials. It may be worth asking your teacher."
+
+### Chats, course assistants and photos
+
+- **Chats.** Every conversation is a row in `AgentConversation` with its messages in `AgentMessage` (the assistant's own tables, owned by one user). The browser sends only the message and a chat id; the server reads that chat's last 10 messages itself, so one chat never sees another's context and the browser cannot forge history. Another user's chat is a 404.
+- **Course assistants.** A chat started on a course page carries the course. In `agent-loop.ts` every tool that takes a `courseId` is forced to that course in code, whatever the model asks for, and the system prompt says which course it is.
+- **Photos (teachers only).** `images` in the chat body are checked by their first bytes (PNG, JPEG, WebP or GIF; at most 4, 4 MB each), shrunk in the browser, and read once by a separate vision model (`AI_VISION_MODEL`), because the main model reads text only. The text it returns is untrusted: it reaches the agent between `<<<PHOTO_TEXT` and `PHOTO_TEXT>>>` marker lines with a reminder that it is data, and a proposal made from it still needs the teacher's confirmation. The pictures are not stored; only their names and the text read from them are kept, so later messages in the same chat can refer back.
 
 ### Customisable home page
 
