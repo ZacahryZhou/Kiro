@@ -121,3 +121,5 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+> **Ownership note (2026-10-04, appended):** the project owner now maintains the core-product track and the front end (`src/app/**`, `src/components/**`, `src/services/**`, `prisma/**`) and authorized the AI-track assistant to edit them. All other rules above still apply, including the API contract (append-only) and the rule that the AI never writes business tables.

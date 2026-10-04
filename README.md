@@ -70,7 +70,7 @@ Work is split between two owners (see [Team, tracks and workflow](#team-tracks-a
 | Area | Status |
 |---|---|
 | Next.js scaffold, Docker Compose, PostgreSQL | Done |
-| Prisma schema (12 tables) and initial migration | Done |
+| Prisma schema (14 tables) and migrations | Done |
 | Demo account seed (idempotent, refuses to run in production) | Done |
 | Email/password sign-in, role-based route protection, `requireActor()` | Done |
 | Read services (`src/services/read.ts`): courses, schedule, students, materials, student workspace | Done |
@@ -79,6 +79,9 @@ Work is split between two owners (see [Team, tracks and workflow](#team-tracks-a
 | Teacher course management, student enrollment, session scheduling, attendance and deductions | Done |
 | Course units and materials (teacher editing; student reading) | Done |
 | Session rescheduling (teacher UI, conflict checks and change history) | Done |
+| Student leave and different-time requests (student form, teacher Requests inbox, AI) | Done |
+| Progress records (teacher Progress tab, student progress notes, AI drafting) | Done |
+| Month calendar, teacher Students pages and account Settings | Done |
 | Role-specific AI panel, chat API, read-only questions, verified material citations and proposal flows | Integrated; requires AI provider configuration for live model responses |
 | Full multi-person AI showcase fixture (`prisma/seed-ai.ts`) | Done; `npm run db:seed:demo`, or `npx tsx prisma/seed-ai.ts --reset` for a clean slate |
 | AI proposals and run log stored in the database (`AgentProposal`, `AgentRun`) | Done; only the AI's own tables are written |
@@ -103,9 +106,11 @@ Each AI feature follows the same pattern: the teacher says one sentence, the AI 
 | 8 | Student memory | "Remember Jordan is unavailable Tuesday and Thursday afternoons" | `ADD_STUDENT_NOTE` preview, then written to `AgentMemory` (teacher-only) | C · Integrated; role and course isolation verified |
 | 9 | Memory-aware scheduling | "Schedule next week for math" | Same as #5, candidate times avoid remembered gaps | C · Integrated; conflicting preferences block proposal creation |
 | 10 | Lesson preparation | "Help me prepare tomorrow's math class" | `ADD_CONTENT` preview with a handout draft and 5 exercises | C · Integrated; five-question output validated and requires confirmation |
-| 11 | Rescheduling | "Move the Oct 10 class to Oct 11 at 4 PM" | Teacher can reschedule manually; AI `RESCHEDULE` proposal is not implemented | C · Manual workflow done; AI unavailable |
-| 12 | Student leave request | (student) "I need to take leave next Tuesday" | `STUDENT_REQUEST` pending for the teacher; schedule unchanged | C · Not implemented |
-| 13 | Tuition adjustment | "Add 3 sessions for Jordan" | Out of the current MVP; needs a new table, function and proposal type agreed in the contract | C · Out of scope |
+| 11 | Rescheduling | "Move the Oct 10 class to Oct 11 at 4 PM" | `RESCHEDULE` preview with old and new time; a clash blocks the proposal; no deduction changes | C · Integrated (also available manually) |
+| 12 | Student leave request | (student) "I need to take leave next Tuesday" | `STUDENT_REQUEST` preview; after the student confirms it is a pending request for the teacher; schedule and attendance unchanged | C · Integrated |
+| 13 | Progress record | "Record progress for Jordan: goal: fractions; output: solved 8 of 10; next: practice" | `PROGRESS_RECORD` preview from the teacher's own words; the student later reads it without the private note | C · Integrated |
+| 14 | Add a student to a course | "Add Sam to my Physics course" | `ADD_STUDENT` preview; names are matched only among the teacher's own students | C · Integrated |
+| 15 | Tuition adjustment | "Add 3 sessions for Jordan" | Out of the current MVP; needs a new table, function and proposal type agreed in the contract | C · Out of scope |
 
 **Intended demo line:** feature 1 → 2 → 3 → access isolation, on the showcase fixture. It runs with a live model (`AI_API_KEY`, `AI_MODEL`) or, with no network or key, in the scripted demo mode (`AI_MOCK=1`), which understands a few plain requests and drives the same real tools, proposals, confirmation and database (it is not a language model, so it does not show how a real model chooses tools).
 
@@ -232,9 +237,9 @@ Conventions: IDs are `cuid()` strings; times are ISO 8601 UTC strings stored as 
 
 ### One loop, two configurations
 
-The teacher and student agents are the same loop with different system prompts and tool sets. Students have no proposal or write tools (the Tier B leave request is the only exception).
+The teacher and student agents are the same loop with different system prompts and tool sets. Students have no write tools; the one proposal they can prepare is a leave or different-time request to their own teacher, and it still needs their confirmation.
 
-Teacher tools, read-only: `getTeacherSchedule`, `listMyCourses`, `listMyStudents`, `listAttendance`, `listDeductions`, `checkConflicts`, `getCourseMaterials`, `getAttendanceTrends`, `getStudentMemory`. Teacher tools that only prepare a pending proposal: `proposeMarkAttendance`, `proposeCreateCourse`, `proposeCreateSessions`, `proposeAddContent`, `proposeAddStudentNote`, `proposeLessonPrep`. Student tools, read-only: `getStudentWorkspace`, `answerFromCourseMaterials`.
+Teacher tools, read-only: `getTeacherSchedule`, `listMyCourses`, `listMyStudents`, `listAttendance`, `listDeductions`, `checkConflicts`, `getCourseMaterials`, `getAttendanceTrends`, `getStudentMemory`, `getMyProfile`, `findMyStudent`, `listStudentRequests`, `listProgressRecords`. Teacher tools that only prepare a pending proposal: `proposeMarkAttendance`, `proposeCreateCourse`, `proposeCreateSessions`, `proposeAddContent`, `proposeAddStudent`, `proposeReschedule`, `proposeProgressRecord`, `proposeAddStudentNote`, `proposeLessonPrep`. Student tools: `getStudentWorkspace`, `answerFromCourseMaterials`, `getMyProfile`, `listStudentRequests`, `listProgressRecords` (read-only) and `proposeStudentRequest`.
 
 The behaviour rules both agents follow are written in `docs/AI-REPLY-POLICY.md` (section 0 is loaded into their instructions at run time).
 
@@ -250,8 +255,9 @@ The behaviour rules both agents follow are written in `docs/AI-REPLY-POLICY.md` 
 | `PROGRESS_RECORD` (Tier B) | `SaveProgressInput` | `saveProgressRecord` |
 | `STUDENT_REQUEST` (Tier B) | `StudentRequestInput` | `submitStudentRequest` |
 | `ADD_STUDENT_NOTE` (bonus) | `AddStudentNoteInput` | AI side writes `AgentMemory` (no service function) |
+| `ADD_STUDENT` (v0.6) | `AddStudentInput` | `addExistingStudentToCourse` |
 
-Of these, `CREATE_COURSE`, `CREATE_SESSIONS`, `ADD_CONTENT`, `MARK_ATTENDANCE` and `ADD_STUDENT_NOTE` are built; `RESCHEDULE`, `PROGRESS_RECORD` and `STUDENT_REQUEST` are defined in the contract but have no AI tool yet (rescheduling is available in the teacher UI).
+Every type above is built and has an AI tool. A `STUDENT_REQUEST` is prepared by a student's assistant and confirmed by that student; a request is only a note to the teacher and never changes the schedule or attendance.
 
 Proposals are validated with Zod and pre-checked with read-only functions (for example, that the student is really enrolled) before they are created. Business data **must remain unchanged** until confirmation. `CREATE_COURSE` is not rolled back as a whole: if an email is unregistered the course stays, the proposal is `executed`, and the result lists per-email outcomes.
 
@@ -305,6 +311,7 @@ All text materials of the course go into the context. The model must return `{ f
 
 The workspace uses one shared layout: a left sidebar (Schedule and Courses for teachers, My learning for students, plus the Agent console for allowed admins), a header with the signed-in name and role, and a floating **Ask Kora AI** button that opens the assistant. The panel stays mounted while closed, so the conversation and any pending proposal cards survive closing and reopening. On phones the sidebar becomes a top bar with a horizontal menu.
 
+- Teachers also get Calendar (month view), Students (own students only, with attendance, progress and requests), Requests (leave and different-time requests with an unread count) and Settings; students get Calendar and Settings.
 - `/` shows a landing page to signed-out visitors and redirects signed-in users to their workspace.
 - `/login` is a split layout with a product preview. Teacher pages show weekly stats; student pages show courses, upcoming sessions and attendance at a glance.
 - Shared building blocks live in `src/components/page.tsx` (page header, stat card, empty state, error alert), `brand.tsx`, `sidebar-nav.tsx` and `workspace-shell.tsx`. Fonts and colours are unchanged.

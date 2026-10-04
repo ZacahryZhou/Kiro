@@ -23,7 +23,7 @@
 | S8 | `seed-ai.ts` (idempotent, `--reset`), scripted demo model, real-database and browser checks, reply policy | Done; live-model rehearsal needs the local API key |
 | Switch | Real services and database-backed proposals and run log | Done: the app runs on `src/services/**`; offline checks use fakes |
 
-Open items: rehearse the live model path by hand (see the manual list in `docs/AI-REPLY-POLICY.md`), AI tools for rescheduling, progress records and student requests (the services for the last two do not exist), and adding students by name (the contract only allows email).
+Open items: rehearse the live model path by hand (see the manual list in `docs/AI-REPLY-POLICY.md`; it needs the owner's `AI_API_KEY`). Rescheduling, progress records, student requests and adding students by name are now built; see `docs/ROADMAP-next.md`.
 
 ## AI features
 
@@ -41,8 +41,10 @@ Each feature is one sentence from the teacher, then read, preview, confirm, writ
 | 8 | Student memory | "Jordan is unavailable Tuesday afternoons" | `ADD_STUDENT_NOTE`, teacher-only | C | Done |
 | 9 | Memory-aware scheduling | "Schedule next week" | Notes are a reference: a clash is explained and the teacher can say to proceed | C | Done |
 | 10 | Lesson preparation | "Prepare tomorrow's class" | `ADD_CONTENT` with a guide and five exercises | C | Done |
-| 11 | Rescheduling | "Move Oct 10 to Oct 11" | Manual in the teacher UI; no AI tool | C | Not built |
-| 12 | Student leave request | "I need leave next Tuesday" | `STUDENT_REQUEST` | C | Not built |
+| 11 | Rescheduling | "Move Oct 10 to Oct 11" | `RESCHEDULE` preview; a clash blocks the proposal | C | Done |
+| 12 | Student leave request | "I need leave next Tuesday" | `STUDENT_REQUEST`, confirmed by the student; a note to the teacher only | C | Done |
+| 12b | Progress record | "Record progress for Jordan: goal: ...; output: ...; next: practice" | `PROGRESS_RECORD` preview | C | Done |
+| 12c | Add a student to a course | "Add Sam to my Physics course" | `ADD_STUDENT` preview | C | Done |
 | 13 | Tuition adjustment | "Add 3 sessions" | Needs a new table, function and proposal type | C | Out of scope |
 
 Minimum demo line: feature 1, 2, 3, then access isolation.

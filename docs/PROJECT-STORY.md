@@ -1,6 +1,6 @@
 # Kora: Project Story
 
-> Draft for the submission form. Sentences marked **[UPDATE]** describe work that is planned but not finished in the repository yet. Confirm or edit them before submitting so the story only claims what the demo actually shows.
+> Text for the submission form. It describes what the repository does today and what the demo shows; the one thing it cannot show on its own is the live language model, which needs your own `AI_API_KEY` (the scripted demo mode needs none).
 
 ## Inspiration
 
@@ -21,7 +21,15 @@ The rule that defines the product: **the AI never writes business data on its ow
 
 Students get a different, smaller agent. It can only read their own workspace and answer questions from their course materials, and every answer carries citations that code has verified against the source text. If the materials do not contain the answer, it says so instead of guessing.
 
-Planned AI features, in priority order: attendance by sentence, student materials Q&A with verified citations, course creation, scheduling with conflict detection, material entry, attendance trends, and teacher-only student notes that help with scheduling. **[UPDATE: list only what is working in the demo.]**
+What the assistant can do today, all with the same preview-then-confirm rule:
+
+- **Attendance by sentence**, with lesson deductions calculated by code.
+- **Verified answers from course materials** for students: every citation is checked against the source text, or the assistant says it could not find the answer.
+- **Course creation, scheduling and rescheduling**, with conflict checks before a proposal exists and again at confirmation. A clash writes nothing and is explained.
+- **Adding students to a course**, **course content entry**, **progress records** drafted from the teacher's own words, **attendance trends** that refuse to guess with fewer than three records, and **teacher-only student notes** that help with scheduling.
+- **Student leave requests**: a student asks in plain language, confirms the preview, and the teacher sees a pending request. It never edits the schedule or attendance by itself.
+
+Around the assistant is a normal product: sign-in, weekly schedule and month calendar, courses, materials, attendance, a Requests inbox, a Students page, account settings, and a live Agent Console that shows each step of the agent and the files it uses.
 
 ## How we built it
 
@@ -29,7 +37,7 @@ Planned AI features, in priority order: attendance by sentence, student material
 
 **Two tracks, one contract.** The work is split between two people. One owns the core product (database, sign-in, services, pages); the other owns the AI agent. We agreed on a written API contract first: every service function, input type, return type, error code and permission rule. Each side builds against the contract and neither edits the other's directories.
 
-**Fake services first.** The AI track did not wait for the real services. We wrote in-memory services that follow the contract exactly, including permission checks, time-overlap conflict detection and the attendance and deduction rules, and ran the whole agent flow in a terminal against them. A single file decides whether the agent talks to the fake or the real services, so switching is one import change. A 38-assertion script checks that the fakes behave the way the contract says.
+**Fake services first.** The AI track did not wait for the real services. We wrote in-memory services that follow the contract exactly, including permission checks, time-overlap conflict detection and the attendance and deduction rules, and ran the whole agent flow in a terminal against them. A single file decides whether the agent talks to the fake or the real services, so switching is one import change. Scripts check that the fakes behave the way the contract says, and a second set runs the same flows against the real database.
 
 **Trust is enforced by design, not by prompts:**
 - Identity comes only from the signed-in session. No function accepts a user ID or role from the browser or from the model.
@@ -48,10 +56,11 @@ Planned AI features, in priority order: attendance by sentence, student material
 
 ## Accomplishments that we're proud of
 
-- A complete foundation: containerised app and database, a 12-table schema, idempotent demo seeding that refuses to run in production, role-based sign-in, read services with per-user isolation, and teacher and student schedule and course pages.
+- A complete product around the AI: containerised app and database, a 14-table schema with migrations, idempotent demo seeding that refuses to run in production, role-based sign-in, per-user isolation on every read and write, and teacher and student workspaces.
 - A written contract that two people (and their coding assistants) could build against without stepping on each other.
 - Fake services that behave like the real ones, with a repeatable check script covering access isolation, conflicts, attendance and rescheduling rules.
-- **[UPDATE: add the headline demo result here, for example "an attendance proposal that previews, confirms once, and cannot be applied twice," once it works end to end.]**
+- The headline result: a teacher says one sentence, sees a preview, and confirms once. Confirming twice or in parallel writes once, and the real-database checks (54 of them, plus 400 offline checks) prove it, along with cross-account denial for every new feature.
+- A live Agent Console that makes the agent legible: each step lights up, and so does every file it touches.
 
 ## What we learned
 
@@ -61,10 +70,10 @@ Planned AI features, in priority order: attendance by sentence, student material
 
 ## What's next for Kora
 
-- Finish the agent loop, proposals and the in-page assistant panel, then connect them to the real services.
-- Student notes that stay teacher-only, lesson preparation, and attendance trends that refuse to guess when there is too little data.
-- Manual forms for everything the AI can do, so the product works without it.
-- Safe corrections to attendance after submission, and tuition adjustments.
+- Self-service registration, password reset by email, and notifications.
+- Assignments and lesson-pack balances (tuition changes were left out on purpose until they can follow the same confirm-first rule).
+- Safe corrections to attendance after submission.
+- A broader trial with real tutors and a live-model evaluation of the assistant's wording.
 
 ## Built with
 

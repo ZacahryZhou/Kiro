@@ -4,7 +4,23 @@
 > **Ownership:** the project owner now develops the core-product track (formerly Nick's) and the front end. The AI track stays in `src/features/ai-agent/**`, `src/lib/ai/**`, `src/app/api/ai/**` and `src/contracts/**`. Core steps are marked **[Core]**, AI steps **[AI]**. If one person does both, still keep them as separate commits so a core change never hides inside an AI change.
 > Record the ownership change once in `docs/HANDOFF.md` and in the §2 table of `CLAUDE.md` (append-only note) so later sessions do not revert work.
 
-## Current state (2026-10-04)
+## Status (updated 2026-10-04)
+
+| Phase | Result |
+|---|---|
+| A1 restore pending proposals after reload | Done |
+| A2 add students by name | Done (new `ADD_STUDENT` proposal type) |
+| A3 run the 16 manual tests with the real model | **Open: needs the owner's `AI_API_KEY`; the list now has 20 items** |
+| A4 demo model covers content entry, notes, trends | Done (lesson preparation needs a real model) |
+| A5 story and demo script | Done (`docs/PROJECT-STORY.md`, `docs/DEMO-SCRIPT.md`) |
+| B AI rescheduling | Done |
+| C student leave requests | Done |
+| D progress records | Done |
+| E1 calendar, E2 students pages, E3 settings | Done |
+| E4 registration and forgot password, E5 notifications, assignments, tuition | **Not started: need the owner's decision** |
+| F hardening | Done except the real-model rehearsal and a Docker rebuild on the owner's machine |
+
+## Current state (2026-10-04, before this round)
 
 Done: sign-in, schedules, courses, materials, attendance and deductions, AI attendance, student materials Q&A with verified citations, AI course creation, AI scheduling with conflict checks, AI content entry, attendance trends, teacher-only student notes, lesson preparation, "who am I" and student lookup, live Agent Console, redesigned front end.
 

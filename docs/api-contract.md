@@ -210,6 +210,7 @@ Rule: unauthorized access **always returns `FORBIDDEN`** (a nonexistent course r
 | PROGRESS_RECORD (Tier B) |
 | STUDENT_REQUEST (Tier B) |
 | ADD_STUDENT_NOTE (optional) |
+| ADD_STUDENT (added in v0.6) |
 
 When **creating a proposal**, validate it with the matching Zod schema and preflight with read-only functions such as `checkConflicts` / `listMyStudents` (for example, verify that a student is enrolled in the course). If validation fails, do not create the proposal; have the AI ask the teacher for clarification.
 
@@ -308,6 +309,10 @@ AI_MOCK=0
 | H0 | Zachary | v0.2: add return types, all input types, access-control matrix, confirmation rules, API endpoints, panel integration, detailed seed data, acceptance scenarios, and new `listMyCourses` function | Pending |
 | 2026-10-03 | Project owner | Update baseline local demo logins to one teacher (`t@example.test`) and one student (`s@example.test`); keep the shared password in `prisma/seed.ts` only | Confirmed |
 | 2026-10-03 | Zachary | v0.5 (additive): `ProposalView` gains optional `preview?: string[]` (readable preview lines computed by code) so the AI panel can show per-student and per-session details. No existing field changed. | Pending |
+| 2026-10-04 | Project owner (front end and core) | v0.6 (additive): new proposal type `ADD_STUDENT` (payload `AddStudentInput`, runs `addExistingStudentToCourse`); `ProposalType` DB enum gains `ADD_STUDENT`. | Confirmed |
+| 2026-10-04 | Project owner | v0.6 (additive): table `StudentRequest`; view `StudentRequestView`; input `ResolveStudentRequestInput`; functions `submitStudentRequest(actor, StudentRequestInput)` (STUDENT; creates a PENDING record only), `listStudentRequests(actor, { status? })` (student: own; teacher: own courses) and `resolveStudentRequest(actor, ResolveStudentRequestInput)` (TEACHER of the course; never edits schedule or attendance). `STUDENT_REQUEST` proposals now run `submitStudentRequest`. | Confirmed |
+| 2026-10-04 | Project owner | v0.6 (additive): table `ProgressRecord` (one per session and student); view `ProgressRecordView` (`note` is never returned to students); functions `saveProgressRecord(actor, SaveProgressInput)` (TEACHER; session must have started) and `listProgressRecords(actor, { courseId?, studentId?, sessionId? })`. `PROGRESS_RECORD` proposals now run `saveProgressRecord`. | Confirmed |
+| 2026-10-04 | Project owner | v0.6 (additive): `RESCHEDULE` proposals now run `rescheduleSession`; account functions `getMyAccount(actor)`, `updateMyProfile(actor, UpdateProfileInput)` and `changeMyPassword(actor, ChangePasswordInput)` (identity from the session only). | Confirmed |
 
 ## 15. Decision log
 **Confirmed by Zachary**

@@ -70,7 +70,7 @@
 | 模块 | 状态 |
 |---|---|
 | Next.js 骨架、Docker Compose、PostgreSQL | 已完成 |
-| Prisma schema(12 张表)和初始迁移 | 已完成 |
+| Prisma schema(14 张表)和迁移 | 已完成 |
 | 演示账号种子(幂等,生产环境拒绝运行) | 已完成 |
 | 邮箱密码登录、按角色保护路由、`requireActor()` | 已完成 |
 | 只读服务(`src/services/read.ts`):课程、课表、学生、资料、学生工作区 | 已完成 |
@@ -79,6 +79,9 @@
 | 老师课程管理、学生加入、排课、点名和扣课 | 已完成 |
 | 课程单元和资料(老师编辑,学生阅读) | 已完成 |
 | 场次改期(老师界面、冲突检查、变更记录) | 已完成 |
+| 学生请假和换时间请求(学生表单、老师的请求收件箱、AI) | 已完成 |
+| 学习进度记录(老师的进度标签页、学生的进度笔记、AI 起草) | 已完成 |
+| 月历、老师的学生页和账号设置 | 已完成 |
 | 按角色区分的 AI 面板、聊天接口、只读问答、带验证引用的资料问答、提案流程 | 已接入;要得到真实模型的回复,需要配置 AI 接口 |
 | 完整的多人 AI 演示数据(`prisma/seed-ai.ts`) | 已完成;`npm run db:seed:demo`,或用 `npx tsx prisma/seed-ai.ts --reset` 从干净状态重来 |
 | AI 提案和运行记录存进数据库(`AgentProposal`、`AgentRun`) | 已完成;只写 AI 自己的表 |
@@ -101,11 +104,14 @@
 | 6 | AI 录入课程内容 | 粘贴一段文字:"建第一单元并加入" | `ADD_CONTENT` 预览,确认后建单元和资料 | B · 已接入;真实数据库和确认流程已验证 |
 | 7 | 出勤趋势 | "Jordan 最近出勤怎么样?" | 数字由代码计算;少于 3 节课时回答 "Insufficient data to identify a trend." | B · 已接入;阈值和出勤率已验证 |
 | 8 | 学生 memory | "记一下 Jordan 周二周四下午不方便" | `ADD_STUDENT_NOTE` 预览,确认后写入 `AgentMemory`(仅老师可见) | C · 已接入;角色和课程隔离已验证 |
+| `ADD_STUDENT`(v0.6) | `AddStudentInput` | `addExistingStudentToCourse` |
 | 9 | 基于 memory 排课 | "给数学班排下周的课" | 同 #5,候选时间避开已记录的不方便时段 | C · 已接入;有冲突的偏好会阻止创建提案 |
 | 10 | 备课 | "帮我备明天数学班的课" | `ADD_CONTENT` 预览,含讲义草稿和 5 道练习 | C · 已接入;5 道题的输出经过校验,需要确认 |
-| 11 | 改期 | "把 10/10 的课改到 10/11 下午 4 点" | 老师可以手动改期;AI 的 `RESCHEDULE` 提案未实现 | C · 手动流程已完成;AI 暂不可用 |
-| 12 | 学生请假请求 | (学生)"下周二我想请假" | `STUDENT_REQUEST` 交给老师处理,课表不变 | C · 未实现 |
-| 13 | 学费增减 | "给 Jordan 加 3 次课" | 不在当前 MVP 内;需要先在契约里约定新表、新函数和新提案类型 | C · 不在范围内 |
+| 11 | 改期 | "把 10/10 的课改到 10/11 下午 4 点" | `RESCHEDULE` 预览,显示原时间和新时间;冲突会拦下提案;不改变扣课 | C · 已接入(手动也可以) |
+| 12 | 学生请假请求 | (学生)"下周二我想请假" | `STUDENT_REQUEST` 预览;学生确认后变成给老师的待处理请求,课表和出勤不变 | C · 已接入 |
+| 13 | 学习进度记录 | "记录 Jordan 的进度:目标:分数;成果:10 题对 8 题;下一步:练习" | 按老师自己的话生成 `PROGRESS_RECORD` 预览;学生之后能看到(看不到老师私人备注) | C · 已接入 |
+| 14 | 把学生加进课程 | "把 Sam 加进我的物理课" | `ADD_STUDENT` 预览;姓名只在老师自己的学生里匹配 | C · 已接入 |
+| 15 | 学费增减 | "给 Jordan 加 3 次课" | 不在当前 MVP 内;需要先在契约里约定新表、新函数和新提案类型 | C · 不在范围内 |
 
 **最少要演示的一条线:** 功能 1 → 2 → 3 → 权限隔离,在演示数据上进行。可以用真实模型(`AI_API_KEY`、`AI_MODEL`)运行;没有网络和 key 时,用带剧本的演示模式(`AI_MOCK=1`),它能理解几类简单的话,并驱动同样的真实工具、提案、确认和数据库(它不是语言模型,所以展示不了真实模型是怎么选工具的)。
 
@@ -232,9 +238,9 @@ type ErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION" | 
 
 ### 一个循环,两套配置
 
-老师 Agent 和学生 Agent 是同一个循环,只是系统提示和工具集不同。学生没有任何提案或写入工具(B 档的请假请求是唯一例外)。
+老师 Agent 和学生 Agent 是同一个循环,只是系统提示和工具集不同。学生没有写入工具;他们唯一能准备的提案是给自己老师的请假或换时间请求,而且仍然需要学生自己确认。
 
-老师的只读工具:`getTeacherSchedule`、`listMyCourses`、`listMyStudents`、`listAttendance`、`listDeductions`、`checkConflicts`、`getCourseMaterials`、`getAttendanceTrends`、`getStudentMemory`。老师只准备待确认提案的工具:`proposeMarkAttendance`、`proposeCreateCourse`、`proposeCreateSessions`、`proposeAddContent`、`proposeAddStudentNote`、`proposeLessonPrep`。学生的只读工具:`getStudentWorkspace`、`answerFromCourseMaterials`。
+老师的只读工具:`getTeacherSchedule`、`listMyCourses`、`listMyStudents`、`listAttendance`、`listDeductions`、`checkConflicts`、`getCourseMaterials`、`getAttendanceTrends`、`getStudentMemory`、`getMyProfile`、`findMyStudent`、`listStudentRequests`、`listProgressRecords`。老师只准备待确认提案的工具:`proposeMarkAttendance`、`proposeCreateCourse`、`proposeCreateSessions`、`proposeAddContent`、`proposeAddStudent`、`proposeReschedule`、`proposeProgressRecord`、`proposeAddStudentNote`、`proposeLessonPrep`。学生的工具:`getStudentWorkspace`、`answerFromCourseMaterials`、`getMyProfile`、`listStudentRequests`、`listProgressRecords`(只读)和 `proposeStudentRequest`。
 
 两个 Agent 都遵守的行为规则写在 `docs/AI-REPLY-POLICY.md` 里(第 0 节会在运行时被加载进它们的指令)。
 
@@ -251,7 +257,7 @@ type ErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION" | 
 | `STUDENT_REQUEST`(B 档) | `StudentRequestInput` | `submitStudentRequest` |
 | `ADD_STUDENT_NOTE`(加分) | `AddStudentNoteInput` | AI 侧直接写 `AgentMemory`(不调用服务函数) |
 
-其中 `CREATE_COURSE`、`CREATE_SESSIONS`、`ADD_CONTENT`、`MARK_ATTENDANCE` 和 `ADD_STUDENT_NOTE` 已经做出来;`RESCHEDULE`、`PROGRESS_RECORD` 和 `STUDENT_REQUEST` 在契约里有定义,但还没有 AI 工具(改期在老师界面里可以用)。
+以上每种类型都已做出来,并有对应的 AI 工具。`STUDENT_REQUEST` 由学生自己的助手准备、学生自己确认;请求只是给老师的一条说明,不会改变课表和出勤。
 
 提案在创建前要先用 Zod 校验,并用只读函数预先核对(例如学生确实已加入该课程)。确认之前,业务数据**必须保持不变**。`CREATE_COURSE` 不整体回滚:某个邮箱未注册时,课程仍然保留,提案状态记为 `executed`,`result` 里逐项列出结果。
 
@@ -305,6 +311,7 @@ type ErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION" | 
 
 所有登录后的页面共用一个布局:左侧边栏(老师是课表和课程,学生是"我的学习",允许的管理员还有 Agent 控制台)、显示当前登录姓名和身份的顶栏,以及右下角悬浮的 **Ask Kora AI** 按钮,点开即是 AI 助手。面板关闭时仍保持挂载,所以对话和待确认的提案卡片在关闭再打开后不会丢失。手机上侧边栏变成顶部的横向菜单。
 
+- 老师还有日历(月视图)、学生(只含自己的学生,带出勤、进度和请求)、请求(请假和换时间请求,带未处理数量)和设置;学生有日历和设置。
 - `/` 对未登录访客显示落地页,已登录用户会跳转到自己的工作区。
 - `/login` 是带产品预览的分栏布局。老师页面有本周统计,学生页面一眼可见课程、即将开始的课和出勤。
 - 共用组件在 `src/components/page.tsx`(页头、统计卡、空状态、错误提示)、`brand.tsx`、`sidebar-nav.tsx` 和 `workspace-shell.tsx`。字体和配色不变。
