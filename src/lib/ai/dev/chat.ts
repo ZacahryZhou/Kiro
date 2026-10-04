@@ -8,6 +8,7 @@ import { stdin, stdout, stderr } from "node:process";
 import type { Role } from "@/contracts";
 import { runAgent, type ChatTurn } from "../core/agent-loop";
 import { chatCompletion } from "../core/provider";
+import { loadPolicy } from "../domain/edu/policy";
 import { eduProposals } from "../domain/edu/proposal-types";
 import { actorFor, findUserByEmail } from "./fake-store";
 
@@ -32,6 +33,9 @@ async function main() {
 
   const name = findUserByEmail(email)!.name;
   stdout.write(`Signed in as ${name} (${role}). Type a message, or "exit" to quit.\n`);
+  if (loadPolicy().source === "fallback") {
+    stdout.write("Warning: docs/AI-REPLY-POLICY.md could not be loaded; using the short built-in rules.\n");
+  }
 
   const history: ChatTurn[] = [];
   const respond = async (line: string): Promise<string> => {

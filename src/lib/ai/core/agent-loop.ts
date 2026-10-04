@@ -1,4 +1,5 @@
 import type { Actor, Citation, ProposalView, Role } from "@/contracts";
+import type { Policy } from "../domain/edu/policy";
 import { getSystemPrompt } from "../domain/edu/prompts";
 import { findTool, getToolsForRole } from "../domain/edu/tools";
 import { chatCompletion } from "./provider";
@@ -30,6 +31,8 @@ export type AgentDeps = {
   record?: RunRecorder;
   maxRounds?: number;
   timeoutMs?: number;
+  /** Behaviour rules; defaults to the ones loaded from docs/AI-REPLY-POLICY.md. */
+  policy?: Policy;
 };
 
 const MAX_ROUNDS = 6;
@@ -71,7 +74,7 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
   const tools = getToolsForRole(input.role);
   const specs = tools.map(({ name, description, parameters }) => ({ name, description, parameters }));
   const messages: ChatMessage[] = [
-    { role: "system", content: getSystemPrompt(input.role, new Date(startedAt)) },
+    { role: "system", content: getSystemPrompt(input.role, new Date(startedAt), deps.policy) },
     ...input.history.slice(-MAX_HISTORY).map((turn): ChatMessage => ({ role: turn.role, content: turn.content })),
     { role: "user", content: input.userMessage },
   ];
