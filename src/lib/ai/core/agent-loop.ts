@@ -3,6 +3,7 @@ import type { Policy } from "../domain/edu/policy";
 import { getSystemPrompt } from "../domain/edu/prompts";
 import { findTool, getToolsForRole } from "../domain/edu/tools";
 import { eduMockModel } from "../domain/edu/mock-model";
+import { NOTHING_PREPARED_REPLY, PHANTOM_PROPOSAL_NOTE, claimsPendingProposal } from "../domain/edu/guards";
 import { chatCompletion } from "./provider";
 import { defaultRunRecorder, type RunRecorder, type ToolCallLog } from "./runs";
 import { createTracer, filesForTool, type Tracer } from "../trace";
@@ -62,6 +63,7 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
   const proposals: ProposalView[] = [];
   const citations: Citation[] = [];
   let finalReply: string | undefined;
+  let corrected = false;
 
   const finish = async (reply: string, status: "OK" | "ERROR", error?: string): Promise<AgentOutput> => {
     tracer.emit("runlog", "start");
@@ -105,7 +107,15 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
     const { content, toolCalls, message } = completion.data;
     messages.push(message);
     if (toolCalls.length === 0) {
-      return finish(content?.trim() || "I don't have an answer for that.", "OK");
+      const reply = content?.trim() || "I don't have an answer for that.";
+      // A reply must never say a change is waiting when no proposal exists: ask once, then replace it.
+      if (claimsPendingProposal(reply, proposals.length)) {
+        if (corrected) return finish(NOTHING_PREPARED_REPLY, "OK");
+        corrected = true;
+        messages.push({ role: "system", content: PHANTOM_PROPOSAL_NOTE });
+        continue;
+      }
+      return finish(reply, "OK");
     }
 
     for (const call of toolCalls) {

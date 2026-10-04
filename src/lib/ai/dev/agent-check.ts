@@ -54,6 +54,25 @@ const ask = (actor: typeof alex, userMessage: string, deps: AgentDeps, history: 
   runAgent({ actor, role: actor.role, userMessage, history }, { now: () => NOW, ...deps });
 
 async function main() {
+  // 0. A reply may never promise a pending change that was not created (found with a real model).
+  {
+    const { record } = setup();
+    const model = scripted([text("No conflict. The proposal is ready and waiting for your confirmation in the panel."), text("Sorry, nothing was prepared yet. Which session do you mean?")]);
+    const out = await ask(alex, "Move Tuesday's math class to Friday", { chatCompletion: model.fn, record });
+    check("A false 'waiting for your confirmation' is corrected once, and the corrected reply is used", out.reply === "Sorry, nothing was prepared yet. Which session do you mean?" && out.proposals.length === 0 && model.requests.length === 2 && model.requests[1].messages.some((m) => m.role === "system" && /no proposal tool succeeded/.test(m.content ?? "")), out.reply);
+  }
+  {
+    const { record } = setup();
+    const model = scripted([text("I prepared the proposal. Please confirm it in the panel."), text("The proposal is ready and waiting for your confirmation.")]);
+    const out = await ask(alex, "Move Tuesday's math class to Friday", { chatCompletion: model.fn, record });
+    check("A claim that survives the correction is replaced with an honest message", /nothing is waiting for your confirmation/.test(out.reply) && out.proposals.length === 0 && out.status === "OK", out.reply);
+  }
+  {
+    const { record } = setup();
+    const model = scripted([text("Nothing has been recorded yet. Which session do you mean, and do you want me to prepare it for your confirmation?")]);
+    const out = await ask(alex, "Jordan came", { chatCompletion: model.fn, record });
+    check("Negated or conditional wording is left alone", model.requests.length === 1 && /Which session/.test(out.reply), out.reply);
+  }
   // 1. Direct answer, no tools.
   {
     const { runs, record } = setup();

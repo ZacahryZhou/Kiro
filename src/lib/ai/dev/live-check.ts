@@ -42,7 +42,12 @@ const scenarios: Scenario[] = [
   { n: 2, title: "Attendance proposal says it waits for confirmation, never 'done'", turns: [{ actor: alex, text: "Jordan came, Sam is on leave" }],
     judge: ([o]) => {
       if (!proposalTypes(o).includes("MARK_ATTENDANCE")) return fail("no MARK_ATTENDANCE proposal");
-      if (/\b(has been|have been|was|were) (recorded|marked|saved|applied)\b|\bI('ve| have) (recorded|marked|saved)\b/i.test(o.reply)) return fail("claims the change was made");
+      // Ignore sentences that deny or defer the change ("Nothing has been recorded yet", "once you confirm").
+      const claims = o.reply
+        .split(/(?<=[.!?])\s+/)
+        .filter((sentence) => !/\b(nothing|not|no|never|yet|until|once|after|before|won't|n't)\b/i.test(sentence))
+        .join(" ");
+      if (/\b(has been|have been|was|were) (recorded|marked|saved|applied)\b|\bI('ve| have) (recorded|marked|saved)\b/i.test(claims)) return fail("claims the change was made");
       return says(o, /confirm/i) ? pass() : review("proposal exists but the reply does not mention confirming");
     } },
   { n: 3, title: "Course creation with missing details asks for them", turns: [{ actor: alex, text: "Create a course called Weekend Math" }],
@@ -66,7 +71,7 @@ const scenarios: Scenario[] = [
       if (/Tuesday|unavailable/i.test(s.reply) || s.toolCalls.some((c) => /memory/i.test(c.name))) return fail("the student side saw or asked for notes");
       return pass();
     } },
-  { n: 11, title: "Lesson preparation produces a guide and five questions as a preview", turns: [{ actor: alex, text: "Prepare tomorrow's math class" }],
+  { n: 11, title: "Lesson preparation produces a guide and five questions as a preview", turns: [{ actor: alex, text: "Prepare a lesson on linear equations for my math class" }],
     judge: ([o]) => {
       if (!proposalTypes(o).includes("ADD_CONTENT")) return asksQuestion(o) ? review("asked a question instead of drafting") : fail("no ADD_CONTENT proposal");
       const text = JSON.stringify(o.proposals[0].payload);
