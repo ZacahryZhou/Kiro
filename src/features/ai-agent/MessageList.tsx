@@ -28,7 +28,7 @@ export function MessageList({ messages, busy }: { messages: PanelMessage[]; busy
             {message.role === "user" ? labels.you : labels.assistant}
           </p>
           <p
-            className={`inline-block max-w-full whitespace-pre-wrap rounded-lg px-3 py-2 text-sm ${
+            className={`inline-block max-w-full whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm ${
               message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
             }`}
           >

@@ -114,7 +114,7 @@ export function CreateCourseDialog() {
 export function AddStudentForm({ courseId }: { courseId: string }) {
   const [state, formAction, pending] = useActionState(addStudentAction, initialState);
   return (
-    <form action={formAction} className="rounded-xl border bg-white p-4 sm:flex sm:items-end sm:gap-3">
+    <form action={formAction} className="rounded-2xl border bg-card shadow-sm p-4 sm:flex sm:items-end sm:gap-3">
       <input type="hidden" name="courseId" value={courseId} />
       <div className="flex-1 space-y-2">
         <Label htmlFor="student-email">Add an existing student</Label>
@@ -129,7 +129,7 @@ export function AddStudentForm({ courseId }: { courseId: string }) {
 export function CreateSessionsForm({ courseId, timeZone }: { courseId: string; timeZone: string }) {
   const [state, formAction, pending] = useActionState(createSessionsAction, initialState);
   return (
-    <form action={formAction} className="space-y-4 rounded-xl border bg-white p-4">
+    <form action={formAction} className="space-y-4 rounded-2xl border bg-card shadow-sm p-4">
       <input type="hidden" name="courseId" value={courseId} />
       <div>
         <h3 className="font-medium">Schedule weekly sessions</h3>
@@ -170,7 +170,7 @@ export function MarkAttendanceForm({ sessionId, students }: { sessionId: string;
   }
 
   return (
-    <details className="basis-full rounded-lg border bg-slate-50 p-4">
+    <details className="basis-full rounded-xl border bg-muted/40 p-4">
       <summary className="cursor-pointer font-medium">Mark attendance</summary>
       <form action={formAction} className="mt-4 space-y-4">
         <input type="hidden" name="sessionId" value={sessionId} />
@@ -231,7 +231,7 @@ export function RescheduleSessionForm({
   const [state, formAction, pending] = useActionState(rescheduleSessionAction, initialState);
   const local = getLocalDateTimeValues(startAt, timeZone);
   return (
-    <details className="basis-full rounded-lg border bg-slate-50 p-4">
+    <details className="basis-full rounded-xl border bg-muted/40 p-4">
       <summary className="cursor-pointer font-medium">Reschedule session</summary>
       <form action={formAction} className="mt-4 space-y-4">
         <input type="hidden" name="courseId" value={courseId} />
@@ -257,7 +257,7 @@ export function RescheduleSessionForm({
 export function CreateCourseUnitForm({ courseId }: { courseId: string }) {
   const [state, formAction, pending] = useActionState(createCourseUnitAction, initialState);
   return (
-    <form action={formAction} className="space-y-3 rounded-xl border bg-white p-4 sm:flex sm:items-end sm:gap-3 sm:space-y-0">
+    <form action={formAction} className="space-y-3 rounded-2xl border bg-card shadow-sm p-4 sm:flex sm:items-end sm:gap-3 sm:space-y-0">
       <input type="hidden" name="courseId" value={courseId} />
       <div className="flex-1 space-y-2">
         <Label htmlFor="unit-title">New unit</Label>
@@ -272,7 +272,7 @@ export function CreateCourseUnitForm({ courseId }: { courseId: string }) {
 export function AddMaterialForm({ courseId, unitId }: { courseId: string; unitId: string }) {
   const [state, formAction, pending] = useActionState(addMaterialAction, initialState);
   return (
-    <form action={formAction} className="space-y-3 rounded-lg border bg-slate-50 p-4">
+    <form action={formAction} className="space-y-3 rounded-xl border bg-muted/40 p-4">
       <input type="hidden" name="courseId" value={courseId} />
       <input type="hidden" name="unitId" value={unitId} />
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
@@ -314,14 +314,14 @@ export function TeacherCourseMaterials({ courseId, units }: { courseId: string; 
     <div className="space-y-5">
       <CreateCourseUnitForm courseId={courseId} />
       {units.length === 0 ? (
-        <div className="rounded-2xl border bg-white px-6 py-10 text-center">
+        <div className="rounded-2xl border border-dashed bg-card/60 px-6 py-10 text-center">
           <h3 className="font-medium">No units yet</h3>
           <p className="mt-2 text-sm text-muted-foreground">Create a unit to organize text materials and links.</p>
         </div>
       ) : (
         <ol className="space-y-4">
           {units.map((unit) => (
-            <li key={unit.id} className="space-y-4 rounded-xl border bg-white p-5">
+            <li key={unit.id} className="space-y-4 rounded-2xl border bg-card shadow-sm p-5">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Unit {unit.order}</p>
                 <h3 className="mt-1 text-lg font-semibold">{unit.title}</h3>
@@ -331,7 +331,7 @@ export function TeacherCourseMaterials({ courseId, units }: { courseId: string; 
               ) : (
                 <ul className="space-y-2">
                   {unit.materials.map((material) => (
-                    <li key={material.id} className="rounded-lg bg-slate-50 p-3">
+                    <li key={material.id} className="rounded-xl bg-muted/50 p-3">
                       <p className="font-medium">{material.title}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{material.kind === "TEXT" ? "Text" : "Link"}</p>
                     </li>

@@ -45,8 +45,8 @@ export function AiPanel({ role }: { role: Role }) {
   }
 
   return (
-    <section aria-label={labels.title} className="flex h-[32rem] w-full max-w-md flex-col rounded-xl border bg-background">
-      <header className="border-b px-3 py-2">
+    <section aria-label={labels.title} className="flex h-[min(32rem,calc(100vh-7rem))] w-full max-w-md flex-col rounded-2xl border bg-card">
+      <header className="border-b bg-muted/40 px-4 py-3">
         <h2 className="text-sm font-semibold">{labels.title}</h2>
         {messages.length === 0 ? (
           <p className="text-xs text-muted-foreground">{role === "TEACHER" ? labels.teacherHint : labels.studentHint}</p>

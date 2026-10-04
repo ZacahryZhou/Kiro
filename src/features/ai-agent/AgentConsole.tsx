@@ -139,7 +139,7 @@ export function AgentConsole({ role }: { role: Role }) {
                   key={step.id}
                   data-testid={`step-${step.id}`}
                   data-state={state}
-                  className={`rounded-lg border-2 p-3 transition-colors ${STATE_STYLE[state]} ${activeStep === step.id ? "ring-2 ring-amber-500" : ""}`}
+                  className={`rounded-xl border-2 p-3 transition-colors ${STATE_STYLE[state]} ${activeStep === step.id ? "ring-2 ring-amber-500" : ""}`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium">{step.title}</span>
@@ -156,7 +156,7 @@ export function AgentConsole({ role }: { role: Role }) {
         </section>
 
         <div className="flex flex-col gap-4">
-          <section aria-label="Files" className="rounded-lg border p-3">
+          <section aria-label="Files" className="kora-card p-4">
             <h2 className="mb-2 text-sm font-semibold">Files used</h2>
             <ul className="flex flex-col gap-1 font-mono text-xs">
               {allFiles.map((file) => {
@@ -179,12 +179,12 @@ export function AgentConsole({ role }: { role: Role }) {
             <p className="mt-2 text-xs text-muted-foreground">Amber: the running step. Green: touched earlier in this run.</p>
           </section>
 
-          <section aria-label="Chat" className="rounded-lg border p-3">
+          <section aria-label="Chat" className="kora-card p-4">
             <h2 className="mb-2 text-sm font-semibold">Try it</h2>
             <AiPanel role={role} />
           </section>
 
-          <section aria-label="Event log" className="rounded-lg border p-3">
+          <section aria-label="Event log" className="kora-card p-4">
             <h2 className="mb-2 text-sm font-semibold">Event log</h2>
             <ul className="max-h-48 overflow-auto font-mono text-xs" data-testid="event-log">
               {runEvents.slice(0, upTo).map((event) => (

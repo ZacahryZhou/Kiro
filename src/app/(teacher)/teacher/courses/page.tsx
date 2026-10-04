@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { BookOpen, MapPin, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState, ErrorAlert, PageHeader } from "@/components/page";
 import { CreateCourseDialog } from "@/components/teacher-course-forms";
 import { requireRole } from "@/lib/auth/actor";
 import { listMyCourses } from "@/services/read";
@@ -14,49 +16,48 @@ export default async function Page() {
   const result = await listMyCourses(actor);
 
   return (
-    <section className="space-y-6">
-      <Link href="/teacher" className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
-        ← Back to schedule
-      </Link>
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="mb-2 text-sm font-medium text-muted-foreground">Teacher Workspace</p>
-          <h1 className="text-3xl font-semibold tracking-tight">Your courses</h1>
-          <p className="mt-2 text-muted-foreground">Create a course, enroll existing students, and set up a schedule.</p>
-        </div>
-        <CreateCourseDialog />
-      </header>
+    <section className="space-y-8">
+      <PageHeader
+        back={{ href: "/teacher", label: "Back to schedule" }}
+        eyebrow="Teacher Workspace"
+        title="Your courses"
+        description="Create a course, enroll existing students, and set up a schedule."
+        actions={<CreateCourseDialog />}
+      />
 
       {!result.ok ? (
-        <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
-          {result.error.message}
-        </div>
+        <ErrorAlert message={result.error.message} />
       ) : result.data.courses.length === 0 ? (
-        <div className="rounded-2xl border bg-white px-6 py-12 text-center">
-          <h2 className="text-lg font-medium">No courses yet</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Create your first course to enroll students and schedule sessions.</p>
-        </div>
+        <EmptyState icon={BookOpen} title="No courses yet" description="Create your first course to enroll students and schedule sessions." />
       ) : (
         <>
           <p className="text-sm text-muted-foreground">
             {result.data.courses.length} {result.data.courses.length === 1 ? "course" : "courses"}
           </p>
-          <ul className="grid gap-4 sm:grid-cols-2">
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {result.data.courses.map((course) => (
               <li key={course.id}>
-                <Link
-                  href={`/teacher/courses/${course.id}`}
-                  className="block h-full rounded-xl border bg-white p-5 transition-colors hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
+                <Link href={`/teacher/courses/${course.id}`} className="kora-card-link block h-full p-5">
                   <div className="flex items-start justify-between gap-3">
-                    <h2 className="font-semibold">{course.name}</h2>
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                      <BookOpen className="size-5" aria-hidden />
+                    </span>
                     <Badge variant="outline">{courseTypeLabels[course.type]}</Badge>
                   </div>
-                  <p className="mt-2 text-sm text-muted-foreground">{course.subject}</p>
-                  <p className="mt-4 text-sm">
-                    {course.studentCount} {course.studentCount === 1 ? "student" : "students"}
-                  </p>
-                  {course.location && <p className="mt-1 text-sm text-muted-foreground">{course.location}</p>}
+                  <h2 className="mt-4 font-semibold">{course.name}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{course.subject}</p>
+                  <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Users className="size-3.5" aria-hidden />
+                      {course.studentCount} {course.studentCount === 1 ? "student" : "students"}
+                    </span>
+                    {course.location && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <MapPin className="size-3.5" aria-hidden />
+                        {course.location}
+                      </span>
+                    )}
+                  </div>
                 </Link>
               </li>
             ))}

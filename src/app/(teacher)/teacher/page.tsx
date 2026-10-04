@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { CalendarDays, CheckCircle2, Clock3, BookOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState, ErrorAlert, PageHeader, StatCard } from "@/components/page";
 import { requireActor } from "@/lib/auth/actor";
 import { formatLocalDate, formatLocalTime, getLocalDateKey, getWeekRange } from "@/lib/time";
 import { getTeacherSchedule, type SessionView } from "@/services/read";
@@ -35,60 +37,65 @@ export default async function Page({
   const lastDay = new Date(to.getTime() - 1);
   const endLabel = new Intl.DateTimeFormat("en-US", { timeZone, month: "long", day: "numeric" }).format(lastDay);
 
+  const todayKey = getLocalDateKey(new Date(), timeZone);
+  const sessions = result.ok ? result.data.sessions : [];
+  const upcoming = sessions.filter((session) => session.status === "SCHEDULED" || session.status === "RESCHEDULED").length;
+  const completed = sessions.filter((session) => session.status === "COMPLETED").length;
+  const courseCount = new Set(sessions.map((session) => session.courseId)).size;
+  const segment = (active: boolean) =>
+    `inline-flex h-9 items-center justify-center rounded-lg px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+      active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+    }`;
+
   return (
-    <section className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="mb-2 text-sm text-muted-foreground">Teacher Workspace</p>
-          <h1 className="text-2xl font-semibold">Schedule</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {weekOffset === 0 ? "This week" : "Next week"} · {startLabel} – {endLabel}
-          </p>
+    <section className="space-y-8">
+      <PageHeader
+        eyebrow="Teacher Workspace"
+        title="Schedule"
+        description={`${weekOffset === 0 ? "This week" : "Next week"} · ${startLabel} – ${endLabel}`}
+        actions={
+          <nav aria-label="Teacher workspace navigation" className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/teacher/courses"
+              className="inline-flex h-9 items-center justify-center rounded-lg border bg-card px-4 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Manage courses
+            </Link>
+            <div className="flex rounded-xl border bg-muted/60 p-1">
+              <Link href="/teacher" className={segment(weekOffset === 0)} aria-current={weekOffset === 0 ? "page" : undefined}>This week</Link>
+              <Link href="/teacher?week=next" className={segment(weekOffset === 1)} aria-current={weekOffset === 1 ? "page" : undefined}>Next week</Link>
+            </div>
+          </nav>
+        }
+      />
+
+      {result.ok && (
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          <StatCard icon={CalendarDays} label="Sessions" value={sessions.length} hint={weekOffset === 0 ? "This week" : "Next week"} />
+          <StatCard icon={Clock3} label="Upcoming" value={upcoming} hint="Scheduled or rescheduled" />
+          <StatCard icon={CheckCircle2} label="Completed" value={completed} />
+          <StatCard icon={BookOpen} label="Courses" value={courseCount} hint="With sessions in view" />
         </div>
-        <nav aria-label="Teacher workspace navigation" className="flex flex-wrap gap-2">
-          <Link
-            href="/teacher/courses"
-            className="inline-flex h-9 items-center justify-center rounded-md border bg-background px-4 text-sm font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Manage courses
-          </Link>
-          <Link
-            href="/teacher"
-            className={`inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${weekOffset === 0 ? "bg-primary text-primary-foreground" : "border bg-background hover:bg-accent"}`}
-          >
-            This week
-          </Link>
-          <Link
-            href="/teacher?week=next"
-            className={`inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${weekOffset === 1 ? "bg-primary text-primary-foreground" : "border bg-background hover:bg-accent"}`}
-          >
-            Next week
-          </Link>
-        </nav>
-      </div>
+      )}
 
       {!result.ok ? (
-        <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
-          {result.error.message}
-        </div>
+        <ErrorAlert message={result.error.message} />
       ) : result.data.sessions.length === 0 ? (
-        <div className="rounded-2xl border bg-white px-6 py-14 text-center">
-          <h2 className="text-lg font-medium">No sessions this week</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Ask the AI assistant to create a course when you are ready.</p>
-        </div>
+        <EmptyState icon={CalendarDays} title="No sessions this week" description="Ask the AI assistant to create a course when you are ready." />
       ) : (
         <div className="space-y-5">
-          {[...groups.entries()].map(([dateKey, sessions]) => (
-            <section key={dateKey} aria-labelledby={`date-${dateKey}`} className="overflow-hidden rounded-2xl border bg-white">
-              <h2 id={`date-${dateKey}`} className="border-b px-5 py-3 text-sm font-semibold">
+          {[...groups.entries()].map(([dateKey, daySessions]) => (
+            <section key={dateKey} aria-labelledby={`date-${dateKey}`} className="kora-card overflow-hidden">
+              <h2 id={`date-${dateKey}`} className="flex items-center justify-between border-b bg-muted/40 px-5 py-3 text-sm font-semibold">
                 {formatLocalDate(new Date(`${dateKey}T12:00:00Z`), "UTC")}
+                {dateKey === todayKey && <Badge>Today</Badge>}
               </h2>
               <ul className="divide-y">
-                {sessions.map((session) => (
+                {daySessions.map((session) => (
                   <li key={session.id}>
                     <Link
                       href={`/teacher/courses/${session.courseId}`}
-                      className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-4 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-4 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                     >
                       <time dateTime={session.startAt} className="w-16 shrink-0 font-medium tabular-nums">
                         {formatLocalTime(new Date(session.startAt), timeZone)}

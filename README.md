@@ -301,6 +301,14 @@ All text materials of the course go into the context. The model must return `{ f
 - **Student memory is for teachers only.** It never enters a student agent's context, and writing it also needs a confirmed proposal. Memory is a hint for scheduling and lesson preparation; only `checkConflicts` decides conflicts.
 - Attendance cannot be edited after submission in the MVP (a different status on a completed session returns `CONFLICT`).
 
+## Interface
+
+The workspace uses one shared layout: a left sidebar (Schedule and Courses for teachers, My learning for students, plus the Agent console for allowed admins), a header with the signed-in name and role, and a floating **Ask Kora AI** button that opens the assistant. The panel stays mounted while closed, so the conversation and any pending proposal cards survive closing and reopening. On phones the sidebar becomes a top bar with a horizontal menu.
+
+- `/` shows a landing page to signed-out visitors and redirects signed-in users to their workspace.
+- `/login` is a split layout with a product preview. Teacher pages show weekly stats; student pages show courses, upcoming sessions and attendance at a glance.
+- Shared building blocks live in `src/components/page.tsx` (page header, stat card, empty state, error alert), `brand.tsx`, `sidebar-nav.tsx` and `workspace-shell.tsx`. Fonts and colours are unchanged.
+
 ## Access control
 
 | Scenario | Expected result |

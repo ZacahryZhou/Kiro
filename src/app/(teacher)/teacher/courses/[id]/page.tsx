@@ -1,6 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { FileText, MapPin, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState, ErrorAlert, Initial, PageHeader, SectionHeading } from "@/components/page";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AddStudentForm, CreateSessionsForm, MarkAttendanceForm, RescheduleSessionForm, TeacherCourseMaterials } from "@/components/teacher-course-forms";
 import { requireRole } from "@/lib/auth/actor";
@@ -26,9 +27,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   if (!coursesResult.ok) {
     return (
-      <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
-        {coursesResult.error.message}
-      </div>
+      <ErrorAlert message={coursesResult.error.message} />
     );
   }
 
@@ -58,31 +57,21 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   return (
     <section className="space-y-6">
-      <div>
-        <Link href="/teacher" className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
-          ← Back to schedule
-        </Link>
+      <PageHeader
+        back={{ href: "/teacher", label: "Back to schedule" }}
+        eyebrow="Course details"
+        title={course.name}
+        description={course.subject}
+        actions={<Badge variant="outline">{courseTypeLabels[course.type]}</Badge>}
+      />
+      <div className="kora-card flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-4 text-sm text-muted-foreground">
+        <span className="inline-flex items-center gap-2"><Users className="size-4" aria-hidden />{course.studentCount} {course.studentCount === 1 ? "student" : "students"} enrolled</span>
+        {course.location && <span className="inline-flex items-center gap-2"><MapPin className="size-4" aria-hidden />{course.location}</span>}
+        {course.description && <span className="inline-flex items-center gap-2"><FileText className="size-4" aria-hidden />{course.description}</span>}
       </div>
 
-      <header className="space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <p className="text-sm font-medium text-muted-foreground">Course details</p>
-          <Badge variant="outline">{courseTypeLabels[course.type]}</Badge>
-        </div>
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">{course.name}</h1>
-          <p className="mt-2 text-muted-foreground">{course.subject}</p>
-        </div>
-        {(course.location || course.description) && (
-          <div className="space-y-1 text-sm text-muted-foreground">
-            {course.location && <p>{course.location}</p>}
-            {course.description && <p>{course.description}</p>}
-          </div>
-        )}
-      </header>
-
       <Tabs defaultValue="students" className="space-y-5">
-        <TabsList className="grid h-auto w-full grid-cols-2 sm:w-[min(100%,34rem)] sm:grid-cols-4">
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:w-[min(100%,36rem)] sm:grid-cols-4">
           <TabsTrigger value="students">Students</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
           <TabsTrigger value="materials">Materials</TabsTrigger>
@@ -90,28 +79,18 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         </TabsList>
 
         <TabsContent value="students" className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold">Students</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {course.studentCount} {course.studentCount === 1 ? "student" : "students"} enrolled
-            </p>
-          </div>
+          <SectionHeading title="Students" description={`${course.studentCount} ${course.studentCount === 1 ? "student" : "students"} enrolled`} />
           {!studentsResult.ok ? (
-            <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
-              {studentsResult.error.message}
-            </div>
+            <ErrorAlert message={studentsResult.error.message} />
           ) : (
             <>
               <AddStudentForm courseId={id} />
               {studentsResult.data.students.length === 0 ? (
-                <div className="rounded-2xl border bg-white px-6 py-10 text-center">
-                  <h3 className="font-medium">No students enrolled yet</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">Add a registered student by email to get started.</p>
-                </div>
+                <EmptyState title="No students enrolled yet" description="Add a registered student by email to get started." />
               ) : (
-                <div role="region" aria-label="Enrolled students" tabIndex={0} className="overflow-x-auto rounded-xl border bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <div role="region" aria-label="Enrolled students" tabIndex={0} className="kora-card overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-muted-foreground">
+                    <thead className="bg-muted/50 text-muted-foreground">
                       <tr>
                         <th scope="col" className="px-5 py-3 font-medium">Name</th>
                         <th scope="col" className="px-5 py-3 font-medium">Email</th>
@@ -120,7 +99,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                     <tbody className="divide-y">
                       {studentsResult.data.students.map((student) => (
                         <tr key={student.id}>
-                          <td className="px-5 py-4 font-medium">{student.name}</td>
+                          <td className="px-5 py-4 font-medium"><span className="flex items-center gap-3"><Initial name={student.name} className="size-8 text-xs" />{student.name}</span></td>
                           <td className="px-5 py-4 text-muted-foreground">{student.email}</td>
                         </tr>
                       ))}
@@ -133,25 +112,17 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         </TabsContent>
 
         <TabsContent value="sessions" className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold">Sessions</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Course sessions, shown in {timeZone}.</p>
-          </div>
+          <SectionHeading title="Sessions" description={`Course sessions, shown in ${timeZone}.`} />
           <CreateSessionsForm courseId={id} timeZone={timeZone} />
           {!scheduleResult.ok ? (
-            <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
-              {scheduleResult.error.message}
-            </div>
+            <ErrorAlert message={scheduleResult.error.message} />
           ) : scheduleResult.data.sessions.length === 0 ? (
-            <div className="rounded-2xl border bg-white px-6 py-10 text-center">
-              <h3 className="font-medium">No sessions scheduled yet</h3>
-              <p className="mt-2 text-sm text-muted-foreground">Sessions for this course will appear here.</p>
-            </div>
+            <EmptyState title="No sessions scheduled yet" description="Sessions for this course will appear here." />
           ) : (
             <div className="space-y-4">
               {[...sessionsByDate.entries()].map(([dateKey, sessions]) => (
-                <section key={dateKey} aria-labelledby={`date-${dateKey}`} className="overflow-hidden rounded-2xl border bg-white">
-                  <h3 id={`date-${dateKey}`} className="border-b px-5 py-3 text-sm font-semibold">
+                <section key={dateKey} aria-labelledby={`date-${dateKey}`} className="kora-card overflow-hidden">
+                  <h3 id={`date-${dateKey}`} className="border-b bg-muted/40 px-5 py-3 text-sm font-semibold">
                     {formatLocalDate(new Date(`${dateKey}T12:00:00Z`), "UTC")}
                   </h3>
                   <ul className="divide-y">
@@ -185,41 +156,26 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         </TabsContent>
 
         <TabsContent value="materials" className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold">Course materials</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Organize text lessons and helpful links into course units.</p>
-          </div>
+          <SectionHeading title="Course materials" description="Organize text lessons and helpful links into course units." />
           {!materialsResult.ok ? (
-            <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
-              {materialsResult.error.message}
-            </div>
+            <ErrorAlert message={materialsResult.error.message} />
           ) : (
             <TeacherCourseMaterials courseId={id} units={materialsResult.data.units} />
           )}
         </TabsContent>
 
         <TabsContent value="attendance" className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold">Attendance</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Attendance and lesson deductions by session.</p>
-          </div>
+          <SectionHeading title="Attendance" description="Attendance and lesson deductions by session." />
           {!attendanceResult.ok ? (
-            <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
-              {attendanceResult.error.message}
-            </div>
+            <ErrorAlert message={attendanceResult.error.message} />
           ) : !deductionsResult.ok ? (
-            <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
-              {deductionsResult.error.message}
-            </div>
+            <ErrorAlert message={deductionsResult.error.message} />
           ) : attendanceResult.data.records.length === 0 ? (
-            <div className="rounded-2xl border bg-white px-6 py-10 text-center">
-              <h3 className="font-medium">No attendance records yet</h3>
-              <p className="mt-2 text-sm text-muted-foreground">Mark attendance for a scheduled session to see it here.</p>
-            </div>
+            <EmptyState title="No attendance records yet" description="Mark attendance for a scheduled session to see it here." />
           ) : (
-            <div role="region" aria-label="Attendance and lesson deductions" tabIndex={0} className="overflow-x-auto rounded-xl border bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <div role="region" aria-label="Attendance and lesson deductions" tabIndex={0} className="kora-card overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-muted-foreground">
+                <thead className="bg-muted/50 text-muted-foreground">
                   <tr>
                     <th scope="col" className="px-5 py-3 font-medium">Session</th>
                     <th scope="col" className="px-5 py-3 font-medium">Student</th>

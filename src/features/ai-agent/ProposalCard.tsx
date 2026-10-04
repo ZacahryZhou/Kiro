@@ -49,7 +49,7 @@ export function ProposalCard({ proposal }: { proposal: ProposalView }) {
 
   const open = state.kind === "pending" || state.kind === "working";
   return (
-    <section aria-label={labels.proposal.heading} className="mt-2 rounded-lg border bg-card p-3 text-sm">
+    <section aria-label={labels.proposal.heading} className="mt-2 rounded-xl border bg-card p-3.5 text-sm shadow-sm">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="font-medium">{labels.proposal.heading}</p>
         {open ? <Badge variant="outline">Pending</Badge> : null}

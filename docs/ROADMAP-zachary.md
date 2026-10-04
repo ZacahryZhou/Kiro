@@ -81,3 +81,5 @@ prisma/seed-ai.ts     demo data (the only place that writes business tables for 
 Lesson preparation, memory-aware scheduling, attendance trends, leave and reschedule proposals, AI course creation. Never cut: sign-in, schedules, AI attendance, student materials Q&A, access isolation.
 
 - [x] Live Agent Console (`/admin/agent`): real-time pipeline diagram with step and file highlighting, replay, SSE stream, access control (2026-10-04).
+
+- [x] Front-end redesign (shell, landing, login, teacher and student pages, floating AI launcher) (2026-10-04).
