@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:seed:demo": "tsx prisma/seed-ai.ts",
+    "check:ai": "tsx src/lib/ai/dev/provider-check.ts && tsx src/lib/ai/dev/tools-check.ts && tsx src/lib/ai/dev/schedule-check.ts && tsx src/lib/ai/dev/proposals-check.ts && tsx src/lib/ai/dev/student-check.ts && tsx src/lib/ai/dev/lesson-prep-check.ts && tsx src/lib/ai/dev/policy-check.ts && tsx src/lib/ai/dev/agent-check.ts && tsx src/lib/ai/dev/routes-check.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

@@ -11,6 +11,7 @@ import {
   formatDateOnly,
 } from "../core/time";
 import { findTool, getToolsForRole } from "../domain/edu/tools";
+import { eduProposals } from "../domain/edu/proposal-types";
 import { addMaterial } from "../services";
 import { actorFor, ids, resetStore, store } from "./fake-store";
 import { timeZoneDataProblem } from "./tz-sanity";
@@ -37,18 +38,18 @@ async function main() {
 
   // ----- tool sets -----
   const names = getToolsForRole("TEACHER").map((t) => t.name).sort();
-  check("Teacher has the 7 read-only tools plus three proposal tools", JSON.stringify(names) === JSON.stringify(["checkConflicts", "getCourseMaterials", "getTeacherSchedule", "listAttendance", "listDeductions", "listMyCourses", "listMyStudents", "proposeCreateCourse", "proposeCreateSessions", "proposeMarkAttendance"]), names);
+  check("Teacher has 9 read-only tools plus six proposal tools", JSON.stringify(names) === JSON.stringify(["checkConflicts", "getAttendanceTrends", "getCourseMaterials", "getStudentMemory", "getTeacherSchedule", "listAttendance", "listDeductions", "listMyCourses", "listMyStudents", "proposeAddContent", "proposeAddStudentNote", "proposeCreateCourse", "proposeCreateSessions", "proposeLessonPrep", "proposeMarkAttendance"]), names);
   check("Students get exactly two read-only tools", JSON.stringify(getToolsForRole("STUDENT").map((t) => t.name).sort()) === JSON.stringify(["answerFromCourseMaterials", "getStudentWorkspace"]));
   const schemaText = JSON.stringify(getToolsForRole("TEACHER").map((t) => t.parameters));
   check("No tool parameter is called userId or role", !/"userId"|"role"/.test(schemaText));
-  check("No tool can write directly (three propose* tools only prepare pending proposals)", getToolsForRole("TEACHER").every((t) => !/^(create|add|confirm|reschedule|delete|update|discard)/.test(t.name)) && getToolsForRole("TEACHER").filter((t) => t.name.startsWith("propose")).length === 3);
+  check("No tool can write directly (six propose* tools only prepare pending proposals)", getToolsForRole("TEACHER").every((t) => !/^(create|add|confirm|reschedule|delete|update|discard)/.test(t.name)) && getToolsForRole("TEACHER").filter((t) => t.name.startsWith("propose")).length === 6);
 
   // ----- calendar helpers -----
   check("parseDateOnly rejects 2026-02-30", parseDateOnly("2026-02-30") === null && parseDateOnly("2026-2-3") === null && parseDateOnly("2026-02-28") !== null);
   check("parseTimeOnly validates HH:mm", parseTimeOnly("24:00") === null && parseTimeOnly("9:00") === null && parseTimeOnly("16:30")?.minute === 30);
   const beforeDst = new Date("2026-10-28T19:00:00.000Z");
   const week = resolveWhen("this_week", beforeDst, "America/Vancouver");
-  check("this_week runs Monday to next Monday in local time, across the Nov 1 clock change", week.from.toISOString() === "2026-10-26T07:00:00.000Z" && week.to.toISOString() === "2026-11-02T08:00:00.000Z", week);
+  check("this_week runs Monday to next Monday in local time; Vancouver stays UTC-7 after Nov 1, 2026", week.from.toISOString() === "2026-10-26T07:00:00.000Z" && week.to.toISOString() === "2026-11-02T07:00:00.000Z", week);
   const tomorrow = resolveWhen("tomorrow", new Date("2026-10-08T06:30:00.000Z"), "America/Vancouver");
   check("tomorrow uses the local date (06:30Z is still Oct 7 in Vancouver)", tomorrow.from.toISOString() === "2026-10-08T07:00:00.000Z" && tomorrow.to.toISOString() === "2026-10-09T07:00:00.000Z", tomorrow);
   check("describeInstant gives local date, time and weekday", JSON.stringify(describeInstant("2026-10-08T23:00:00.000Z", "America/Vancouver")) === JSON.stringify({ localDate: "2026-10-08", localTime: "16:00", weekday: "Thu" }));
@@ -82,6 +83,17 @@ async function main() {
   check("listMyCourses returns Alex's two courses", courses.ok && courses.data.total === 2 && courses.data.courses.every((c: any) => c.courseId !== ids.courseC));
   const roster = await run("listMyStudents", alex, { courseId: ids.courseA });
   check("listMyStudents returns Jordan and Sam", roster.ok && roster.data.students.map((s: any) => s.name).sort().join() === "Jordan Lee,Sam Patel");
+  const memories = await run("getStudentMemory", alex, { courseId: ids.courseA });
+  check("Teacher can read only teacher-private memories for their course", memories.ok && memories.data.memories.length === 2 && !findTool("STUDENT", "getStudentMemory"));
+  check("A different teacher cannot read those memories", (await run("getStudentMemory", taylor, { courseId: ids.courseA })).data.error?.code === "FORBIDDEN");
+  const trends = await run("getAttendanceTrends", alex, { courseId: ids.courseA, studentId: ids.jordan });
+  check("Attendance trends refuse to judge students with fewer than three records", trends.ok && trends.data.trends[0].enoughData === false && trends.data.trends[0].attendanceRate === null, trends.data);
+  const memoryCount = store.memories.length;
+  const note = await run("proposeAddStudentNote", alex, { courseId: ids.courseA, studentId: ids.jordan, kind: "AVAILABILITY", content: "Unavailable Monday mornings." });
+  const noteId = note.data.proposalId as string;
+  check("Adding a private note creates a proposal without writing memory", note.ok && note.data.status === "PENDING_CONFIRMATION" && store.memories.length === memoryCount);
+  const noteConfirmation = await eduProposals.confirm(alex, noteId);
+  check("Confirming a private note writes teacher-only memory", noteConfirmation.ok && noteConfirmation.data.status === "executed" && store.memories.length === memoryCount + 1);
   const attendance = await run("listAttendance", alex, { courseId: ids.courseA });
   check("Attendance summary is computed by code (3 present, 1 leave, 4 total)", attendance.ok && attendance.data.summary.present === 3 && attendance.data.summary.leave === 1 && attendance.data.summary.absent === 0 && attendance.data.summary.total === 4, attendance.data.summary);
   const absentOnly = await run("listAttendance", alex, { status: "LEAVE" });

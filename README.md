@@ -80,10 +80,10 @@ Work is split between two owners (see [Team, tracks and workflow](#team-tracks-a
 | Course units and materials (teacher editing; student reading) | Done |
 | Session rescheduling (teacher UI, conflict checks and change history) | Done |
 | Role-specific AI panel, chat API, read-only questions, verified material citations and proposal flows | Integrated; requires AI provider configuration for live model responses |
-| Full multi-person AI showcase fixture (`prisma/seed-ai.ts`) | Not available yet |
-| AI calendar behavior across the Nov 2026 daylight-saving fallback | Needs correction; two development checks currently fail |
+| Full multi-person AI showcase fixture (`prisma/seed-ai.ts`) | Done; repeatable with `npm run db:seed:demo` |
+| Vancouver calendar behavior after Nov 1, 2026 | Verified with current time-zone data; British Columbia keeps UTC-7 year-round |
 
-The core teacher/student workflows and the required AI panel integration are implemented. Final AI scenario acceptance still depends on the missing showcase fixture and the daylight-saving fixes noted above.
+Core teacher/student workflows, persistent AI proposals, role-specific tools and the showcase fixture are implemented. UI acceptance with a live language model still requires a configured `AI_API_KEY` and `AI_MODEL` in the local `.env` file.
 
 ## Features
 
@@ -95,12 +95,12 @@ Each AI feature follows the same pattern: the teacher says one sentence, the AI 
 | 2 | AI attendance | "Jordan attended math today; Sam is on leave" | `MARK_ATTENDANCE` preview, then attendance and deductions on confirm | A · Integrated; needs populated fixture data for the full demo |
 | 3 | Student materials Q&A | (student) "What is the definition in chapter 2?" | Answer with verified citations, or "not found" | A · Integrated; needs populated fixture data for cited answers |
 | 4 | AI course creation | "Create a weekend math group with Jordan and Sam" | `CREATE_COURSE` preview, then course and enrollments | B · Integrated |
-| 5 | AI scheduling | "Schedule next Tuesday and Thursday, 60 minutes each" | `CREATE_SESSIONS` preview with per-session ✅/❌; conflicts block the proposal | B · Integrated; DST fallback check needs correction |
-| 6 | AI content entry | Paste text: "Create the first unit and add this" | `ADD_CONTENT` preview, then unit and materials | B · Not implemented |
-| 7 | Attendance trends | "How is Jordan's attendance lately?" | Code-computed numbers; fewer than 3 sessions → "Insufficient data to identify a trend." | B · Not implemented |
-| 8 | Student memory | "Remember Jordan is unavailable Tuesday and Thursday afternoons" | `ADD_STUDENT_NOTE` preview, then written to `AgentMemory` (teacher-only) | C · Not implemented |
-| 9 | Memory-aware scheduling | "Schedule next week for math" | Same as #5, candidate times avoid remembered gaps | C · Not implemented |
-| 10 | Lesson preparation | "Help me prepare tomorrow's math class" | `ADD_CONTENT` preview with a handout draft and 5 exercises | C · Not implemented |
+| 5 | AI scheduling | "Schedule next Tuesday and Thursday, 60 minutes each" | `CREATE_SESSIONS` preview with per-session ✅/❌; conflicts block the proposal | B · Integrated; current Vancouver time-zone rules verified |
+| 6 | AI content entry | Paste text: "Create the first unit and add this" | `ADD_CONTENT` preview, then unit and materials | B · Integrated; real database and confirmation verified |
+| 7 | Attendance trends | "How is Jordan's attendance lately?" | Code-computed numbers; fewer than 3 sessions → "Insufficient data to identify a trend." | B · Integrated; threshold and rate verified |
+| 8 | Student memory | "Remember Jordan is unavailable Tuesday and Thursday afternoons" | `ADD_STUDENT_NOTE` preview, then written to `AgentMemory` (teacher-only) | C · Integrated; role and course isolation verified |
+| 9 | Memory-aware scheduling | "Schedule next week for math" | Same as #5, candidate times avoid remembered gaps | C · Integrated; conflicting preferences block proposal creation |
+| 10 | Lesson preparation | "Help me prepare tomorrow's math class" | `ADD_CONTENT` preview with a handout draft and 5 exercises | C · Integrated; five-question output validated and requires confirmation |
 | 11 | Rescheduling | "Move the Oct 10 class to Oct 11 at 4 PM" | Teacher can reschedule manually; AI `RESCHEDULE` proposal is not implemented | C · Manual workflow done; AI unavailable |
 | 12 | Student leave request | (student) "I need to take leave next Tuesday" | `STUDENT_REQUEST` pending for the teacher; schedule unchanged | C · Not implemented |
 | 13 | Tuition adjustment | "Add 3 sessions for Jordan" | Out of the current MVP; needs a new table, function and proposal type agreed in the contract | C · Out of scope |
@@ -169,11 +169,13 @@ npx tsc --noEmit                     # type check
 npm run lint                         # lint
 ```
 
-The baseline seed creates accounts only. `prisma/seed-ai.ts` is not present, so the multi-person course, attendance, and material scenarios need a separate fixture before they can be rehearsed end to end.
+The baseline seed creates two accounts only. Run the AI showcase fixture as a second step to create the multi-person course, attendance, material, conflict and teacher-memory data.
 
 ### Clean-environment check
 
-`docker compose down -v` → `docker compose up --build` → `docker compose exec app npm run db:seed` → sign in.
+`docker compose down -v` → `docker compose up --build` → `docker compose exec app npm run db:seed` → `docker compose exec app npm run db:seed:demo` → sign in.
+
+Run the provider/tool/proposal/student/policy/route acceptance checks without a live AI key using `npm run check:ai`. Run `NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts` inside the app container for real-database acceptance checks.
 
 ## Demo accounts and seed data
 
@@ -184,7 +186,7 @@ The baseline seed creates accounts only. `prisma/seed-ai.ts` is not present, so 
 | Teacher | Demo Teacher | `t@example.test` |
 | Student | Demo Student | `s@example.test` |
 
-The multi-person acceptance personas below (Alex Morgan, Taylor Chen, Jordan Lee, Sam Patel, Casey Kim) are **required for the contract's complete AI acceptance scenarios**, separate from the baseline logins. The fixture seeder has not been delivered yet:
+The multi-person acceptance personas below (Alex Morgan, Taylor Chen, Jordan Lee, Sam Patel, Casey Kim) are separate from the two baseline logins. `npm run db:seed:demo` provisions them with the demonstration password:
 
 - **Course A, "Grade 8 Math Small Group"** (Alex; Jordan and Sam): two units with materials containing verifiable facts, deliberately **without** the quadratic vertex formula, to test the "not found" answer.
 - **Course B, "Grade 8 Physics 1:1"** (Alex; Jordan): one session overlaps Course A next Tuesday at 4 PM, to test conflict detection.
@@ -192,7 +194,7 @@ The multi-person acceptance personas below (Alex Morgan, Taylor Chen, Jordan Lee
 - Completed sessions with attendance and deductions, plus scheduled sessions this week and next.
 - `AgentMemory` examples: Jordan unavailable Tuesday and Thursday afternoons; Sam struggles with functions.
 
-The baseline account seed is idempotent and refuses to run when `NODE_ENV=production`. The optional AI fixture seed is not available yet.
+The baseline account seed and AI fixture seed are idempotent and refuse to run when `NODE_ENV=production`. The five AI personas use `t+alex@example.test`, `t+taylor@example.test`, `s+jordan@example.test`, `s+sam@example.test` and `s+casey@example.test`.
 
 ## Architecture
 
@@ -361,9 +363,9 @@ Strategy: write **fake services** against the contract first and run the whole A
 | S1–S3 | Contracts, fake services, provider, agent loop and proposal routes **(done)** |
 | S4 | Student agent and verified-citation materials Q&A **(done)** |
 | S5 | `/api/ai/chat` and `AiPanel` with proposal cards; panel mounted in both workspaces **(done)** |
-| S6 | `CREATE_COURSE` and `CREATE_SESSIONS` proposals **(done; two DST fallback checks need correction)** |
-| S7 | Content entry, student memory, lesson prep and attendance trends **(not implemented)** |
-| S8 | Full `seed-ai.ts` fixture and complete multi-person demo rehearsal **(not implemented)** |
+| S6 | `CREATE_COURSE` and `CREATE_SESSIONS` proposals **(done; calendar checks updated for permanent UTC-7 in Vancouver)** |
+| S7 | Content entry, teacher-private student memory, memory-aware scheduling, lesson prep and attendance trends **(implemented; manually rehearse the live model path)** |
+| S8 | Idempotent multi-person `seed-ai.ts` fixture and real-service acceptance checks **(implemented; final live-model rehearsal awaits local API credentials/model)** |
 
 Checkpoints: **H3** swap in the real read services; **H6** swap in the real write services and move proposals from memory to Prisma; **H7.5** is the last moment to finish the real-service integration; freeze new features two hours before the deadline.
 
@@ -396,7 +398,7 @@ All of these must pass for the project to count as complete.
 8. Paste text "Create the first unit and add this" → preview → confirm → the material appears and Jordan can ask about it.
 9. (Bonus) "Remember that Jordan is unavailable Tuesday and Thursday afternoons" → confirm; later scheduling avoids those times; when Jordan asks "What notes do you have about me?" no memory is returned.
 
-**Demo readiness:** `AI_MOCK=1` confirms the provider path without network access but returns a canned reply; it cannot demonstrate model-selected tools. The full multi-person fixture command is not available until `prisma/seed-ai.ts` is added. Configure a real AI provider and seed demo data before attempting contract scenarios 1–5 end to end.
+**Demo readiness:** `AI_MOCK=1` confirms the provider path without network access but returns a canned reply; it cannot demonstrate model-selected tools. The multi-person fixture and real-service checks are available. To rehearse natural-language tool use in the app, set `AI_API_KEY` and `AI_MODEL` in the local `.env`, then run both seed commands above. Tuition adjustments and student-submitted leave requests remain outside the accepted core flow; rescheduling is available through the teacher UI.
 
 ## Documentation index
 

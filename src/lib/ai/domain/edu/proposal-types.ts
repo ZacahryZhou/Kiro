@@ -8,6 +8,7 @@ import {
   type Result,
 } from "@/contracts";
 import { createMemoryProposalStore } from "../../core/proposal-store";
+import { prismaProposalStore } from "../../core/prisma-proposal-store";
 import { createProposalService, type ProposalRegistry } from "../../core/proposals";
 import { describeInstant } from "../../core/time";
 import * as services from "../../services";
@@ -125,6 +126,47 @@ async function executeSessions(
   );
 }
 
+// ---------- add course content ----------
+
+async function describeContent(_actor: Actor, payload: ProposalPayloads["ADD_CONTENT"]): Promise<string[]> {
+  return [
+    `Add unit: ${payload.unit.title}`,
+    `${payload.materials.length} ${payload.materials.length === 1 ? "material" : "materials"}`,
+    ...payload.materials.map((material) => {
+      const body = material.kind === "TEXT" ? material.content : material.url;
+      const excerpt = body?.slice(0, 1200) ?? "";
+      const clipped = (body?.length ?? 0) > 1200;
+      return `${material.kind}: ${material.title}${excerpt ? ` — ${excerpt}${clipped ? " … (preview shortened)" : ""}` : ""}`;
+    }),
+  ];
+}
+
+async function executeContent(
+  actor: Actor,
+  payload: ProposalPayloads["ADD_CONTENT"],
+): Promise<Result<{ unitId: string; materialIds: string[] }>> {
+  const unit = await services.createCourseUnit(actor, {
+    courseId: payload.courseId,
+    title: payload.unit.title,
+    order: payload.unit.order,
+  });
+  if (!unit.ok) return unit;
+  const materialIds: string[] = [];
+  for (const material of payload.materials) {
+    const created = await services.addMaterial(actor, { unitId: unit.data.unitId, ...material });
+    if (!created.ok) return created;
+    materialIds.push(created.data.materialId);
+  }
+  return ok({ unitId: unit.data.unitId, materialIds });
+}
+
+async function executeStudentNote(
+  actor: Actor,
+  payload: ProposalPayloads["ADD_STUDENT_NOTE"],
+): Promise<Result<{ memoryId: string }>> {
+  return services.saveStudentMemory(actor, payload);
+}
+
 export const eduProposalHandlers: ProposalRegistry = {
   MARK_ATTENDANCE: {
     schema: ProposalPayloadSchemas.MARK_ATTENDANCE,
@@ -141,11 +183,28 @@ export const eduProposalHandlers: ProposalRegistry = {
     execute: executeSessions,
     describe: describeSessions,
   },
+  ADD_CONTENT: {
+    schema: ProposalPayloadSchemas.ADD_CONTENT,
+    execute: executeContent,
+    describe: describeContent,
+  },
+  ADD_STUDENT_NOTE: {
+    schema: ProposalPayloadSchemas.ADD_STUDENT_NOTE,
+    execute: executeStudentNote,
+    describe: async (_actor, payload) => [
+      `${payload.kind === "AVAILABILITY" ? "Availability" : "Private note"} for student ${payload.studentId}`,
+      payload.content,
+      "This note is visible to the teacher only.",
+    ],
+  },
 };
 
 // A global singleton in development, so every route handler sees the same pending proposals.
 const globalForProposals = globalThis as unknown as {
   __koraProposalStore?: ReturnType<typeof createMemoryProposalStore>;
 };
-export const proposalStore = (globalForProposals.__koraProposalStore ??= createMemoryProposalStore());
-export const eduProposals = createProposalService(eduProposalHandlers, proposalStore);
+const memoryProposalStore = (globalForProposals.__koraProposalStore ??= createMemoryProposalStore());
+const usePrismaStore = process.env.NODE_ENV === "development" || process.env.NODE_ENV === "production";
+export const proposalStore = memoryProposalStore;
+const activeProposalStore = usePrismaStore ? prismaProposalStore : memoryProposalStore;
+export const eduProposals = createProposalService(eduProposalHandlers, activeProposalStore);

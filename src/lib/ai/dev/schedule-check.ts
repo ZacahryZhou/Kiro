@@ -40,7 +40,7 @@ async function main() {
   const thisWeek = resolveSessions({ weekdays: ["MON", "FRI"], when: "this_week", time: "09:30" }, thu, TZ);
   check("this_week uses Monday to Sunday of the current week", thisWeek.ok && thisWeek.sessions.map((s) => s.localDate).join() === "2026-10-05,2026-10-09");
   const dst = resolveSessions({ weekdays: ["TUE"], startDate: "2026-10-27", weeks: 2, time: "16:00" }, thu, TZ);
-  check("A weekly pattern across the Nov 1 clock change keeps local 16:00 (23:00Z, then 00:00Z)", dst.ok && dst.sessions.map((s) => s.startAt).join() === "2026-10-27T23:00:00.000Z,2026-11-04T00:00:00.000Z", dst);
+  check("A weekly Tuesday 16:00 pattern remains 23:00Z after Vancouver adopts permanent UTC-7", dst.ok && dst.sessions.map((s) => s.startAt).join() === "2026-10-27T23:00:00.000Z,2026-11-03T23:00:00.000Z", dst);
   const explicit = resolveSessions({ dates: ["2026-12-02", "2026-12-01", "2026-12-01"], time: "18:15" }, thu, TZ);
   check("Explicit dates are de-duplicated and sorted", explicit.ok && explicit.sessions.map((s) => s.localDate).join() === "2026-12-01,2026-12-02");
   check("An impossible date is rejected", !resolveSessions({ dates: ["2026-02-30"], time: "10:00" }, thu).ok);

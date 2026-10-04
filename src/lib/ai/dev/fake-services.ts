@@ -372,6 +372,41 @@ export async function getCourseMaterials(
   });
 }
 
+export async function getStudentMemory(
+  actor: Actor,
+  input: { courseId: string; studentId?: string },
+): Promise<Result<{ memories: typeof store.memories }>> {
+  if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers can view student memory.");
+  const course = store.courses.find((item) => item.id === input.courseId && item.teacherId === actor.userId);
+  if (!course) return fail("FORBIDDEN", "You do not have access to this course.");
+  if (input.studentId && !store.enrollments.some((item) => item.courseId === course.id && item.studentId === input.studentId)) {
+    return fail("NOT_FOUND", "Student is not enrolled in this course.");
+  }
+  return ok({ memories: store.memories.filter((memory) => memory.courseId === course.id && memory.teacherId === actor.userId && (!input.studentId || memory.studentId === input.studentId)) });
+}
+
+export async function saveStudentMemory(
+  actor: Actor,
+  input: { courseId: string; studentId: string; kind: "AVAILABILITY" | "NOTE"; content: string },
+): Promise<Result<{ memoryId: string }>> {
+  if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers can save student memory.");
+  const course = store.courses.find((item) => item.id === input.courseId && item.teacherId === actor.userId);
+  if (!course || !store.enrollments.some((item) => item.courseId === course.id && item.studentId === input.studentId)) {
+    return fail("FORBIDDEN", "You do not have access to this student in this course.");
+  }
+  const memory = {
+    id: nextId("mem"),
+    courseId: course.id,
+    studentId: input.studentId,
+    teacherId: actor.userId,
+    kind: input.kind,
+    content: input.content,
+    createdAt: new Date().toISOString(),
+  };
+  store.memories.push(memory);
+  return ok({ memoryId: memory.id });
+}
+
 export async function checkConflicts(
   actor: Actor,
   input: { courseId: string; startAt: string; durationMin: number; excludeSessionId?: string },
