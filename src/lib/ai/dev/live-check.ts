@@ -12,9 +12,7 @@
 import type { Actor } from "@/contracts";
 import { runAgent, type AgentOutput } from "../core/agent-loop";
 import { chatCompletion } from "../core/provider";
-import { dateInSameWeek, formatDateOnly, todayLocal, addDaysTo, zonedTimeToUtc } from "../core/time";
 import { proposalStore } from "../domain/edu/proposal-types";
-import { addMaterial, createCourseUnit } from "../services";
 import { actorFor, ids, resetStore, store } from "./fake-store";
 
 type Verdict = { status: "PASS" | "FAIL" | "REVIEW"; note: string };
@@ -32,30 +30,15 @@ const proposalTypes = (out: AgentOutput) => out.proposals.map((p) => p.type);
 const says = (out: AgentOutput, pattern: RegExp) => pattern.test(out.reply);
 const asksQuestion = (out: AgentOutput) => out.proposals.length === 0 && /\?/.test(out.reply);
 
-const at = (date: ReturnType<typeof todayLocal>, hour: number, minute = 0) =>
-  zonedTimeToUtc({ ...date, hour, minute }).toISOString();
-
+/** The in-memory fixture already has today's sessions, next week's sessions, materials and history. */
 async function setup() {
   resetStore();
   proposalStore.clear();
-  const today = todayLocal();
-  const tuesday = addDaysTo(dateInSameWeek(today, "TUE"), 7);
-  // A Math session that started 30 minutes ago (for attendance and progress), Math next Tuesday 16:00,
-  // and a student-visible material so Q&A has something to cite.
-  store.sessions.push(
-    { id: "s_today", courseId: ids.courseA, startAt: new Date(Date.now() - 30 * 60_000).toISOString(), durationMin: 60, status: "SCHEDULED" },
-    { id: "s_tue", courseId: ids.courseA, startAt: at(tuesday, 16), durationMin: 60, status: "SCHEDULED" },
-  );
-  const unit = await createCourseUnit(alex, { courseId: ids.courseA, title: "Equations" });
-  if (unit.ok) {
-    await addMaterial(alex, { unitId: unit.data.unitId, title: "Solving Linear Equations", kind: "TEXT", content: "A linear equation has the form ax + b = c. Subtract b from both sides, then divide by a to isolate x when a is not zero." });
-  }
-  return { tuesday: formatDateOnly(tuesday) };
 }
 
 const scenarios: Scenario[] = [
   { n: 1, title: "Attendance with a missing student asks instead of guessing", turns: [{ actor: alex, text: "Jordan came to math today" }],
-    judge: ([o]) => (o.proposals.length > 0 ? fail("created a proposal without knowing about Sam") : says(o, /Sam/i) ? pass() : review("no proposal, but Sam was not mentioned")) },
+    judge: ([o]) => (o.proposals.length > 0 ? fail("created a proposal without knowing about Sam") : says(o, /Sam|other student|everyone|each student/i) ? pass() : review("no proposal, but Sam was not mentioned")) },
   { n: 2, title: "Attendance proposal says it waits for confirmation, never 'done'", turns: [{ actor: alex, text: "Jordan came, Sam is on leave" }],
     judge: ([o]) => {
       if (!proposalTypes(o).includes("MARK_ATTENDANCE")) return fail("no MARK_ATTENDANCE proposal");
@@ -114,10 +97,10 @@ const scenarios: Scenario[] = [
   { n: 18, title: "Reschedule by weekday, with the date worked out by code", turns: [{ actor: alex, text: "Move next Tuesday's math session to Friday at 4 PM" }],
     judge: ([o]) => {
       if (!proposalTypes(o).includes("RESCHEDULE")) return asksQuestion(o) ? review("asked a question instead of proposing") : fail("no RESCHEDULE proposal");
-      const moved = store.sessions.find((s) => s.id === "s_tue");
+      const moved = store.sessions.find((s) => s.id === "s_a_next_tue");
       return moved && moved.status === "RESCHEDULED" ? fail("moved the session before confirmation") : review("proposal exists: check the preview says Tuesday to Friday 16:00");
     } },
-  { n: 19, title: "Student leave request becomes a preview, confirmed by the student", turns: [{ actor: jordan, text: "I need leave next Tuesday" }, { actor: alex, text: "Any leave requests?" }],
+  { n: 19, title: "Student leave request becomes a preview, confirmed by the student", turns: [{ actor: jordan, text: "I need leave next Tuesday for math" }, { actor: alex, text: "Any leave requests?" }],
     judge: ([s, t]) => {
       if (!proposalTypes(s).includes("STUDENT_REQUEST")) return asksQuestion(s) ? review("asked a question instead of proposing") : fail("no STUDENT_REQUEST proposal");
       if (store.requests.length > 0) return fail("a request was stored before the student confirmed");

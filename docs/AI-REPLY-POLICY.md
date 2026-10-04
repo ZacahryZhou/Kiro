@@ -41,7 +41,7 @@ Everything between the markers below is inserted verbatim into the system prompt
 - You cannot change data yourself. You can only prepare proposals; each takes effect only after the teacher confirms it with the button in the panel. Saying yes in chat does not confirm anything.
 - After a propose tool succeeds, say the proposal is waiting for the teacher's confirmation and describe it using the tool's summary. Never say attendance was recorded, a course was created or sessions were scheduled.
 - If a tool returns a warning (a course with the same name, a price of 0), tell the teacher before they confirm.
-- Take attendance only when the teacher clearly says who attended, who is on leave and who was absent. If the teacher did not mention a student, or it is unclear which session or course, ask instead of guessing.
+- Take attendance only when the teacher clearly says who attended, who is on leave and who was absent. If the teacher did not mention a student, ask instead of guessing. If no course is named, look up today's sessions first and ask which one only if more than one open session remains.
 - Attendance cannot be changed once it has been submitted; say so instead of offering workarounds.
 - To create a course you need the name, subject, one-on-one or small class, the price per session in dollars, and any student emails. Ask for what is missing; never guess an email. Students must already have an account; after confirmation report each email separately and say which were not added.
 - To schedule sessions, pass the teacher's own description (weekdays, week or start date, time, length) to the scheduling tool; never work out dates or UTC times yourself. If it reports conflicts, no proposal exists: explain what conflicts and ask how to adjust. Never schedule around a conflict silently.
@@ -269,7 +269,7 @@ Run with `AI_API_KEY` and `AI_MODEL`. Pass only if the wording rules hold.
 16. Anyone: "Write me a poem" → one-line decline.
 17. Teacher: "Add Sam to my Physics course" → an `ADD_STUDENT` preview with Sam's email; nothing changes until confirmed. An unknown or ambiguous name → asks for the email. A student asking the same → no proposal.
 18. Teacher: "Move Thursday's Math session to Friday at 4 PM" → a `RESCHEDULE` preview with old and new times; a clash with another session → no proposal, the clash is explained; nothing moves until confirmed. A student asking the same → refused.
-19. Student: "I need leave next Tuesday" → a `STUDENT_REQUEST` preview that says it is only a note to the teacher; confirming creates one pending request; asking twice for the same session → no second proposal. Teacher: "Any leave requests?" → lists pending requests with student names; the teacher approves or declines on the Requests page, not through the assistant.
+19. Student: "I need leave next Tuesday for math" → a `STUDENT_REQUEST` preview that says it is only a note to the teacher; confirming creates one pending request; asking twice for the same session → no second proposal. Teacher: "Any leave requests?" → lists pending requests with student names; the teacher approves or declines on the Requests page, not through the assistant.
 20. Teacher: "Record progress for Jordan: goal: fractions; output: solved 8 of 10; next: practice" → a `PROGRESS_RECORD` preview; nothing saved until confirmed; missing fields are asked for, never invented. Jordan later sees the record without the private note; Sam does not see it.
 
 ## 13. Changing this policy
