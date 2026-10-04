@@ -17,6 +17,19 @@ export const WIDGET_TYPES = [
 ] as const;
 export type WidgetType = (typeof WIDGET_TYPES)[number];
 
+/** Starting size (12-column grid) and the smallest size each widget stays readable at. */
+export const WIDGET_SIZES: Record<WidgetType, { w: number; h: number; minW: number; minH: number }> = {
+  STATS: { w: 12, h: 2, minW: 4, minH: 2 },
+  TODAY_SESSIONS: { w: 5, h: 5, minW: 3, minH: 3 },
+  WEEK_SCHEDULE: { w: 7, h: 5, minW: 4, minH: 3 },
+  MONTH_CALENDAR: { w: 6, h: 7, minW: 4, minH: 5 },
+  PENDING_REQUESTS: { w: 5, h: 4, minW: 3, minH: 3 },
+  STUDENT_FOCUS: { w: 4, h: 5, minW: 3, minH: 4 },
+  ATTENDANCE_TREND: { w: 6, h: 5, minW: 4, minH: 4 },
+  RECENT_PROGRESS: { w: 6, h: 5, minW: 4, minH: 3 },
+  COURSE_LIST: { w: 6, h: 4, minW: 3, minH: 3 },
+};
+
 export const DASHBOARD_THEMES = ["kora", "ocean", "sunset", "forest", "violet", "midnight"] as const;
 export type DashboardTheme = (typeof DASHBOARD_THEMES)[number];
 

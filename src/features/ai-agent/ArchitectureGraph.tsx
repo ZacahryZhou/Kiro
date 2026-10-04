@@ -20,7 +20,7 @@ const H = 50;
 const NODES: GraphNode[] = [
   { key: "request", step: "request", title: "Chat request", note: "Zod-validated body", x: 355, y: 16, zone: "fixed" },
   { key: "identity", step: "identity", title: "Identity", note: "From the session only", x: 355, y: 86, zone: "fixed" },
-  { key: "prompt", step: "prompt", title: "Prompt + tools", note: "Per role: 22 teacher / 6 student", x: 355, y: 156, zone: "fixed" },
+  { key: "prompt", step: "prompt", title: "Prompt + tools", note: "Per role: 24 teacher / 6 student", x: 355, y: 156, zone: "fixed" },
   { key: "model", step: "model", title: "Model", note: "Decides the next tool call", x: 110, y: 285, zone: "flexible" },
   { key: "tool", step: "tool", title: "Tool runs", note: "Actor injected by code", x: 395, y: 285, zone: "flexible" },
   { key: "read", title: "Read services", note: "Access-filtered database reads", x: 650, y: 285, zone: "fixed" },

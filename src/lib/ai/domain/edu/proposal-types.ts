@@ -13,6 +13,7 @@ import { createProposalService, type ProposalRegistry } from "../../core/proposa
 import { describeInstant } from "../../core/time";
 import { useRealBackend } from "../../runtime";
 import * as services from "../../services";
+import { labels } from "./labels";
 
 // Maps each proposal type to its payload schema, the service function that runs on confirmation,
 // and a code-generated preview. "Re-skinning" the agent for another domain replaces this file.
@@ -175,6 +176,32 @@ async function executeAddStudent(
   return services.addExistingStudentToCourse(actor, payload);
 }
 
+async function describeDashboard(actor: Actor, payload: ProposalPayloads["DASHBOARD_LAYOUT"]): Promise<string[]> {
+  const students = new Map<string, string>();
+  const roster = await services.listMyCourses(actor);
+  if (roster.ok) {
+    for (const course of roster.data.courses.slice(0, 50)) {
+      const list = await services.listMyStudents(actor, { courseId: course.id });
+      if (list.ok) for (const student of list.data.students) students.set(student.id, student.name);
+    }
+  }
+  const courses = new Map(roster.ok ? roster.data.courses.map((c) => [c.id, c.name] as const) : []);
+  const widgets = payload.items.map((item) => {
+    const base = item.title ?? labels.dashboard.widgets[item.type];
+    if (item.type === "STUDENT_FOCUS" && item.studentId) return `${base} (${students.get(item.studentId) ?? "student"})`;
+    if (item.type === "ATTENDANCE_TREND" && item.courseId) return `${base} (${courses.get(item.courseId) ?? "course"})`;
+    return base;
+  });
+  const existing = await services.listMyLayouts(actor);
+  const replaces = existing.ok && existing.data.layouts.some((layout) => layout.name === payload.name);
+  return [
+    `Home page layout "${payload.name}"`,
+    `Widgets: ${widgets.join(", ")}`,
+    `Colours: ${labels.dashboard.themes[payload.theme]}. Motion: ${labels.dashboard.motions[payload.motion]}.`,
+    replaces ? `This replaces your saved layout named "${payload.name}".` : "It becomes your active home page; your current layout stays in your history.",
+  ];
+}
+
 async function findSession(actor: Actor, sessionId: string) {
   const now = Date.now();
   const schedule = await services.getTeacherSchedule(actor, {
@@ -275,6 +302,11 @@ export const eduProposalHandlers: ProposalRegistry = {
       `Student email: ${payload.email}`,
       "The student is added only if they already have a student account.",
     ],
+  },
+  DASHBOARD_LAYOUT: {
+    schema: ProposalPayloadSchemas.DASHBOARD_LAYOUT,
+    execute: (actor, payload) => services.saveDashboardLayout(actor, payload),
+    describe: describeDashboard,
   },
   MARK_ATTENDANCE: {
     schema: ProposalPayloadSchemas.MARK_ATTENDANCE,

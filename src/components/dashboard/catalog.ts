@@ -1,19 +1,19 @@
 import { Activity, BookOpen, CalendarDays, CalendarRange, Clock3, Inbox, NotebookPen, TrendingUp, UserRound, type LucideIcon } from "lucide-react";
-import type { DashboardTheme, WidgetType } from "@/contracts";
+import { WIDGET_SIZES, type DashboardTheme, type WidgetType } from "@/contracts";
 
 export type WidgetMeta = { label: string; description: string; icon: LucideIcon; w: number; h: number; minW: number; minH: number };
 
 /** What the editor shows for each widget and the size a new one starts with (12-column grid). */
 export const WIDGET_META: Record<WidgetType, WidgetMeta> = {
-  STATS: { label: "Week at a glance", description: "Sessions, upcoming lessons, students and open requests", icon: Activity, w: 12, h: 2, minW: 4, minH: 2 },
-  TODAY_SESSIONS: { label: "Today", description: "Today's lessons, with a link to take attendance", icon: Clock3, w: 5, h: 5, minW: 3, minH: 3 },
-  WEEK_SCHEDULE: { label: "This week", description: "Every lesson this week, day by day", icon: CalendarDays, w: 7, h: 6, minW: 4, minH: 3 },
-  MONTH_CALENDAR: { label: "Month calendar", description: "A compact calendar of this month", icon: CalendarRange, w: 6, h: 7, minW: 4, minH: 5 },
-  PENDING_REQUESTS: { label: "Requests", description: "Leave and reschedule requests waiting for you", icon: Inbox, w: 5, h: 4, minW: 3, minH: 3 },
-  STUDENT_FOCUS: { label: "Student focus", description: "One student's attendance, last progress note and next lesson", icon: UserRound, w: 4, h: 5, minW: 3, minH: 4 },
-  ATTENDANCE_TREND: { label: "Attendance trend", description: "Attendance by session, computed by code", icon: TrendingUp, w: 6, h: 5, minW: 4, minH: 4 },
-  RECENT_PROGRESS: { label: "Recent progress", description: "The latest progress records you saved", icon: NotebookPen, w: 6, h: 5, minW: 4, minH: 3 },
-  COURSE_LIST: { label: "My courses", description: "Your courses and how many students each has", icon: BookOpen, w: 6, h: 4, minW: 3, minH: 3 },
+  STATS: { label: "Week at a glance", description: "Sessions, upcoming lessons, students and open requests", icon: Activity, ...WIDGET_SIZES.STATS },
+  TODAY_SESSIONS: { label: "Today", description: "Today's lessons, with a link to take attendance", icon: Clock3, ...WIDGET_SIZES.TODAY_SESSIONS },
+  WEEK_SCHEDULE: { label: "This week", description: "Every lesson this week, day by day", icon: CalendarDays, ...WIDGET_SIZES.WEEK_SCHEDULE },
+  MONTH_CALENDAR: { label: "Month calendar", description: "A compact calendar of this month", icon: CalendarRange, ...WIDGET_SIZES.MONTH_CALENDAR },
+  PENDING_REQUESTS: { label: "Requests", description: "Leave and reschedule requests waiting for you", icon: Inbox, ...WIDGET_SIZES.PENDING_REQUESTS },
+  STUDENT_FOCUS: { label: "Student focus", description: "One student's attendance, last progress note and next lesson", icon: UserRound, ...WIDGET_SIZES.STUDENT_FOCUS },
+  ATTENDANCE_TREND: { label: "Attendance trend", description: "Attendance by session, computed by code", icon: TrendingUp, ...WIDGET_SIZES.ATTENDANCE_TREND },
+  RECENT_PROGRESS: { label: "Recent progress", description: "The latest progress records you saved", icon: NotebookPen, ...WIDGET_SIZES.RECENT_PROGRESS },
+  COURSE_LIST: { label: "My courses", description: "Your courses and how many students each has", icon: BookOpen, ...WIDGET_SIZES.COURSE_LIST },
 };
 
 export const THEME_META: Record<DashboardTheme, { label: string; swatch: [string, string, string] }> = {

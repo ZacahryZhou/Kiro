@@ -31,6 +31,9 @@ export function resultLines(type: ProposalType, result: unknown): string[] {
   if (type === "RESCHEDULE" && typeof data.newStartAt === "string") {
     return ["Session moved"];
   }
+  if (type === "DASHBOARD_LAYOUT" && typeof data.name === "string") {
+    return [`${labels.dashboard.saved}: "${data.name}"`];
+  }
   if (type === "ADD_STUDENT") {
     return [data.alreadyJoined === true ? labels.result.studentAlreadyJoined : labels.result.studentAdded];
   }

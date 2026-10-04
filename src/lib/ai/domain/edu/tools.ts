@@ -19,6 +19,8 @@ import { chatCompletion } from "../../core/provider";
 import type { ToolSpec } from "../../core/types";
 import * as services from "../../services";
 import { materialsQaSystemPrompt } from "./prompts";
+import { DASHBOARD_MOTIONS, DASHBOARD_THEMES, WIDGET_TYPES, DashboardLayoutInput } from "@/contracts";
+import { packWidgets, WIDGET_WIDTHS, type WidgetRequest } from "@/lib/dashboard-pack";
 import { eduProposals, money, sessionsDeducted } from "./proposal-types";
 
 // Tools the model can call. The actor is always injected by code: tool arguments never carry a user
@@ -1494,6 +1496,108 @@ const proposeProgressRecord = defineTool({
   },
 });
 
+
+const listMyDashboardLayouts = defineTool({
+  name: "listMyDashboardLayouts",
+  description: "List the home-page layouts the teacher has saved (name, colours, widgets) and which one is active. Use it before proposing a layout so you do not replace one by accident.",
+  parameters: obj({}),
+  schema: z.object({}),
+  async run(actor) {
+    const result = await services.listMyLayouts(actor);
+    if (!result.ok) return serviceFailure(result.error);
+    return succeed({
+      layouts: result.data.layouts.map((layout) => ({ name: layout.name, theme: layout.theme, motion: layout.motion, widgets: layout.items.map((item) => item.type), active: layout.isActive })),
+      note: "The built-in Classic layout is used when none is active.",
+    });
+  },
+});
+
+const proposeDashboardLayout = defineTool({
+  name: "proposeDashboardLayout",
+  description:
+    "Design the teacher's home page. This does NOT change anything until the teacher confirms. Choose which widgets to show, in reading order, plus colours and motion; code places and sizes them on the grid, so never give coordinates. " +
+    `Widget types: ${WIDGET_TYPES.join(", ")}. STUDENT_FOCUS needs studentName (a student in the teacher's courses); ATTENDANCE_TREND may take courseName. ` +
+    "A layout with the same name as a saved one replaces it, so pick a new name unless the teacher asked to change that layout. If the teacher gives no preference for colours or motion, use theme 'kora' and motion 'calm'.",
+  parameters: obj(
+    {
+      name: { type: "string", description: "A short layout name, at most 40 characters, such as 'Teaching day'." },
+      theme: { type: "string", enum: [...DASHBOARD_THEMES] },
+      motion: { type: "string", enum: [...DASHBOARD_MOTIONS] },
+      widgets: {
+        type: "array",
+        description: "Widgets in reading order, 1 to 12.",
+        items: obj(
+          {
+            type: { type: "string", enum: [...WIDGET_TYPES] },
+            size: { type: "string", enum: Object.keys(WIDGET_WIDTHS), description: "Optional width: small, medium, large or full." },
+            studentName: { type: "string", description: "Required for STUDENT_FOCUS." },
+            courseName: { type: "string", description: "Optional for ATTENDANCE_TREND." },
+            title: { type: "string", description: "Optional custom heading, at most 60 characters." },
+          },
+          ["type"],
+        ),
+      },
+    },
+    ["name", "widgets"],
+  ),
+  schema: z.object({
+    name: z.string().trim().min(1).max(40),
+    theme: z.enum(DASHBOARD_THEMES).default("kora"),
+    motion: z.enum(DASHBOARD_MOTIONS).default("calm"),
+    widgets: z
+      .array(
+        z.object({
+          type: z.enum(WIDGET_TYPES),
+          size: z.enum(Object.keys(WIDGET_WIDTHS) as [keyof typeof WIDGET_WIDTHS, ...(keyof typeof WIDGET_WIDTHS)[]]).optional(),
+          studentName: z.string().trim().min(1).max(80).optional(),
+          courseName: z.string().trim().min(1).max(80).optional(),
+          title: z.string().trim().min(1).max(60).optional(),
+        }),
+      )
+      .min(1)
+      .max(12),
+  }),
+  async run(actor, args) {
+    if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers have a customisable home page.");
+    const courses = await services.listMyCourses(actor);
+    if (!courses.ok) return serviceFailure(courses.error);
+    const requests: WidgetRequest[] = [];
+    for (const widget of args.widgets) {
+      const request: WidgetRequest = { type: widget.type, ...(widget.size ? { size: widget.size } : {}), ...(widget.title ? { title: widget.title } : {}) };
+      if (widget.type === "STUDENT_FOCUS") {
+        if (!widget.studentName) return failed("INVALID_ARGUMENTS", "A STUDENT_FOCUS widget needs studentName. Ask the teacher which student to show.");
+        const found = await searchOwnRosters(actor, widget.studentName);
+        if (!found.ok) return serviceFailure(found.error);
+        if (found.matches.length === 0) return failed("NOT_FOUND", `No student named "${widget.studentName}" is in your courses, so I cannot show them. Ask the teacher who they mean.`);
+        if (found.matches.length > 1) {
+          return succeed({ status: "AMBIGUOUS", candidates: found.matches.slice(0, 5).map((m) => ({ name: m.name, email: m.email })), note: "More than one student matches. Ask the teacher which one, then call this tool again." });
+        }
+        request.studentId = found.matches[0].studentId;
+      }
+      if (widget.type === "ATTENDANCE_TREND" && widget.courseName) {
+        const needle = widget.courseName.toLowerCase();
+        const matches = courses.data.courses.filter((course) => course.name.toLowerCase().includes(needle));
+        if (matches.length !== 1) {
+          return failed("NOT_FOUND", matches.length === 0 ? `No course matches "${widget.courseName}". Your courses: ${courses.data.courses.map((c) => c.name).join(", ") || "none"}.` : `More than one course matches "${widget.courseName}": ${matches.map((c) => c.name).join(", ")}. Ask which one.`);
+        }
+        request.courseId = matches[0].id;
+      }
+      requests.push(request);
+    }
+    const payload = { name: args.name, theme: args.theme, motion: args.motion, items: packWidgets(requests) };
+    const parsed = DashboardLayoutInput.safeParse(payload);
+    if (!parsed.success) return failed("VALIDATION", parsed.error.issues[0]?.message ?? "That layout is not valid.");
+    const summary = `Design the home page "${args.name}"`;
+    const created = await eduProposals.create({ actor, type: "DASHBOARD_LAYOUT", payload: parsed.data, summary });
+    if (!created.ok) return serviceFailure(created.error);
+    return {
+      ok: true,
+      proposal: created.data,
+      content: JSON.stringify({ status: "PENDING_CONFIRMATION", proposalId: created.data.id, summary, note: "The home page has not changed yet. The teacher must confirm the layout." }),
+    };
+  },
+});
+
 // ---------- tool sets ----------
 
 const TEACHER_TOOLS: Tool[] = [
@@ -1510,6 +1614,7 @@ const TEACHER_TOOLS: Tool[] = [
   findMyStudent,
   listStudentRequests,
   listProgressRecords,
+  listMyDashboardLayouts,
   proposeMarkAttendance,
   proposeCreateCourse,
   proposeCreateSessions,
@@ -1519,6 +1624,7 @@ const TEACHER_TOOLS: Tool[] = [
   proposeProgressRecord,
   proposeAddStudentNote,
   proposeLessonPrep,
+  proposeDashboardLayout,
 ];
 
 /** Students get no write or memory tools. The one proposal they can make is a leave or different-time request to their own teacher. */

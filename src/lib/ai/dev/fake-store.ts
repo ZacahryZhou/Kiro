@@ -98,6 +98,8 @@ export type FakeProgress = {
   updatedAt: string;
 };
 
+export type FakeLayout = { id: string; teacherId: string; name: string; theme: string; motion: string; items: unknown[]; lastUsedAt: number; updatedAt: string };
+
 export type FakeState = {
   users: FakeUser[];
   courses: FakeCourse[];
@@ -111,6 +113,7 @@ export type FakeState = {
   memories: FakeMemory[];
   requests: FakeRequest[];
   progress: FakeProgress[];
+  layouts: FakeLayout[];
 };
 
 export const ids = {
@@ -206,6 +209,7 @@ export function createState(now = new Date()): FakeState {
     memories: [],
     requests: [],
     progress: [],
+    layouts: [],
   };
 
   const session = (

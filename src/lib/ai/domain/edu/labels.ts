@@ -19,6 +19,22 @@ export const labels = {
     studentNotRegistered: "no student account with this email, so not added",
     studentFailed: "could not be added",
   },
+  dashboard: {
+    widgets: {
+      STATS: "Week at a glance",
+      TODAY_SESSIONS: "Today",
+      WEEK_SCHEDULE: "This week",
+      MONTH_CALENDAR: "Month calendar",
+      PENDING_REQUESTS: "Requests",
+      STUDENT_FOCUS: "Student focus",
+      ATTENDANCE_TREND: "Attendance trend",
+      RECENT_PROGRESS: "Recent progress",
+      COURSE_LIST: "My courses",
+    },
+    themes: { kora: "Kora", ocean: "Ocean", sunset: "Sunset", forest: "Forest", violet: "Violet", midnight: "Midnight" },
+    motions: { calm: "Calm", lively: "Lively", off: "No motion" },
+    saved: "Home page layout saved and now active",
+  },
   proposal: {
     heading: "Review before anything changes",
     notChanged: "Nothing has been changed yet.",

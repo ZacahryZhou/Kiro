@@ -7,6 +7,8 @@ import {
   CreateCourseInput,
   CreateSessionsInput,
   CreateUnitInput,
+  DashboardLayoutInput,
+  MAX_LAYOUTS,
   RescheduleInput,
   ResolveStudentRequestInput,
   SaveProgressInput,
@@ -17,6 +19,7 @@ import {
   type AttendanceView,
   type ConflictView,
   type CourseView,
+  type DashboardLayoutView,
   type DeductionView,
   type ErrorCode,
   type Result,
@@ -913,4 +916,46 @@ export async function listProgressRecords(
       .filter((v): v is ProgressRecordView => v !== undefined)
       .sort((a, b) => Date.parse(b.sessionStartAt) - Date.parse(a.sessionStartAt)),
   });
+}
+
+// ---------- dashboard layouts (contract v0.7) ----------
+
+function layoutView(row: (typeof store.layouts)[number], activeId: string | null): DashboardLayoutView {
+  return { id: row.id, name: row.name, theme: row.theme as DashboardLayoutView["theme"], motion: row.motion as DashboardLayoutView["motion"], items: row.items as DashboardLayoutView["items"], isActive: row.id === activeId, updatedAt: row.updatedAt };
+}
+
+export async function listMyLayouts(actor: Actor): Promise<Result<{ layouts: DashboardLayoutView[] }>> {
+  if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers have a customisable home page.");
+  const rows = store.layouts.filter((row) => row.teacherId === actor.userId).sort((a, b) => b.lastUsedAt - a.lastUsedAt);
+  const activeId = rows.find((row) => row.lastUsedAt > 0)?.id ?? null;
+  return ok({ layouts: rows.map((row) => layoutView(row, activeId)) });
+}
+
+export async function getActiveLayout(actor: Actor): Promise<Result<{ layout: DashboardLayoutView | null }>> {
+  const all = await listMyLayouts(actor);
+  if (!all.ok) return all as Result<never>;
+  return ok({ layout: all.data.layouts.find((layout) => layout.isActive) ?? null });
+}
+
+export async function saveDashboardLayout(actor: Actor, input: z.input<typeof DashboardLayoutInput>): Promise<Result<DashboardLayoutView>> {
+  if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers have a customisable home page.");
+  const parsed = DashboardLayoutInput.safeParse(input);
+  if (!parsed.success) return fail("VALIDATION", parsed.error.issues[0]?.message ?? "That layout is not valid.");
+  const layout = parsed.data;
+  const courseIds = new Set(layout.items.flatMap((item) => (item.courseId ? [item.courseId] : [])));
+  for (const courseId of courseIds) {
+    if (!store.courses.some((c) => c.id === courseId && c.teacherId === actor.userId)) return fail("FORBIDDEN", "A widget points at a course you do not teach.");
+  }
+  const studentIds = new Set(layout.items.flatMap((item) => (item.studentId ? [item.studentId] : [])));
+  for (const studentId of studentIds) {
+    const mine = store.enrollments.some((e) => e.studentId === studentId && store.courses.some((c) => c.id === e.courseId && c.teacherId === actor.userId));
+    if (!mine) return fail("FORBIDDEN", "A widget points at a student who is not in your courses.");
+  }
+  const now = Date.now();
+  const existing = store.layouts.find((row) => row.teacherId === actor.userId && row.name === layout.name);
+  if (!existing && store.layouts.filter((row) => row.teacherId === actor.userId).length >= MAX_LAYOUTS) return fail("CONFLICT", `You can keep up to ${MAX_LAYOUTS} layouts. Delete one first.`);
+  const row = existing ?? { id: nextId("l"), teacherId: actor.userId, name: layout.name, theme: layout.theme, motion: layout.motion, items: layout.items as unknown[], lastUsedAt: now, updatedAt: new Date(now).toISOString() };
+  if (existing) Object.assign(existing, { theme: layout.theme, motion: layout.motion, items: layout.items, lastUsedAt: now, updatedAt: new Date(now).toISOString() });
+  else store.layouts.push(row);
+  return ok(layoutView(row, row.id));
 }

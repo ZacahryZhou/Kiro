@@ -6,6 +6,7 @@ import type { ProposalView } from "@/contracts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { labels } from "@/lib/ai/domain/edu/labels";
+import { LayoutPreview } from "./LayoutPreview";
 import { resultLines } from "./results";
 
 type State =
@@ -55,6 +56,7 @@ export function ProposalCard({ proposal }: { proposal: ProposalView }) {
         {open ? <Badge variant="outline">Pending</Badge> : null}
       </div>
       <p className="mb-1">{proposal.summary}</p>
+      {proposal.type === "DASHBOARD_LAYOUT" ? <LayoutPreview payload={proposal.payload} /> : null}
       {proposal.preview && proposal.preview.length > 0 ? (
         <ul className="mb-2 list-disc space-y-0.5 pl-5 text-muted-foreground">
           {proposal.preview.map((line, i) => (

@@ -147,6 +147,33 @@ function teacherFlow(text: string, messages: ChatMessage[]): Completion {
   const first = done[0]?.data;
 
   // Pending leave or different-time requests.
+  // Design the home page: pick widgets, colours and motion from the sentence; code places them.
+  if (/\b(home\s?page|home\s?screen|dashboard)\b/i.test(text) && /\b(design|set\s?up|arrange|build|make|show|layout|only|want|create)\b/i.test(text)) {
+    const picks: { type: string; studentName?: string; courseName?: string }[] = [];
+    const add = (re: RegExp, type: string) => { if (re.test(text) && !picks.some((p) => p.type === type)) picks.push({ type }); };
+    add(/\b(glance|overview|stats|numbers)\b/i, "STATS");
+    add(/\btoday\b/i, "TODAY_SESSIONS");
+    add(/\b(this week|week|schedule)\b/i, "WEEK_SCHEDULE");
+    add(/\b(month|calendar)\b/i, "MONTH_CALENDAR");
+    add(/\b(requests?|leave)\b/i, "PENDING_REQUESTS");
+    add(/\bprogress\b/i, "RECENT_PROGRESS");
+    add(/\bcourses?\b/i, "COURSE_LIST");
+    add(/\b(trend|attendance)\b/i, "ATTENDANCE_TREND");
+    for (const m of text.matchAll(/\b([A-Z][a-z]{2,})(?:'s|\u2019s)\b/g)) picks.push({ type: "STUDENT_FOCUS", studentName: m[1] });
+    if (picks.length === 0) return say("Which widgets do you want on your home page? I can show: week at a glance, today, this week, month calendar, requests, a student's focus card, attendance trend, recent progress and your courses.");
+    const theme = /\bocean\b/i.test(text) ? "ocean" : /\bsunset\b/i.test(text) ? "sunset" : /\bforest\b/i.test(text) ? "forest" : /\bviolet\b/i.test(text) ? "violet" : /\b(midnight|dark)\b/i.test(text) ? "midnight" : "kora";
+    const motion = /\b(no (?:motion|animation)|static|still)\b/i.test(text) ? "off" : /\b(lively|playful|animated|bouncy)\b/i.test(text) ? "lively" : "calm";
+    const name = /(?:called|named)\s+"?([^",.:]+?)"?(?=[:,.]|$|\s+(?:in|with|and)\b)/i.exec(text)?.[1]?.trim() ?? "My home page";
+    if (step === 0) return call("proposeDashboardLayout", { name, theme, motion, widgets: picks }, 1);
+    const data = first ?? {};
+    if (errorLine(data)) return say(`I couldn't design that: ${errorLine(data)}`);
+    if (data.status === "AMBIGUOUS") {
+      const rows = (data.candidates as { name: string; email: string }[]) ?? [];
+      return say(`More than one student matches: ${rows.map((r) => `${r.name} (${r.email})`).join("; ")}. Which one do you mean?`);
+    }
+    return say(proposalReply(data));
+  }
+
   if (/\b(leave|time|student)\s+requests?\b|\bany requests\b|\bpending requests\b/i.test(text)) {
     if (step === 0) return call("listStudentRequests", { status: "PENDING" }, 1);
     const rows = ((first?.requests as { student: string; course: string; kind: string; session: { localDate: string; localTime: string }; note?: string }[]) ?? []);

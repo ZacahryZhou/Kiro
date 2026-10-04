@@ -2,12 +2,13 @@
 // services; standalone contract checks (tsx, with no NODE_ENV) use the in-memory fake services.
 import * as read from "@/services/read";
 import * as write from "@/services/write";
+import * as dashboard from "@/services/dashboard";
 import * as fake from "./dev/fake-services";
 import * as memory from "./core/memory";
 import * as profile from "./core/profile";
 import { useRealBackend } from "./runtime";
 
-const realServices = { ...read, ...write, ...memory, ...profile };
+const realServices = { ...read, ...write, ...dashboard, ...memory, ...profile };
 const activeServices: typeof fake = useRealBackend
   ? realServices as unknown as typeof fake
   : fake;
@@ -35,3 +36,6 @@ export const listStudentRequests = activeServices.listStudentRequests;
 export const resolveStudentRequest = activeServices.resolveStudentRequest;
 export const saveProgressRecord = activeServices.saveProgressRecord;
 export const listProgressRecords = activeServices.listProgressRecords;
+export const listMyLayouts = activeServices.listMyLayouts;
+export const getActiveLayout = activeServices.getActiveLayout;
+export const saveDashboardLayout = activeServices.saveDashboardLayout;

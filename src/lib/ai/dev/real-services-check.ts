@@ -253,6 +253,23 @@ async function main() {
     check(classic.ok && afterClassic.ok && afterClassic.data.layout === null, "choosing Classic clears the active layout without deleting any");
     const layoutRemoved = await dashboard.deleteDashboardLayout(teacher, { layoutId: savedLayout.ok ? savedLayout.data.id : "" });
     check(layoutRemoved.ok && (await prisma.dashboardLayout.count({ where: { teacherId: teacher.userId } })) === 1, "a teacher deletes their own layout");
+
+    // ----- AI-designed home page, against the real database -----
+    const designTool = findTool("TEACHER", "proposeDashboardLayout");
+    if (!designTool) throw new Error("Dashboard proposal tool is unavailable.");
+    const layoutsBefore = await prisma.dashboardLayout.count({ where: { teacherId: teacher.userId } });
+    const designed = await designTool.run(teacher, { name: "AI evening", theme: "sunset", motion: "lively", widgets: [{ type: "TODAY_SESSIONS" }, { type: "STUDENT_FOCUS", studentName: "Jordan" }] });
+    check(designed.ok && designed.proposal?.type === "DASHBOARD_LAYOUT" && (await prisma.dashboardLayout.count({ where: { teacherId: teacher.userId } })) === layoutsBefore, "an AI layout proposal is stored without touching the layout table");
+    const designedConfirm = await eduProposals.confirm(teacher, designed.proposal!.id);
+    const designedRow = await prisma.dashboardLayout.findFirst({ where: { teacherId: teacher.userId, name: "AI evening" } });
+    check(designedConfirm.ok && designedConfirm.data.status === "executed" && designedRow?.theme === "sunset" && (await dashboard.getActiveLayout(teacher)).ok, "confirming the proposal saves the layout and makes it active");
+    const designedAgain = await eduProposals.confirm(teacher, designed.proposal!.id);
+    check(!designedAgain.ok || designedAgain.data.status !== "executed" || (await prisma.dashboardLayout.count({ where: { teacherId: teacher.userId, name: "AI evening" } })) === 1, "confirming twice never saves a second copy");
+    const otherConfirm = await eduProposals.confirm(otherTeacher, designed.proposal!.id);
+    check(!otherConfirm.ok, "another teacher cannot confirm this proposal");
+    const foreign = await designTool.run(otherTeacher, { name: "Mine", widgets: [{ type: "STUDENT_FOCUS", studentName: "Jordan" }] });
+    check(!foreign.ok && !foreign.proposal, "another teacher cannot pin Jordan by name");
+    await prisma.dashboardLayout.deleteMany({ where: { teacherId: teacher.userId } });
   } finally {
     // Leave the database in its pristine fixture state.
     await seedFixtures(prisma, { reset: true });
