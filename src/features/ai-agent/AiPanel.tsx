@@ -14,6 +14,7 @@ export function AiPanel({ role }: { role: Role }) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const nextId = useRef(1);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // After a reload, bring back changes the assistant prepared earlier that still wait for a decision.
   useEffect(() => {
@@ -76,13 +77,34 @@ export function AiPanel({ role }: { role: Role }) {
           <p className="text-xs text-muted-foreground">{role === "TEACHER" ? labels.teacherHint : labels.studentHint}</p>
         ) : null}
       </header>
-      <MessageList messages={messages} busy={busy} />
+      {messages.length === 0 ? (
+        <div className="flex-1 space-y-2 overflow-y-auto p-3" data-testid="suggestions">
+          {(role === "TEACHER" ? labels.teacherSuggestions : labels.studentSuggestions).map((text) => (
+            <button
+              key={text}
+              type="button"
+              onClick={() => {
+                setInput(text);
+                inputRef.current?.focus();
+              }}
+              className="block w-full rounded-xl border bg-muted/40 px-3 py-2.5 text-left text-sm transition-colors hover:border-foreground/20 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              data-testid="suggestion"
+            >
+              {text}
+            </button>
+          ))}
+          <p className="px-1 pt-1 text-xs text-muted-foreground">Click an example to put it in the box, edit it, then press Send.</p>
+        </div>
+      ) : (
+        <MessageList messages={messages} busy={busy} />
+      )}
       <form onSubmit={send} className="flex gap-2 border-t p-3">
         <label htmlFor="ai-input" className="sr-only">
           {labels.inputLabel}
         </label>
         <Input
           id="ai-input"
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={labels.inputPlaceholder}

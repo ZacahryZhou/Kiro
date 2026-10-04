@@ -25,7 +25,7 @@ export default async function Page() {
       <PageHeader
         eyebrow="Teacher workspace"
         title={`${greeting(hour)}${firstName ? `, ${firstName}` : ""}`}
-        description="Your home page. Arrange it yourself, or ask the assistant to design it: “Show today's lessons, my requests, and Jordan's progress in ocean colours.”"
+        description="Your home page. Arrange it yourself, or ask the assistant to design it: “Show today's lessons and my open requests in ocean colours.”"
       />
       <HomeDashboard
         layout={{ id: layout.id, name: layout.name, theme: layout.theme, motion: layout.motion, items: layout.items }}

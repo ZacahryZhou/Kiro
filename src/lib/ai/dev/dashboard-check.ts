@@ -2,7 +2,7 @@
 // Assertion script for AI-designed home pages (tool, packing, proposals, confirmation, isolation).
 // Run: npx tsx src/lib/ai/dev/dashboard-check.ts
 import { DashboardLayoutInput, GRID_COLUMNS, WIDGET_TYPES } from "@/contracts";
-import { packWidgets } from "@/lib/dashboard-pack";
+import { packWidgets, tidyLayout } from "@/lib/dashboard-pack";
 import { runAgent } from "../core/agent-loop";
 import { eduProposals, proposalStore } from "../domain/edu/proposal-types";
 import { findTool, getToolsForRole } from "../domain/edu/tools";
@@ -40,6 +40,16 @@ async function main() {
   check("Packing keeps widget ids unique", new Set(everything.map((item) => item.id)).size === everything.length);
   check("Packing honours a requested width", packWidgets([{ type: "COURSE_LIST", size: "full" }])[0].w === 12 && packWidgets([{ type: "COURSE_LIST", size: "small" }])[0].w === 4);
   check("The packed layout passes the contract schema", DashboardLayoutInput.safeParse({ name: "All", theme: "kora", motion: "calm", items: everything.slice(0, 12) }).success);
+
+  const messy = [
+    { id: "a", type: "STATS" as const, x: 0, y: 9, w: 12, h: 2 },
+    { id: "b", type: "TODAY_SESSIONS" as const, x: 3, y: 0, w: 5, h: 5 },
+    { id: "c", type: "COURSE_LIST" as const, x: 5, y: 1, w: 6, h: 4 },
+  ];
+  const neat = tidyLayout(messy);
+  check("Tidying keeps reading order and every widget's size", neat.map((i) => i.id).join() === "b,c,a" && neat.every((i) => { const o = messy.find((m) => m.id === i.id)!; return i.w === o.w && i.h === o.h; }), neat);
+  check("Tidying removes overlap and stays inside the grid", !neat.some((a, i) => neat.some((b, j) => i < j && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h)) && neat.every((i) => i.x + i.w <= GRID_COLUMNS));
+  check("Tidying an already tidy layout changes nothing", JSON.stringify(tidyLayout(neat)) === JSON.stringify(neat));
 
   // ----- tool -----
   check("Teachers have the layout tools; students do not", !!findTool("TEACHER", "proposeDashboardLayout") && !!findTool("TEACHER", "listMyDashboardLayouts") && !getToolsForRole("STUDENT").some((t) => /Dashboard/.test(t.name)));

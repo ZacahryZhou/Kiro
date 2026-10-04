@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import ReactGridLayout, { useContainerWidth, verticalCompactor, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
-import { Check, ChevronDown, GripHorizontal, LayoutTemplate, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, GripHorizontal, LayoutTemplate, Pencil, Plus, Trash2, Wand2, X } from "lucide-react";
 import { DASHBOARD_MOTIONS, DASHBOARD_THEMES, MAX_WIDGETS, type DashboardItem, type DashboardLayoutView, type DashboardMotion, type DashboardTheme, type WidgetType } from "@/contracts";
 import { deleteLayoutAction, previewDataAction, saveLayoutAction, switchLayoutAction } from "@/app/(teacher)/teacher/dashboard-actions";
+import { tidyLayout } from "@/lib/dashboard-pack";
 import { MOTION_LABELS, THEME_META, WIDGET_META } from "./catalog";
 import type { DashboardData } from "./types";
 import { WidgetBody, widgetTitle } from "./widgets";
@@ -119,6 +120,11 @@ function DashboardInner({ layout, layouts, data: initialData, status, setStatus 
     setDirty(true);
     setStatus(null);
     startTransition(() => void refreshData(next));
+  }
+
+  function tidy() {
+    setItems((current) => tidyLayout(current));
+    setDirty(true);
   }
 
   function removeWidget(id: string) {
@@ -315,6 +321,7 @@ function DashboardInner({ layout, layouts, data: initialData, status, setStatus 
                 </div>
               )}
             </div>
+            <button type="button" className={btn} onClick={tidy} title="Line the widgets up and close any gaps" data-testid="tidy-layout"><Wand2 className="size-4" aria-hidden />Tidy up</button>
             <div className="ml-auto flex gap-2">
               <button type="button" className={btn} onClick={cancelEdit} disabled={pending}>Cancel</button>
               <button type="button" className={btnPrimary} onClick={save} disabled={pending || name.trim() === "" || items.length === 0} data-testid="save-layout">{pending ? "Saving…" : "Save layout"}</button>

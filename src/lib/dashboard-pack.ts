@@ -43,3 +43,26 @@ export function packWidgets(requests: WidgetRequest[]): DashboardItem[] {
   }
   return items;
 }
+
+/**
+ * Tidies a hand-arranged layout: keeps reading order (top to bottom, left to right) and every
+ * widget's own size, then closes the gaps and removes any overlap.
+ */
+export function tidyLayout(items: DashboardItem[]): DashboardItem[] {
+  const ordered = [...items].sort((a, b) => a.y - b.y || a.x - b.x);
+  const tidy: DashboardItem[] = [];
+  let x = 0;
+  let y = 0;
+  let rowHeight = 0;
+  for (const item of ordered) {
+    if (x + item.w > GRID_COLUMNS) {
+      y += rowHeight;
+      x = 0;
+      rowHeight = 0;
+    }
+    tidy.push({ ...item, x, y });
+    x += item.w;
+    rowHeight = Math.max(rowHeight, item.h);
+  }
+  return tidy;
+}

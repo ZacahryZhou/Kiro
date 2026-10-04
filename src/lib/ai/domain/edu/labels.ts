@@ -1,8 +1,21 @@
 // Every piece of text shown in the AI panel lives here (the only file to change when re-skinning).
 export const labels = {
   title: "AI assistant",
-  teacherHint: "Ask about your schedule, or name every enrolled student's attendance status.",
-  studentHint: "Ask about your schedule, or about something in your course materials.",
+  teacherHint: "Take attendance, write quizzes and notes, or redesign your home page. Try one of these:",
+  teacherSuggestions: [
+    "What classes do I have this week?",
+    "Create a quiz of 8 questions for my course: 5 multiple choice, 2 true/false, 1 short answer",
+    "Create teaching notes from the materials of my course",
+    "Design my home page with today, my requests and the attendance trend in ocean colours",
+    "Do I have any leave requests?",
+  ],
+  studentHint: "Ask about your schedule, get a topic explained, or ask for leave. Try one of these:",
+  studentSuggestions: [
+    "What is on my schedule this week?",
+    "Explain the key ideas from my course notes",
+    "What do my course materials say about the first unit?",
+    "I need leave for my next session",
+  ],
   inputLabel: "Message the assistant",
   inputPlaceholder: "Type a message",
   send: "Send",

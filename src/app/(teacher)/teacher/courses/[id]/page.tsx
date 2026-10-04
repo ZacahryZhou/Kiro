@@ -84,13 +84,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       </div>
 
       <Tabs defaultValue="students" className="space-y-5">
-        <TabsList className="grid h-auto w-full grid-cols-2 sm:w-[min(100%,52rem)] sm:grid-cols-6">
-          <TabsTrigger value="students">Students</TabsTrigger>
-          <TabsTrigger value="sessions">Sessions</TabsTrigger>
-          <TabsTrigger value="materials">Materials</TabsTrigger>
-          <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
-          <TabsTrigger value="attendance">Attendance</TabsTrigger>
-          <TabsTrigger value="progress">Progress</TabsTrigger>
+        <TabsList className="max-w-full justify-start overflow-x-auto sm:w-[min(100%,52rem)]">
+          <TabsTrigger value="students" className="flex-none px-3.5 sm:flex-1">Students</TabsTrigger>
+          <TabsTrigger value="sessions" className="flex-none px-3.5 sm:flex-1">Sessions</TabsTrigger>
+          <TabsTrigger value="materials" className="flex-none px-3.5 sm:flex-1">Materials</TabsTrigger>
+          <TabsTrigger value="quizzes" className="flex-none px-3.5 sm:flex-1">Quizzes</TabsTrigger>
+          <TabsTrigger value="attendance" className="flex-none px-3.5 sm:flex-1">Attendance</TabsTrigger>
+          <TabsTrigger value="progress" className="flex-none px-3.5 sm:flex-1">Progress</TabsTrigger>
         </TabsList>
 
         <TabsContent value="students" className="space-y-4">

@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorAlert, PageHeader, SectionHeading, StatCard } from "@/components/page";
 import { requireRole } from "@/lib/auth/actor";
 import { formatLocalDate, formatLocalTime, getLocalDateKey } from "@/lib/time";
+import { listKnowledgeForStudent } from "@/services/knowledge";
+import { listStudentQuizzes } from "@/services/quiz";
 import { StudentRequestForm } from "@/components/student-request-form";
 import { getMyAccount, getStudentWorkspace, listAttendance, listStudentRequests, type SessionView } from "@/services/read";
 
@@ -26,10 +28,12 @@ export default async function Page() {
   const now = new Date();
   const timeZone = process.env.APP_TZ || "America/Vancouver";
   const to = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const [result, attendanceResult, requestsResult] = await Promise.all([
+  const [result, attendanceResult, requestsResult, quizzesResult, notesResult] = await Promise.all([
     getStudentWorkspace(actor, { from: now.toISOString(), to: to.toISOString() }),
     listAttendance(actor, {}),
     listStudentRequests(actor, {}),
+    listStudentQuizzes(actor),
+    listKnowledgeForStudent(actor),
   ]);
   const requests = requestsResult.ok ? requestsResult.data.requests : [];
   const pendingSessions = new Set(requests.filter((request) => request.status === "PENDING").map((request) => request.sessionId));
@@ -84,6 +88,16 @@ export default async function Page() {
                       </div>
                       <p className="mt-2 text-sm text-muted-foreground">{course.subject}</p>
                       <p className="mt-4 text-sm">Teacher: {course.teacherName}</p>
+                      {(() => {
+                        const quizzes = quizzesResult.ok ? quizzesResult.data.quizzes.filter((quiz) => quiz.courseId === course.id).length : 0;
+                        const notes = notesResult.ok ? notesResult.data.entries.filter((note) => note.courseId === course.id || (!note.courseId && note.teacherName === course.teacherName)).length : 0;
+                        return quizzes + notes > 0 ? (
+                          <p className="mt-3 flex flex-wrap gap-1.5">
+                            {notes > 0 && <Badge variant="secondary">{notes} study {notes === 1 ? "note" : "notes"}</Badge>}
+                            {quizzes > 0 && <Badge variant="secondary">{quizzes} {quizzes === 1 ? "quiz" : "quizzes"} to practise</Badge>}
+                          </p>
+                        ) : null;
+                      })()}
                       {course.location && <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground"><MapPin className="size-3.5" aria-hidden />{course.location}</p>}
                     </Link>
                   </li>
