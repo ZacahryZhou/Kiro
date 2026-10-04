@@ -1286,6 +1286,105 @@ const proposeAddStudent = defineTool({
   },
 });
 
+const listStudentRequests = defineTool({
+  name: "listStudentRequests",
+  description:
+    "List leave and different-time requests. A teacher sees the requests of students in their own courses; a student sees only their own. " +
+    "Answering a request is done by the teacher in the app, not by you.",
+  parameters: obj({ status: { type: "string", enum: ["PENDING", "APPROVED", "DECLINED"], description: "Only requests with this status." } }),
+  schema: z.object({ status: z.enum(["PENDING", "APPROVED", "DECLINED"]).optional() }),
+  async run(actor, args) {
+    const result = await services.listStudentRequests(actor, args);
+    if (!result.ok) return serviceFailure(result.error);
+    return succeed({
+      total: result.data.requests.length,
+      requests: result.data.requests.slice(0, 25).map((request) => ({
+        requestId: request.id,
+        ...(actor.role === "TEACHER" ? { student: request.studentName } : {}),
+        course: request.courseName,
+        kind: request.kind,
+        status: request.status,
+        session: pick(describeInstant(request.sessionStartAt)),
+        ...(request.preferredStartAt ? { preferred: pick(describeInstant(request.preferredStartAt)) } : {}),
+        ...(request.note ? { note: request.note } : {}),
+      })),
+    });
+  },
+});
+
+const proposeStudentRequest = defineTool({
+  name: "proposeStudentRequest",
+  description:
+    "Prepare a request to the teacher for leave from, or a different time for, one of the student's own upcoming sessions. This does NOT send anything: the student must confirm. " +
+    "Find the session with getStudentWorkspace first and pass its sessionId. The request is only a note to the teacher; it never changes the schedule or attendance. " +
+    "Give a preferred date and time only for a different-time request.",
+  parameters: obj(
+    {
+      sessionId: { type: "string", description: "A session ID from getStudentWorkspace." },
+      kind: { type: "string", enum: ["LEAVE", "RESCHEDULE"] },
+      note: { type: "string", description: "A short reason in the student's own words (at most 300 characters)." },
+      preferredDate: { type: "string", description: "Preferred local date as YYYY-MM-DD (different-time requests only)." },
+      preferredTime: { type: "string", description: `Preferred local time as 24-hour HH:mm in ${APP_TZ} (different-time requests only).` },
+    },
+    ["sessionId", "kind"],
+  ),
+  schema: z.object({
+    sessionId: id,
+    kind: z.enum(["LEAVE", "RESCHEDULE"]),
+    note: z.string().trim().max(300).optional(),
+    preferredDate: dateText.optional(),
+    preferredTime: timeText.optional(),
+  }),
+  async run(actor, args) {
+    if (actor.role !== "STUDENT") return failed("FORBIDDEN", "Only students can send requests to their teacher.");
+    if (args.kind === "LEAVE" && (args.preferredDate || args.preferredTime)) {
+      return failed("INVALID_ARGUMENTS", "A leave request has no preferred time.");
+    }
+    let preferredStartAt: string | undefined;
+    if (args.preferredDate || args.preferredTime) {
+      if (!args.preferredDate || !args.preferredTime) return failed("INVALID_ARGUMENTS", "Give both a preferred date and a preferred time, or neither.");
+      const day = parseDateOnly(args.preferredDate)!;
+      const clock = parseTimeOnly(args.preferredTime)!;
+      preferredStartAt = zonedTimeToUtc({ ...day, ...clock }).toISOString();
+      if (Date.parse(preferredStartAt) <= Date.now()) return failed("VALIDATION", "The preferred time is in the past. Ask the student for a future time.");
+    }
+    const now = Date.now();
+    const workspace = await services.getStudentWorkspace(actor, {
+      from: new Date(now).toISOString(),
+      to: new Date(now + 1095 * 86_400_000).toISOString(),
+    });
+    if (!workspace.ok) return serviceFailure(workspace.error);
+    const session = workspace.data.sessions.find((x) => x.id === args.sessionId);
+    if (!session) return failed("NOT_FOUND", "That session was not found among your upcoming sessions.");
+    if (session.status !== "SCHEDULED" && session.status !== "RESCHEDULED") return failed("CONFLICT", "Only upcoming sessions can be requested.");
+    const existing = await services.listStudentRequests(actor, { status: "PENDING" });
+    if (existing.ok && existing.data.requests.some((r) => r.sessionId === session.id)) {
+      return succeed({ status: "ALREADY_REQUESTED", note: "You already have a pending request for this session. Nothing to propose." });
+    }
+
+    const when = describeInstant(session.startAt);
+    const summary = `${args.kind === "LEAVE" ? "Leave request" : "Different-time request"}: ${session.courseName} on ${when.weekday} ${when.localDate} ${when.localTime}`;
+    const created = await eduProposals.create({
+      actor,
+      type: "STUDENT_REQUEST",
+      payload: { sessionId: session.id, kind: args.kind, ...(args.note ? { note: args.note } : {}), ...(preferredStartAt ? { preferredStartAt } : {}) },
+      courseId: session.courseId,
+      summary,
+    });
+    if (!created.ok) return serviceFailure(created.error);
+    return {
+      ok: true,
+      proposal: created.data,
+      content: JSON.stringify({
+        status: "PENDING_CONFIRMATION",
+        proposalId: created.data.id,
+        summary,
+        note: "Nothing has been sent yet. Tell the student to review this and confirm. The teacher decides; the schedule does not change by itself.",
+      }),
+    };
+  },
+});
+
 // ---------- tool sets ----------
 
 const TEACHER_TOOLS: Tool[] = [
@@ -1300,6 +1399,7 @@ const TEACHER_TOOLS: Tool[] = [
   getAttendanceTrends,
   getMyProfile,
   findMyStudent,
+  listStudentRequests,
   proposeMarkAttendance,
   proposeCreateCourse,
   proposeCreateSessions,
@@ -1310,8 +1410,8 @@ const TEACHER_TOOLS: Tool[] = [
   proposeLessonPrep,
 ];
 
-/** Students never get proposal, write or memory tools. */
-const STUDENT_TOOLS: Tool[] = [getStudentWorkspace, answerFromCourseMaterials, getMyProfile];
+/** Students get no write or memory tools. The one proposal they can make is a leave or different-time request to their own teacher. */
+const STUDENT_TOOLS: Tool[] = [getStudentWorkspace, answerFromCourseMaterials, getMyProfile, listStudentRequests, proposeStudentRequest];
 
 export function getToolsForRole(role: Role): Tool[] {
   return role === "TEACHER" ? TEACHER_TOOLS : STUDENT_TOOLS;

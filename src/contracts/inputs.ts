@@ -78,6 +78,7 @@ export const AddStudentNoteInput = z.object({
   kind: z.enum(["AVAILABILITY", "NOTE"]),
   content: z.string().min(1).max(500),
 });
+export const ResolveStudentRequestInput = z.object({ requestId: id, decision: z.enum(["APPROVED", "DECLINED"]) });
 export const StudentRequestInput = z.object({
   sessionId: id,
   kind: z.enum(["LEAVE", "RESCHEDULE"]),
@@ -97,3 +98,4 @@ export type CheckConflictsInput = z.infer<typeof CheckConflictsInput>;
 export type SaveProgressInput = z.infer<typeof SaveProgressInput>;
 export type AddStudentNoteInput = z.infer<typeof AddStudentNoteInput>;
 export type StudentRequestInput = z.infer<typeof StudentRequestInput>;
+export type ResolveStudentRequestInput = z.infer<typeof ResolveStudentRequestInput>;

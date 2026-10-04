@@ -71,7 +71,7 @@ async function main() {
   // ----- tool sets -----
   resetStore();
   const studentTools = getToolsForRole("STUDENT").map((t) => t.name);
-  check("Students have no teacher, proposal or memory tools", studentTools.every((n) => !/^(propose|create|add|confirm|list|check|getTeacher)/.test(n) && !/memory/i.test(n)), studentTools);
+  check("Students have no teacher, write or memory tools (only a request to their own teacher)", studentTools.every((n) => (n === "proposeStudentRequest" || n === "listStudentRequests" || !/^(propose|create|add|confirm|list|check|getTeacher)/.test(n)) && !/memory/i.test(n)), studentTools);
   check("Teachers cannot use the student materials tool", findTool("TEACHER", "answerFromCourseMaterials") === undefined);
   check("Students cannot use teacher tools", findTool("STUDENT", "listMyStudents") === undefined && findTool("STUDENT", "proposeMarkAttendance") === undefined);
 

@@ -120,6 +120,53 @@ async function main() {
     check(marked.length === 2 && deductions.length === 1 && deductions[0].studentId === jordan.userId, "present is deducted once and leave is not charged");
     await eduProposals.confirm(teacher, proposedAttendance.proposal!.id);
     check(await prisma.attendance.count({ where: { sessionId: smokeSessionId } }) === 2 && await prisma.deduction.count({ where: { sessionId: smokeSessionId } }) === 1, "reconfirming the database-backed attendance proposal creates no duplicate records");
+
+    // ----- student leave requests -----
+    const upcoming = await services.getStudentWorkspace(jordan, { from: new Date().toISOString(), to: new Date(Date.now() + 30 * 86_400_000).toISOString() });
+    const mathSession = upcoming.ok ? upcoming.data.sessions.find((x) => x.courseId === course.id) : undefined;
+    const physicsSession = upcoming.ok ? upcoming.data.sessions.find((x) => x.courseId !== course.id) : undefined;
+    if (!mathSession || !physicsSession) throw new Error("The fixtures need upcoming sessions in two of Jordan's courses.");
+    const sam: Actor = { userId: samUser.id, role: "STUDENT" };
+    const attendanceBefore = await prisma.attendance.count();
+    const startBefore = (await prisma.session.findUniqueOrThrow({ where: { id: mathSession.id } })).startAt.toISOString();
+
+    const leave = await services.submitStudentRequest(jordan, { sessionId: mathSession.id, kind: "LEAVE", note: "Family trip" });
+    check(leave.ok && leave.data.status === "PENDING" && leave.data.kind === "LEAVE", "a student can submit a pending leave request for an upcoming session");
+    check(await prisma.attendance.count() === attendanceBefore && (await prisma.session.findUniqueOrThrow({ where: { id: mathSession.id } })).startAt.toISOString() === startBefore, "a request changes neither attendance nor the schedule");
+    const duplicate = await services.submitStudentRequest(jordan, { sessionId: mathSession.id, kind: "LEAVE" });
+    check(!duplicate.ok && duplicate.error.code === "CONFLICT", "a second pending request for the same session is refused");
+    const otherCourse = await prisma.session.findFirstOrThrow({ where: { course: { teacherId: otherTeacher.userId } } });
+    const notMine = await services.submitStudentRequest(jordan, { sessionId: otherCourse.id, kind: "LEAVE" });
+    check(!notMine.ok && notMine.error.code === "FORBIDDEN", "a student cannot request a session of a course they are not in");
+    const samPhysics = await services.submitStudentRequest(sam, { sessionId: physicsSession.id, kind: "LEAVE" });
+    check(!samPhysics.ok && samPhysics.error.code === "FORBIDDEN", "a student cannot request a session of another student's course");
+    const asTeacher = await services.submitStudentRequest(teacher, { sessionId: mathSession.id, kind: "LEAVE" });
+    check(!asTeacher.ok && asTeacher.error.code === "FORBIDDEN", "a teacher cannot submit student requests");
+    const badLeave = await services.submitStudentRequest(jordan, { sessionId: physicsSession.id, kind: "LEAVE", preferredStartAt: new Date(Date.now() + 86_400_000).toISOString() });
+    check(!badLeave.ok && badLeave.error.code === "VALIDATION", "a leave request cannot carry a preferred time");
+    const pastSession = await prisma.session.findFirstOrThrow({ where: { courseId: course.id, startAt: { lt: new Date() } } });
+    const pastRequest = await services.submitStudentRequest(jordan, { sessionId: pastSession.id, kind: "LEAVE" });
+    check(!pastRequest.ok && pastRequest.error.code === "CONFLICT", "a session that already happened cannot be requested");
+    const racing = await Promise.all([1, 2, 3].map(() => services.submitStudentRequest(jordan, { sessionId: physicsSession.id, kind: "RESCHEDULE", preferredStartAt: new Date(Date.now() + 5 * 86_400_000).toISOString() })));
+    check(racing.filter((r) => r.ok).length === 1 && await prisma.studentRequest.count({ where: { sessionId: physicsSession.id, status: "PENDING" } }) === 1, "parallel submissions leave exactly one pending request");
+
+    const alexList = await services.listStudentRequests(teacher, { status: "PENDING" });
+    check(alexList.ok && alexList.data.requests.length === 2 && alexList.data.requests.every((r) => r.studentName === "Jordan Lee"), "the course teacher sees the pending requests");
+    const taylorList = await services.listStudentRequests(otherTeacher, {});
+    check(taylorList.ok && taylorList.data.requests.length === 0, "another teacher sees none of them");
+    const samList = await services.listStudentRequests(sam, {});
+    const jordanList = await services.listStudentRequests(jordan, {});
+    check(samList.ok && samList.data.requests.length === 0 && jordanList.ok && jordanList.data.requests.length === 2, "a student sees only their own requests");
+
+    const requestId = leave.ok ? leave.data.id : "";
+    const taylorResolve = await services.resolveStudentRequest(otherTeacher, { requestId, decision: "APPROVED" });
+    const jordanResolve = await services.resolveStudentRequest(jordan, { requestId, decision: "APPROVED" });
+    check(!taylorResolve.ok && taylorResolve.error.code === "FORBIDDEN" && !jordanResolve.ok && jordanResolve.error.code === "FORBIDDEN", "only the course teacher can answer a request");
+    const approved = await services.resolveStudentRequest(teacher, { requestId, decision: "APPROVED" });
+    check(approved.ok && approved.data.status === "APPROVED" && !!approved.data.resolvedAt, "the teacher approves a request");
+    const answeredAgain = await services.resolveStudentRequest(teacher, { requestId, decision: "DECLINED" });
+    check(!answeredAgain.ok && answeredAgain.error.code === "CONFLICT", "an answered request cannot be answered again");
+    check(await prisma.attendance.count() === attendanceBefore && (await prisma.session.findUniqueOrThrow({ where: { id: mathSession.id } })).startAt.toISOString() === startBefore, "approving a request still changes neither attendance nor the schedule");
   } finally {
     // Leave the database in its pristine fixture state.
     await seedFixtures(prisma, { reset: true });

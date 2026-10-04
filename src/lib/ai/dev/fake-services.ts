@@ -8,6 +8,8 @@ import {
   CreateSessionsInput,
   CreateUnitInput,
   RescheduleInput,
+  ResolveStudentRequestInput,
+  StudentRequestInput,
   err,
   ok,
   type Actor,
@@ -18,6 +20,7 @@ import {
   type ErrorCode,
   type Result,
   type SessionView,
+  type StudentRequestView,
   type StudentView,
   type UnitView,
 } from "@/contracts";
@@ -736,4 +739,92 @@ export async function getMyProfile(
   const user = store.users.find((u) => u.id === actor.userId);
   if (!user) return fail("NOT_FOUND", "Account not found.");
   return ok({ profile: { name: user.name, email: user.email, role: user.role } });
+}
+
+// ---------- student requests ----------
+
+function requestView(request: (typeof store.requests)[number]): StudentRequestView | undefined {
+  const session = store.sessions.find((s) => s.id === request.sessionId);
+  const course = session && store.courses.find((c) => c.id === session.courseId);
+  const student = store.users.find((u) => u.id === request.studentId);
+  if (!session || !course || !student) return undefined;
+  return {
+    id: request.id,
+    sessionId: request.sessionId,
+    courseId: course.id,
+    courseName: course.name,
+    sessionStartAt: session.startAt,
+    studentId: student.id,
+    studentName: student.name,
+    kind: request.kind,
+    ...(request.note ? { note: request.note } : {}),
+    ...(request.preferredStartAt ? { preferredStartAt: request.preferredStartAt } : {}),
+    status: request.status,
+    createdAt: request.createdAt,
+    ...(request.resolvedAt ? { resolvedAt: request.resolvedAt } : {}),
+  };
+}
+
+export async function submitStudentRequest(
+  actor: Actor,
+  input: z.input<typeof StudentRequestInput>,
+): Promise<Result<StudentRequestView>> {
+  if (actor.role !== "STUDENT") return fail("FORBIDDEN", "Only students can submit requests.");
+  const parsed = StudentRequestInput.safeParse(input);
+  if (!parsed.success) return fail("VALIDATION", validationMessage);
+  const { sessionId, kind, note, preferredStartAt } = parsed.data;
+  if (kind === "LEAVE" && preferredStartAt) return fail("VALIDATION", "A leave request does not take a preferred time.");
+  if (preferredStartAt && Date.parse(preferredStartAt) <= Date.now()) return fail("VALIDATION", "The preferred time must be in the future.");
+  const session = store.sessions.find((s) => s.id === sessionId);
+  const enrolled = session && store.enrollments.some((e) => e.courseId === session.courseId && e.studentId === actor.userId);
+  if (!session || !enrolled) return fail("FORBIDDEN", "You do not have access to this session.");
+  if (session.status !== "SCHEDULED" && session.status !== "RESCHEDULED") return fail("CONFLICT", "Only upcoming sessions can be requested.");
+  if (Date.parse(session.startAt) <= Date.now()) return fail("CONFLICT", "This session has already started.");
+  if (store.requests.some((r) => r.sessionId === sessionId && r.studentId === actor.userId && r.status === "PENDING")) {
+    return fail("CONFLICT", "You already have a pending request for this session.");
+  }
+  const created = {
+    id: nextId("req"),
+    sessionId,
+    studentId: actor.userId,
+    kind,
+    ...(note?.trim() ? { note: note.trim() } : {}),
+    ...(preferredStartAt ? { preferredStartAt } : {}),
+    status: "PENDING" as const,
+    createdAt: new Date().toISOString(),
+  };
+  store.requests.push(created);
+  return ok(requestView(created)!);
+}
+
+export async function listStudentRequests(
+  actor: Actor,
+  input: { status?: "PENDING" | "APPROVED" | "DECLINED" } = {},
+): Promise<Result<{ requests: StudentRequestView[] }>> {
+  const rows = store.requests.filter((request) => {
+    if (input.status && request.status !== input.status) return false;
+    if (actor.role === "STUDENT") return request.studentId === actor.userId;
+    const session = store.sessions.find((s) => s.id === request.sessionId);
+    const course = session && store.courses.find((c) => c.id === session.courseId);
+    return course?.teacherId === actor.userId;
+  });
+  return ok({ requests: rows.map(requestView).filter((v): v is StudentRequestView => v !== undefined).reverse() });
+}
+
+export async function resolveStudentRequest(
+  actor: Actor,
+  input: z.input<typeof ResolveStudentRequestInput>,
+): Promise<Result<StudentRequestView>> {
+  if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers can respond to requests.");
+  const parsed = ResolveStudentRequestInput.safeParse(input);
+  if (!parsed.success) return fail("VALIDATION", validationMessage);
+  const request = store.requests.find((r) => r.id === parsed.data.requestId);
+  if (!request) return fail("NOT_FOUND", "Request not found.");
+  const session = store.sessions.find((s) => s.id === request.sessionId);
+  const course = session && store.courses.find((c) => c.id === session.courseId);
+  if (!course || course.teacherId !== actor.userId) return fail("FORBIDDEN", "You do not have access to this request.");
+  if (request.status !== "PENDING") return fail("CONFLICT", "This request has already been answered.");
+  request.status = parsed.data.decision;
+  request.resolvedAt = new Date().toISOString();
+  return ok(requestView(request)!);
 }

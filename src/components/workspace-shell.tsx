@@ -3,6 +3,7 @@ import { LogOut } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { logoutAction } from "@/lib/auth/actions";
 import { currentUserCanViewConsole } from "@/lib/ai/trace/viewer";
+import { listStudentRequests } from "@/services/read";
 import { Brand } from "@/components/brand";
 import { Initial } from "@/components/page";
 import { MobileNav, SidebarNav, type NavItem } from "@/components/sidebar-nav";
@@ -18,7 +19,12 @@ const STUDENT_NAV: NavItem[] = [{ href: "/student", label: "My learning", icon: 
 export async function WorkspaceShell({ title, role, children }: { title: string; role: "TEACHER" | "STUDENT"; children: ReactNode }) {
   const session = await auth();
   const name = session?.user?.name?.trim() || "Your account";
-  const items = [...(role === "TEACHER" ? TEACHER_NAV : STUDENT_NAV)];
+  const items: NavItem[] = [...(role === "TEACHER" ? TEACHER_NAV : STUDENT_NAV)];
+  if (role === "TEACHER") {
+    const actor = { userId: session?.user?.id ?? "", role } as const;
+    const pending = await listStudentRequests(actor, { status: "PENDING" });
+    items.push({ href: "/teacher/requests", label: "Requests", icon: "requests", badge: pending.ok ? pending.data.requests.length : 0 });
+  }
   if (await currentUserCanViewConsole()) items.push({ href: "/admin/agent", label: "Agent console", icon: "agent" });
   const roleLabel = role === "TEACHER" ? "Teacher" : "Student";
 

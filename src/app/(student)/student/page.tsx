@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorAlert, PageHeader, SectionHeading, StatCard } from "@/components/page";
 import { requireRole } from "@/lib/auth/actor";
 import { formatLocalDate, formatLocalTime, getLocalDateKey } from "@/lib/time";
-import { getStudentWorkspace, listAttendance, type SessionView } from "@/services/read";
+import { StudentRequestForm } from "@/components/student-request-form";
+import { getStudentWorkspace, listAttendance, listStudentRequests, type SessionView } from "@/services/read";
 
 const statusLabels = {
   SCHEDULED: "Scheduled",
@@ -26,10 +27,13 @@ export default async function Page() {
   const now = new Date();
   const timeZone = process.env.APP_TZ || "America/Vancouver";
   const to = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const [result, attendanceResult] = await Promise.all([
+  const [result, attendanceResult, requestsResult] = await Promise.all([
     getStudentWorkspace(actor, { from: now.toISOString(), to: to.toISOString() }),
     listAttendance(actor, {}),
+    listStudentRequests(actor, {}),
   ]);
+  const requests = requestsResult.ok ? requestsResult.data.requests : [];
+  const pendingSessions = new Set(requests.filter((request) => request.status === "PENDING").map((request) => request.sessionId));
 
   const sessionsByDate = new Map<string, SessionView[]>();
   if (result.ok) {
@@ -118,6 +122,12 @@ export default async function Page() {
                             </Badge>
                             {session.location && <span className="w-full text-sm text-muted-foreground sm:pl-24">{session.location}</span>}
                           </Link>
+                          {(session.status === "SCHEDULED" || session.status === "RESCHEDULED") &&
+                            (pendingSessions.has(session.id) ? (
+                              <p className="border-t bg-muted/30 px-5 py-2.5 text-sm text-muted-foreground">Request sent. Waiting for your teacher.</p>
+                            ) : (
+                              <StudentRequestForm sessionId={session.id} />
+                            ))}
                         </li>
                       ))}
                     </ul>
@@ -126,6 +136,27 @@ export default async function Page() {
               </div>
             )}
           </section>
+
+          {requests.length > 0 && (
+            <section aria-labelledby="requests-heading" className="space-y-4">
+              <SectionHeading id="requests-heading" title="My requests" description="Leave and different-time requests you sent to your teachers." />
+              <ul className="kora-card divide-y overflow-hidden">
+                {requests.map((request) => (
+                  <li key={request.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                    <div>
+                      <p className="font-medium">{request.courseName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {request.kind === "LEAVE" ? "Leave" : "Different time"} · {formatLocalDate(new Date(request.sessionStartAt), timeZone)}, {formatLocalTime(new Date(request.sessionStartAt), timeZone)}
+                      </p>
+                    </div>
+                    <Badge variant={request.status === "PENDING" ? "outline" : request.status === "APPROVED" ? "secondary" : "destructive"}>
+                      {request.status === "PENDING" ? "Pending" : request.status === "APPROVED" ? "Approved" : "Declined"}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section aria-labelledby="attendance-heading" className="space-y-4">
             <SectionHeading id="attendance-heading" title="Attendance history" description="Your attendance for completed sessions." />

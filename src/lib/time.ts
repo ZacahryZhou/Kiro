@@ -97,3 +97,20 @@ export function formatLocalTime(date: Date, timeZone = process.env.APP_TZ || "Am
     hourCycle: "h12",
   }).format(date);
 }
+
+/** Converts a local date (YYYY-MM-DD) and time (HH:mm) in `timeZone` to a UTC ISO string, or null if either is invalid. */
+export function localDateTimeToUtcIso(date: string, time: string, timeZone = process.env.APP_TZ || "America/Vancouver"): string | null {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+  if (!dateMatch || !timeMatch) return null;
+  const [year, month, day] = dateMatch.slice(1).map(Number);
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return null;
+  const wallClock = Date.UTC(year, month - 1, day, Number(timeMatch[1]), Number(timeMatch[2]));
+  let utc = wallClock;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const local = getZonedParts(new Date(utc), timeZone);
+    utc = wallClock - (Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second) - utc);
+  }
+  return new Date(utc).toISOString();
+}

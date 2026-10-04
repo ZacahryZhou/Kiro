@@ -52,6 +52,7 @@ export async function resetFixtures(prisma: PrismaClient): Promise<void> {
     prisma.deduction.deleteMany({ where: { courseId: { in: courseIds } } }),
     prisma.attendance.deleteMany({ where: { session: { courseId: { in: courseIds } } } }),
     prisma.sessionChange.deleteMany({ where: { session: { courseId: { in: courseIds } } } }),
+    prisma.studentRequest.deleteMany({ where: { OR: [{ session: { courseId: { in: courseIds } } }, { studentId: { in: userIds } }] } }),
     prisma.session.deleteMany({ where: { courseId: { in: courseIds } } }),
     prisma.material.deleteMany({ where: { unit: { courseId: { in: courseIds } } } }),
     prisma.courseUnit.deleteMany({ where: { courseId: { in: courseIds } } }),

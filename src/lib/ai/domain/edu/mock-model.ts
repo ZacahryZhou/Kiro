@@ -146,6 +146,14 @@ function teacherFlow(text: string, messages: ChatMessage[]): Completion {
   const step = done.length;
   const first = done[0]?.data;
 
+  // Pending leave or different-time requests.
+  if (/\b(leave|time|student)\s+requests?\b|\bany requests\b|\bpending requests\b/i.test(text)) {
+    if (step === 0) return call("listStudentRequests", { status: "PENDING" }, 1);
+    const rows = ((first?.requests as { student: string; course: string; kind: string; session: { localDate: string; localTime: string }; note?: string }[]) ?? []);
+    if (rows.length === 0) return say("You have no pending student requests.");
+    return say(`You have ${rows.length} pending ${rows.length === 1 ? "request" : "requests"}: ${rows.map((r) => `${r.student} asked for ${r.kind === "LEAVE" ? "leave" : "a different time"} for ${r.course} on ${r.session.localDate} at ${r.session.localTime}${r.note ? ` ("${r.note}")` : ""}`).join("; ")}. Answer them on the Requests page.`);
+  }
+
   // Attendance: schedule today -> roster -> proposal.
   if (statusOf(text) && /\b(came|attended|present|absent|leave|missed|skipped|showed|here)\b/i.test(text)) {
     if (step === 0) return call("getTeacherSchedule", { when: "today" }, 1);
@@ -355,6 +363,32 @@ function studentFlow(text: string, messages: ChatMessage[]): Completion {
     if (!p?.name) return say("I couldn't load your account details.");
     const lines = (p.courses ?? []).map((c) => `${c.name} with ${c.teacher}`);
     return say(`You're signed in as ${p.name}, a student${lines.length > 0 ? `, in ${lines.join("; ")}` : ""}.`);
+  }
+
+  // Leave request for one upcoming session.
+  if (/\b(need|want|request|ask for|get|take)\b[^.]*\bleave\b|\b(can't|cannot|won't be able to) (make|attend|come)\b|\bday off\b/i.test(text)) {
+    const today = new Date();
+    const range = /\btomorrow\b/i.test(text)
+      ? { when: "tomorrow" }
+      : /\bnext\b/i.test(text)
+        ? { when: "next_week" }
+        : /\bthis\b/i.test(text)
+          ? { when: "this_week" }
+          : { startDate: today.toISOString().slice(0, 10), endDate: new Date(today.getTime() + 14 * 86_400_000).toISOString().slice(0, 10) };
+    const weekday = WEEKDAYS.find(([name]) => new RegExp(`\\b${name}\\b`, "i").test(text))?.[0];
+    if (done.length === 0) return call("getStudentWorkspace", range, 1);
+    const open = ((first?.sessions as { sessionId: string; weekday: string; localDate: string; localTime: string; courseName: string; status: string }[]) ?? [])
+      .filter((x) => x.status === "SCHEDULED" || x.status === "RESCHEDULED");
+    const byDay = weekday ? open.filter((x) => x.weekday.slice(0, 3).toLowerCase() === weekday.slice(0, 3)) : open;
+    const byName = byDay.filter((x) => words(text).some((w) => w.length > 3 && x.courseName.toLowerCase().includes(w)));
+    const picks = byName.length > 0 ? byName : byDay;
+    if (picks.length === 0) return say("I don't see an upcoming session on that day. Which session do you mean?");
+    if (picks.length > 1) return say(`Which session do you mean: ${picks.map((x) => `${x.courseName} on ${x.weekday} ${x.localDate} at ${x.localTime}`).join(" or ")}?`);
+    if (done.length === 1) return call("proposeStudentRequest", { sessionId: picks[0].sessionId, kind: "LEAVE", note: text.slice(0, 300) }, 2);
+    const data = done[1].data;
+    if (errorLine(data)) return say(`I couldn't do that: ${errorLine(data)}`);
+    if (data.status === "ALREADY_REQUESTED") return say(String(data.note));
+    return say(`I've prepared this request: ${String(data.summary)}. It is only a note to your teacher and is sent once you confirm it below. Your teacher decides.`);
   }
 
   if (/\b(schedule|classes|sessions|lessons|attendance|calendar|courses)\b/i.test(text) && !/\b(define|explain|how do|formula)\b/i.test(text)) {

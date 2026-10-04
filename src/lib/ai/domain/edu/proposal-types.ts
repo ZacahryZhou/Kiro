@@ -198,7 +198,30 @@ async function executeReschedule(
   return err("CONFLICT", `The new time conflicts with ${lines.join("; ")}. The session was not moved.`, result.error.details);
 }
 
+async function describeStudentRequest(actor: Actor, payload: ProposalPayloads["STUDENT_REQUEST"]): Promise<string[]> {
+  const now = Date.now();
+  const workspace = await services.getStudentWorkspace(actor, {
+    from: new Date(now).toISOString(),
+    to: new Date(now + 1095 * 86_400_000).toISOString(),
+  });
+  const session = workspace.ok ? workspace.data.sessions.find((x) => x.id === payload.sessionId) : undefined;
+  const when = session ? describeInstant(session.startAt) : undefined;
+  const preferred = payload.preferredStartAt ? describeInstant(payload.preferredStartAt) : undefined;
+  return [
+    payload.kind === "LEAVE" ? "Request leave" : "Request a different time",
+    session && when ? `${session.courseName}, ${when.weekday} ${when.localDate} ${when.localTime}` : "One of your upcoming sessions",
+    ...(preferred ? [`Preferred time: ${preferred.weekday} ${preferred.localDate} ${preferred.localTime}`] : []),
+    ...(payload.note ? [`Note: ${payload.note}`] : []),
+    "This only sends a note to your teacher. Your schedule does not change unless your teacher changes it.",
+  ];
+}
+
 export const eduProposalHandlers: ProposalRegistry = {
+  STUDENT_REQUEST: {
+    schema: ProposalPayloadSchemas.STUDENT_REQUEST,
+    execute: (actor, payload) => services.submitStudentRequest(actor, payload),
+    describe: describeStudentRequest,
+  },
   RESCHEDULE: {
     schema: ProposalPayloadSchemas.RESCHEDULE,
     execute: executeReschedule,

@@ -58,6 +58,17 @@ enum ProposalStatus {
   discarded
 }
 
+enum StudentRequestKind {
+  LEAVE
+  RESCHEDULE
+}
+
+enum StudentRequestStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
 enum ProposalType {
   CREATE_COURSE
   CREATE_SESSIONS
@@ -80,13 +91,15 @@ model User {
   courses          Course[]
   enrollments      Enrollment[]
   sessionChanges   SessionChange[]
-  attendance       Attendance[]    @relation("StudentAttendance")
-  markedAttendance Attendance[]    @relation("MarkedAttendance")
+  attendance       Attendance[]     @relation("StudentAttendance")
+  markedAttendance Attendance[]     @relation("MarkedAttendance")
   deductions       Deduction[]
   agentRuns        AgentRun[]
   agentProposals   AgentProposal[]
-  studentMemories  AgentMemory[]   @relation("StudentMemories")
-  teacherMemories  AgentMemory[]   @relation("TeacherMemories")
+  studentMemories  AgentMemory[]    @relation("StudentMemories")
+  teacherMemories  AgentMemory[]    @relation("TeacherMemories")
+  studentRequests  StudentRequest[] @relation("RequestStudent")
+  resolvedRequests StudentRequest[] @relation("RequestResolver")
 }
 
 model Course {
@@ -128,10 +141,11 @@ model Session {
   status          SessionStatus @default(SCHEDULED)
   originalStartAt DateTime?     @db.Timestamptz(3)
 
-  course     Course          @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  changes    SessionChange[]
-  attendance Attendance[]
-  deductions Deduction[]
+  course          Course           @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  changes         SessionChange[]
+  attendance      Attendance[]
+  deductions      Deduction[]
+  studentRequests StudentRequest[]
 
   @@index([courseId, startAt])
 }
@@ -147,6 +161,26 @@ model SessionChange {
   createdAt   DateTime      @default(now()) @db.Timestamptz(3)
   session     Session       @relation(fields: [sessionId], references: [id], onDelete: Restrict)
   changedBy   User          @relation(fields: [changedById], references: [id], onDelete: Restrict)
+}
+
+/// A student's leave or reschedule request. It is only a pending record: approving it never edits the schedule or attendance.
+model StudentRequest {
+  id               String               @id @default(cuid())
+  sessionId        String
+  studentId        String
+  kind             StudentRequestKind
+  note             String?
+  preferredStartAt DateTime?            @db.Timestamptz(3)
+  status           StudentRequestStatus @default(PENDING)
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  resolvedAt       DateTime?            @db.Timestamptz(3)
+  resolvedById     String?
+  session          Session              @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  student          User                 @relation("RequestStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  resolvedBy       User?                @relation("RequestResolver", fields: [resolvedById], references: [id], onDelete: Restrict)
+
+  @@index([studentId, createdAt])
+  @@index([sessionId, status])
 }
 
 model Attendance {

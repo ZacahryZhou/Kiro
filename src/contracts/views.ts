@@ -62,3 +62,20 @@ export type ConflictView = {
   durationMin: number;
   withStudentId?: string;
 };
+
+/** A student's leave or reschedule request. Approving or declining it never changes the schedule or attendance. */
+export type StudentRequestView = {
+  id: string;
+  sessionId: string;
+  courseId: string;
+  courseName: string;
+  sessionStartAt: string;
+  studentId: string;
+  studentName: string;
+  kind: "LEAVE" | "RESCHEDULE";
+  note?: string;
+  preferredStartAt?: string;
+  status: "PENDING" | "APPROVED" | "DECLINED";
+  createdAt: string;
+  resolvedAt?: string;
+};

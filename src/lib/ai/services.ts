@@ -30,3 +30,6 @@ export const getMyProfile = activeServices.getMyProfile;
 export const getStudentMemory = activeServices.getStudentMemory;
 export const saveStudentMemory = activeServices.saveStudentMemory;
 export const rescheduleSession = activeServices.rescheduleSession;
+export const submitStudentRequest = activeServices.submitStudentRequest;
+export const listStudentRequests = activeServices.listStudentRequests;
+export const resolveStudentRequest = activeServices.resolveStudentRequest;

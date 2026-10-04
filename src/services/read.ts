@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CheckConflictsInput, type AttendanceView, type ConflictView, type CourseView, type DeductionView, type SessionView, type StudentView, type UnitView, type Result, err, ok } from "@/contracts";
+import { CheckConflictsInput, type AttendanceView, type ConflictView, type CourseView, type DeductionView, type SessionView, type StudentRequestView, type StudentView, type UnitView, type Result, err, ok } from "@/contracts";
 import type { Actor } from "@/lib/auth/actor";
 import { prisma } from "@/lib/db/prisma";
 
@@ -12,6 +12,7 @@ export type {
   Result,
   ServiceError,
   SessionView,
+  StudentRequestView,
   StudentView,
   UnitView,
 } from "@/contracts";
@@ -479,5 +480,50 @@ export async function checkConflicts(
     return success({ conflicts: [...conflicts.values()].sort((a, b) => a.startAt.localeCompare(b.startAt)) });
   } catch {
     return failure("INTERNAL", "Could not check schedule conflicts. Please try again.");
+  }
+}
+
+const requestListInput = z.object({ status: z.enum(["PENDING", "APPROVED", "DECLINED"]).optional() });
+
+/** Students see their own requests; teachers see the requests for sessions of their own courses. */
+export async function listStudentRequests(
+  actor: Actor,
+  input: { status?: StudentRequestView["status"] } = {},
+): Promise<Result<{ requests: StudentRequestView[] }>> {
+  if (actor.role !== "TEACHER" && actor.role !== "STUDENT") return failure("FORBIDDEN", "You do not have permission to view requests.");
+  const parsed = requestListInput.safeParse(input);
+  if (!parsed.success) return failure("VALIDATION", "Enter a valid request status.");
+  try {
+    const rows = await prisma.studentRequest.findMany({
+      where: {
+        status: parsed.data.status,
+        ...(actor.role === "STUDENT" ? { studentId: actor.userId } : { session: { course: { teacherId: actor.userId } } }),
+      },
+      include: {
+        student: { select: { name: true } },
+        session: { select: { startAt: true, courseId: true, course: { select: { name: true } } } },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      take: limit,
+    });
+    return success({
+      requests: rows.map((row) => ({
+        id: row.id,
+        sessionId: row.sessionId,
+        courseId: row.session.courseId,
+        courseName: row.session.course.name,
+        sessionStartAt: row.session.startAt.toISOString(),
+        studentId: row.studentId,
+        studentName: row.student.name,
+        kind: row.kind,
+        ...(row.note ? { note: row.note } : {}),
+        ...(row.preferredStartAt ? { preferredStartAt: row.preferredStartAt.toISOString() } : {}),
+        status: row.status,
+        createdAt: row.createdAt.toISOString(),
+        ...(row.resolvedAt ? { resolvedAt: row.resolvedAt.toISOString() } : {}),
+      })),
+    });
+  } catch {
+    return failure("INTERNAL", "Could not load requests. Please try again.");
   }
 }

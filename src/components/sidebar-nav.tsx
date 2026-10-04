@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, CalendarDays, GraduationCap, LayoutDashboard, Workflow } from "lucide-react";
+import { BookOpen, CalendarDays, GraduationCap, Inbox, LayoutDashboard, Workflow } from "lucide-react";
 
-export type NavItem = { href: string; label: string; icon: "schedule" | "courses" | "learning" | "agent" };
+export type NavItem = { href: string; label: string; icon: "schedule" | "courses" | "learning" | "agent" | "requests"; badge?: number };
 
-const ICONS = { schedule: CalendarDays, courses: BookOpen, learning: GraduationCap, agent: Workflow } as const;
+const ICONS = { schedule: CalendarDays, courses: BookOpen, learning: GraduationCap, agent: Workflow, requests: Inbox } as const;
 
 function isActive(pathname: string, href: string) {
   if (href === "/teacher") return pathname === href; // /teacher/courses has its own entry
@@ -32,6 +32,7 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
           >
             <Icon className="size-[18px] shrink-0" aria-hidden />
             {item.label}
+            {item.badge ? <span className="ml-auto rounded-full bg-primary-foreground/20 px-1.5 text-xs tabular-nums" aria-label={`${item.badge} pending`}>{item.badge}</span> : null}
           </Link>
         );
       })}
@@ -58,6 +59,7 @@ export function MobileNav({ items }: { items: NavItem[] }) {
           >
             <Icon className="size-4" aria-hidden />
             {item.label}
+            {item.badge ? <span className="rounded-full bg-foreground/10 px-1.5 text-xs tabular-nums" aria-label={`${item.badge} pending`}>{item.badge}</span> : null}
           </Link>
         );
       })}

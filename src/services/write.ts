@@ -7,6 +7,8 @@ import {
   CreateSessionsInput as CreateSessionsInputSchema,
   RescheduleInput as RescheduleInputSchema,
   ConfirmAttendanceInput as ConfirmAttendanceInputSchema,
+  ResolveStudentRequestInput as ResolveStudentRequestInputSchema,
+  StudentRequestInput as StudentRequestInputSchema,
   type AddStudentInput,
   type AddMaterialInput,
   type AttendanceView,
@@ -20,6 +22,9 @@ import {
   type Result,
   type ConflictView,
   type RescheduleInput,
+  type ResolveStudentRequestInput,
+  type StudentRequestInput,
+  type StudentRequestView,
 } from "@/contracts";
 import type { Actor } from "@/lib/auth/actor";
 import { prisma } from "@/lib/db/prisma";
@@ -459,5 +464,106 @@ export async function confirmAttendance(
       return err("CONFLICT", "Attendance has been submitted and cannot be changed yet.");
     }
     return err("INTERNAL", "Could not confirm attendance. Please try again.");
+  }
+}
+
+// ---------- student requests (leave or reschedule) ----------
+
+const requestInclude = {
+  student: { select: { name: true } },
+  session: { select: { startAt: true, courseId: true, course: { select: { name: true } } } },
+} satisfies Prisma.StudentRequestInclude;
+
+function requestView(row: Prisma.StudentRequestGetPayload<{ include: typeof requestInclude }>): StudentRequestView {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    courseId: row.session.courseId,
+    courseName: row.session.course.name,
+    sessionStartAt: row.session.startAt.toISOString(),
+    studentId: row.studentId,
+    studentName: row.student.name,
+    kind: row.kind,
+    ...(row.note ? { note: row.note } : {}),
+    ...(row.preferredStartAt ? { preferredStartAt: row.preferredStartAt.toISOString() } : {}),
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+    ...(row.resolvedAt ? { resolvedAt: row.resolvedAt.toISOString() } : {}),
+  };
+}
+
+/**
+ * A student asks for leave or a new time for one upcoming session of a course they are enrolled in.
+ * This only stores a pending record: the schedule and attendance are never changed here.
+ */
+export async function submitStudentRequest(actor: Actor, input: StudentRequestInput): Promise<Result<StudentRequestView>> {
+  if (actor.role !== "STUDENT") return err("FORBIDDEN", "Only students can submit requests.");
+  const parsed = StudentRequestInputSchema.safeParse(input);
+  if (!parsed.success) return err("VALIDATION", "Enter a valid request.");
+  const { sessionId, kind, note, preferredStartAt } = parsed.data;
+  if (kind === "LEAVE" && preferredStartAt) return err("VALIDATION", "A leave request does not take a preferred time.");
+  if (preferredStartAt && Date.parse(preferredStartAt) <= Date.now()) return err("VALIDATION", "The preferred time must be in the future.");
+
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        const session = await tx.session.findFirst({
+          where: { id: sessionId, course: { enrollments: { some: { studentId: actor.userId } } } },
+          select: { id: true, startAt: true, status: true },
+        });
+        if (!session) return err("FORBIDDEN", "You do not have access to this session.");
+        if (session.status !== "SCHEDULED" && session.status !== "RESCHEDULED") {
+          return err("CONFLICT", "Only upcoming sessions can be requested.");
+        }
+        if (session.startAt.getTime() <= Date.now()) return err("CONFLICT", "This session has already started.");
+        const pending = await tx.studentRequest.findFirst({
+          where: { sessionId, studentId: actor.userId, status: "PENDING" },
+          select: { id: true },
+        });
+        if (pending) return err("CONFLICT", "You already have a pending request for this session.");
+        const created = await tx.studentRequest.create({
+          data: {
+            sessionId,
+            studentId: actor.userId,
+            kind,
+            note: note?.trim() || null,
+            preferredStartAt: preferredStartAt ? new Date(preferredStartAt) : null,
+          },
+          include: requestInclude,
+        });
+        return ok(requestView(created));
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+      return err("CONFLICT", "You already have a pending request for this session.");
+    }
+    return err("INTERNAL", "Could not submit the request. Please try again.");
+  }
+}
+
+/** The teacher of the course approves or declines a pending request. Nothing else changes. */
+export async function resolveStudentRequest(actor: Actor, input: ResolveStudentRequestInput): Promise<Result<StudentRequestView>> {
+  if (actor.role !== "TEACHER") return err("FORBIDDEN", "Only teachers can respond to requests.");
+  const parsed = ResolveStudentRequestInputSchema.safeParse(input);
+  if (!parsed.success) return err("VALIDATION", "Enter a valid decision.");
+  try {
+    const existing = await prisma.studentRequest.findUnique({
+      where: { id: parsed.data.requestId },
+      select: { session: { select: { course: { select: { teacherId: true } } } } },
+    });
+    if (!existing) return err("NOT_FOUND", "Request not found.");
+    if (existing.session.course.teacherId !== actor.userId) return err("FORBIDDEN", "You do not have access to this request.");
+
+    const claimed = await prisma.studentRequest.updateMany({
+      where: { id: parsed.data.requestId, status: "PENDING" },
+      data: { status: parsed.data.decision, resolvedAt: new Date(), resolvedById: actor.userId },
+    });
+    if (claimed.count === 0) return err("CONFLICT", "This request has already been answered.");
+    const row = await prisma.studentRequest.findUniqueOrThrow({ where: { id: parsed.data.requestId }, include: requestInclude });
+    return ok(requestView(row));
+  } catch {
+    return err("INTERNAL", "Could not save the decision. Please try again.");
   }
 }
