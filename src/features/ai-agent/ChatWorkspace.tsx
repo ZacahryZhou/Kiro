@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { Check, History, MessageSquarePlus, Pencil, Sparkles, Trash2 } from "lucide-react";
+import { Check, History, ImagePlus, MessageSquarePlus, Pencil, Sparkles, Trash2, X } from "lucide-react";
 import type { Citation, ProposalView, Role } from "@/contracts";
 import { labels } from "@/lib/ai/domain/edu/labels";
 import { MessageList, type PanelMessage } from "./MessageList";
+import { ACCEPTED_IMAGE_TYPES, MAX_ATTACHMENTS, picturesIn, prepareImage, type Attachment } from "./image-attach";
 
 type ChatSummary = { id: string; title: string; updatedAt: string; hasPending: boolean };
-type ServerMessage = { id: string; role: "user" | "assistant"; content: string; citations?: Citation[]; proposals?: ProposalView[] };
+type ServerMessage = { id: string; role: "user" | "assistant"; content: string; citations?: Citation[]; proposals?: ProposalView[]; attachments?: { name: string }[] };
 
 const MAX_INPUT = 2000;
 
@@ -46,12 +47,19 @@ export function ChatWorkspace({
   const [notice, setNotice] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachNote, setAttachNote] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const nextId = useRef(1);
   const openToken = useRef(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  // Only teachers can attach photos; the server enforces this too.
+  const canAttach = role === "TEACHER";
 
   const toPanel = useCallback(
-    (items: ServerMessage[]): PanelMessage[] => items.map((m) => ({ id: nextId.current++, role: m.role, content: m.content, citations: m.citations, proposals: m.proposals })),
+    (items: ServerMessage[]): PanelMessage[] => items.map((m) => ({ id: nextId.current++, role: m.role, content: m.content, citations: m.citations, proposals: m.proposals, attachments: m.attachments })),
     [],
   );
 
@@ -140,6 +148,25 @@ export function ChatWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Shrinks the chosen pictures in the browser and adds them to the message being written. */
+  async function addPictures(files: File[]) {
+    if (!canAttach || files.length === 0) return;
+    const room = MAX_ATTACHMENTS - attachments.length;
+    if (room <= 0) return setAttachNote(`You can attach up to ${MAX_ATTACHMENTS} photos to one message.`);
+    setAttachNote(null);
+    setPreparing(true);
+    let problem: string | null = files.length > room ? `Only ${room} more ${room === 1 ? "photo fits" : "photos fit"} in one message (the limit is ${MAX_ATTACHMENTS}).` : null;
+    const added: Attachment[] = [];
+    for (const file of files.slice(0, room)) {
+      const prepared = await prepareImage(file, nextId.current++);
+      if (prepared.ok) added.push(prepared.attachment);
+      else problem = prepared.message;
+    }
+    setAttachments((list) => [...list, ...added].slice(0, MAX_ATTACHMENTS));
+    setAttachNote(problem);
+    setPreparing(false);
+  }
+
   function newChat() {
     openToken.current += 1;
     setActiveId(null);
@@ -147,6 +174,8 @@ export function ChatWorkspace({
     setNotice(null);
     setOpening(false);
     setShowHistory(false);
+    setAttachments([]);
+    setAttachNote(null);
     onChatChange?.(null);
     inputRef.current?.focus();
   }
@@ -154,16 +183,23 @@ export function ChatWorkspace({
   async function send(event?: FormEvent) {
     event?.preventDefault();
     const text = input.trim();
-    if (!text || busy) return;
-    setMessages((m) => [...m, { id: nextId.current++, role: "user", content: text }]);
+    const sending = attachments;
+    if ((!text && sending.length === 0) || busy || preparing) return;
+    setMessages((m) => [...m, { id: nextId.current++, role: "user", content: text, ...(sending.length > 0 ? { attachments: sending.map((photo) => ({ name: photo.name, thumb: photo.thumb })) } : {}) }]);
     setInput("");
+    setAttachments([]);
+    setAttachNote(null);
     setBusy(true);
     setNotice(null);
     try {
       const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, ...(activeId ? { conversationId: activeId } : courseId ? { courseId } : {}) }),
+        body: JSON.stringify({
+          message: text,
+          ...(sending.length > 0 ? { images: sending.map(({ name, mediaType, data }) => ({ name, mediaType, data })) } : {}),
+          ...(activeId ? { conversationId: activeId } : courseId ? { courseId } : {}),
+        }),
       });
       const body = await response.json();
       if (response.status === 404 && activeId) {
@@ -182,7 +218,7 @@ export function ChatWorkspace({
           onChatChange?.(id);
         }
         const now = new Date().toISOString();
-        setChats((list) => [{ id, title: body.title ?? text.slice(0, 60), updatedAt: now, hasPending: Array.isArray(body.proposals) && body.proposals.length > 0 || (list.find((c) => c.id === id)?.hasPending ?? false) }, ...list.filter((c) => c.id !== id)]);
+        setChats((list) => [{ id, title: body.title ?? (text || "Attached a photo").slice(0, 60), updatedAt: now, hasPending: Array.isArray(body.proposals) && body.proposals.length > 0 || (list.find((c) => c.id === id)?.hasPending ?? false) }, ...list.filter((c) => c.id !== id)]);
       }
     } catch {
       setMessages((m) => [...m, { id: nextId.current++, role: "assistant", content: labels.failure }]);
@@ -268,7 +304,28 @@ export function ChatWorkspace({
   return (
     <section aria-label={productName} className={`flex min-h-0 w-full overflow-hidden bg-card ${modal ? "h-full" : "h-[min(34rem,75dvh)] rounded-2xl border"}`} data-testid="chat-workspace">
       {sidebar}
-      <div className={`min-h-0 min-w-0 flex-1 flex-col ${showHistory ? "hidden md:flex" : "flex"}`}>
+      <div
+        className={`relative min-h-0 min-w-0 flex-1 flex-col ${showHistory ? "hidden md:flex" : "flex"}`}
+        onDragOver={(event) => {
+          if (!canAttach || !event.dataTransfer.types.includes("Files")) return;
+          event.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false);
+        }}
+        onDrop={(event) => {
+          if (!canAttach) return;
+          event.preventDefault();
+          setDragOver(false);
+          void addPictures(picturesIn(event.dataTransfer.files));
+        }}
+      >
+        {dragOver && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/5 text-sm font-medium text-primary" data-testid="drop-hint">
+            Drop photos to attach them
+          </div>
+        )}
         <header className={`flex shrink-0 items-center gap-2 border-b px-3 py-2.5 ${modal ? "pr-12" : ""}`}>
           <button type="button" onClick={() => setShowHistory(true)} aria-label={labels.chat.history} className="flex size-8 items-center justify-center rounded-lg border hover:bg-muted md:hidden"><History className="size-4" aria-hidden /></button>
           <div className="min-w-0 flex-1">
@@ -300,7 +357,53 @@ export function ChatWorkspace({
         )}
 
         <form onSubmit={send} className="shrink-0 border-t p-3">
+          {(attachments.length > 0 || preparing || attachNote) && (
+            <div className="mb-2 space-y-1.5" data-testid="attachment-tray">
+              {(attachments.length > 0 || preparing) && (
+                <ul className="flex flex-wrap items-center gap-2" aria-label="Photos to send">
+                  {attachments.map((photo) => (
+                    <li key={photo.id} className="group relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- a tiny data URL made in the browser */}
+                      <img src={photo.thumb} alt={photo.name} title={photo.name} className="size-14 rounded-lg border object-cover" />
+                      <button type="button" aria-label={`Remove ${photo.name}`} onClick={() => setAttachments((list) => list.filter((item) => item.id !== photo.id))} className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-sm hover:text-destructive"><X className="size-3" aria-hidden /></button>
+                    </li>
+                  ))}
+                  {preparing && <li className="text-xs text-muted-foreground" role="status">Preparing photo…</li>}
+                </ul>
+              )}
+              {attachNote && <p role="alert" className="text-xs text-destructive">{attachNote}</p>}
+            </div>
+          )}
           <div className="flex items-end gap-2">
+            {canAttach && (
+              <>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  multiple
+                  accept={ACCEPTED_IMAGE_TYPES}
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-hidden
+                  data-testid="photo-input"
+                  onChange={(event) => {
+                    void addPictures([...(event.target.files ?? [])]);
+                    event.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  disabled={busy || preparing || attachments.length >= MAX_ATTACHMENTS}
+                  aria-label="Attach photos"
+                  title={`Attach photos (up to ${MAX_ATTACHMENTS}). You can also paste or drop them.`}
+                  className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                  data-testid="attach-photos"
+                >
+                  <ImagePlus className="size-4" aria-hidden />
+                </button>
+              </>
+            )}
             <label htmlFor={`ai-input-${variant}${courseId ? `-${courseId}` : ""}`} className="sr-only">{labels.inputLabel}</label>
             <textarea
               id={`ai-input-${variant}${courseId ? `-${courseId}` : ""}`}
@@ -308,15 +411,21 @@ export function ChatWorkspace({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
+              onPaste={(event) => {
+                const pictures = picturesIn(event.clipboardData.files);
+                if (!canAttach || pictures.length === 0) return;
+                event.preventDefault();
+                void addPictures(pictures);
+              }}
               rows={Math.min(5, Math.max(1, input.split("\n").length))}
               maxLength={MAX_INPUT}
               placeholder={labels.inputPlaceholder}
               autoComplete="off"
               className="min-h-10 flex-1 resize-none rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
-            <button type="submit" disabled={busy || input.trim() === ""} className="inline-flex h-10 items-center rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/85 disabled:pointer-events-none disabled:opacity-50">{labels.send}</button>
+            <button type="submit" disabled={busy || preparing || (input.trim() === "" && attachments.length === 0)} className="inline-flex h-10 items-center rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/85 disabled:pointer-events-none disabled:opacity-50">{labels.send}</button>
           </div>
-          <p className="mt-1.5 flex justify-between px-1 text-[11px] text-muted-foreground"><span>{labels.chat.inputHint}{modal ? ` · ${labels.chat.closeHint}` : ""}</span>{input.length > MAX_INPUT * 0.8 && <span>{input.length}/{MAX_INPUT}</span>}</p>
+          <p className="mt-1.5 flex justify-between px-1 text-[11px] text-muted-foreground"><span>{labels.chat.inputHint}{canAttach ? " · Attach, paste or drop photos" : ""}{modal ? ` · ${labels.chat.closeHint}` : ""}</span>{input.length > MAX_INPUT * 0.8 && <span>{input.length}/{MAX_INPUT}</span>}</p>
         </form>
       </div>
     </section>

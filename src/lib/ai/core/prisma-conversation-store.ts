@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import type { Citation } from "@/contracts";
 import { prisma } from "@/lib/db/prisma";
-import { MAX_CONVERSATIONS, type ConversationRecord, type ConversationStore, type MessageRecord } from "./conversations";
+import { MAX_CONVERSATIONS, type AttachmentRecord, type ConversationRecord, type ConversationStore, type MessageRecord } from "./conversations";
 
 // Database version of the conversation store. Every query is scoped by actorId.
 
@@ -9,7 +9,7 @@ function toConversation(row: { id: string; actorId: string; courseId: string | n
   return { id: row.id, actorId: row.actorId, ...(row.courseId ? { courseId: row.courseId } : {}), title: row.title, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
 }
 
-function toMessage(row: { id: string; conversationId: string; role: string; content: string; proposalIds: string[]; citations: Prisma.JsonValue | null; createdAt: Date }): MessageRecord {
+function toMessage(row: { id: string; conversationId: string; role: string; content: string; proposalIds: string[]; citations: Prisma.JsonValue | null; attachments: Prisma.JsonValue | null; modelContext: string | null; createdAt: Date }): MessageRecord {
   return {
     id: row.id,
     conversationId: row.conversationId,
@@ -17,6 +17,8 @@ function toMessage(row: { id: string; conversationId: string; role: string; cont
     content: row.content,
     proposalIds: row.proposalIds,
     citations: Array.isArray(row.citations) ? (row.citations as unknown as Citation[]) : [],
+    attachments: Array.isArray(row.attachments) ? (row.attachments as unknown as AttachmentRecord[]) : [],
+    ...(row.modelContext ? { modelContext: row.modelContext } : {}),
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -51,7 +53,10 @@ export const prismaConversationStore: ConversationStore = {
     if (!owner) return undefined;
     const [row] = await prisma.$transaction([
       prisma.agentMessage.create({
-        data: { conversationId, role: message.role, content: message.content, proposalIds: message.proposalIds ?? [], citations: message.citations && message.citations.length > 0 ? (message.citations as unknown as Prisma.InputJsonValue) : undefined },
+        data: { conversationId, role: message.role, content: message.content, proposalIds: message.proposalIds ?? [], citations: message.citations && message.citations.length > 0 ? (message.citations as unknown as Prisma.InputJsonValue) : undefined,
+          attachments: message.attachments && message.attachments.length > 0 ? (message.attachments as unknown as Prisma.InputJsonValue) : undefined,
+          modelContext: message.modelContext || null,
+        },
       }),
       prisma.agentConversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } }),
     ]);

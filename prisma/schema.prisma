@@ -437,6 +437,10 @@ model AgentMessage {
   /// Proposals this assistant message prepared; their current status is read from AgentProposal.
   proposalIds    String[]
   citations      Json?
+  /// Names of the photos the user attached. The photos themselves are not stored.
+  attachments    Json?
+  /// What was read from those photos, kept so later turns can refer back to them. Never shown as the user's own words.
+  modelContext   String?  @db.Text
   createdAt      DateTime @default(now())
 
   conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

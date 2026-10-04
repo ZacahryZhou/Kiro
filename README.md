@@ -86,6 +86,9 @@ Work is split between two owners (see [Team, tracks and workflow](#team-tracks-a
 | File upload for course materials (.txt, .md, .pdf, .docx; preview and remove) | Done; scanned PDFs need OCR first |
 | AI-written quizzes from materials (grounded questions, draft, publish, student practice) | Done |
 | Teaching knowledge page and a student tutor that teaches from the teacher's notes | Done; kept apart from the private student memory |
+| AI chat as a centred pop-up with history; every chat has its own context; each course page has its own assistant | Done; chats are stored per user (`AgentConversation`, `AgentMessage`) |
+| Edit and delete courses, units, materials, sessions and enrolments; upload files from the Teaching knowledge page | Done; deleting a course needs its name typed and shows what goes with it |
+| Teachers attach photos in the chat (timetable, worksheet, whiteboard) | Done; needs `AI_VISION_MODEL` for real reading. The text read from a photo is treated as untrusted data and the picture is never stored |
 | Role-specific AI panel, chat API, read-only questions, verified material citations and proposal flows | Integrated; requires AI provider configuration for live model responses |
 | Full multi-person AI showcase fixture (`prisma/seed-ai.ts`) | Done; `npm run db:seed:demo`, or `npx tsx prisma/seed-ai.ts --reset` for a clean slate |
 | AI proposals and run log stored in the database (`AgentProposal`, `AgentRun`) | Done; only the AI's own tables are written |
@@ -202,6 +205,8 @@ Real values go only in your local `.env`, which is git-ignored. `.env.example` h
 | `AI_MODEL` | Model name, for example `deepseek-chat` |
 | `AI_ADMIN_EMAILS` | Comma-separated emails allowed to open the Agent Console in production (in development any teacher can) |
 | `AI_MOCK` | `1` replaces the model with a scripted demo model (no network or key); it still uses the real tools and database |
+| `AI_VISION_MODEL` | Optional. A vision-capable model that reads photos teachers attach in the chat (for example `gpt-4o-mini`). DeepSeek chat models cannot see pictures, so this is a separate model. Without it, attaching a photo explains what to set |
+| `AI_VISION_BASE_URL`, `AI_VISION_API_KEY` | Optional. Endpoint and key for the vision model; they default to `AI_BASE_URL` and `AI_API_KEY`, so set them only when the vision model is on a different service |
 
 ### Useful commands
 
@@ -338,7 +343,9 @@ These three features follow the same rule as the rest of the agent: **the model 
 
 | Endpoint | Request | Response |
 |---|---|---|
-| `POST /api/ai/chat` | `{ message; history? }` (latest 10 turns, text only, no identity) | `{ reply; proposals?; citations? }` |
+| `POST /api/ai/chat` | `{ message; conversationId?; courseId?; images? }` (no identity; the server reads the chat's last 10 messages itself; `images` are teacher-only photos) | `{ reply; conversationId; title; isNew; proposals?; citations? }` |
+| `GET /api/ai/conversations?courseId?` | | `{ conversations }` (current user only) |
+| `GET / PATCH / DELETE /api/ai/conversations/:id` | `{ title }` for PATCH | the chat with its messages, the renamed chat, or `{ ok }` |
 | `GET /api/ai/proposals?status=pending` | | `{ proposals }` (current user only) |
 | `POST /api/ai/proposals/:id/confirm` | none | `{ status: "executed" \| "failed"; result?; error? }` |
 | `POST /api/ai/proposals/:id/discard` | none | `{ status: "discarded" }` |

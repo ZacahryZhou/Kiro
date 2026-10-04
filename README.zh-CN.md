@@ -89,6 +89,9 @@
 | 按角色区分的 AI 面板、聊天接口、只读问答、带验证引用的资料问答、提案流程 | 已接入;要得到真实模型的回复,需要配置 AI 接口 |
 | 完整的多人 AI 演示数据(`prisma/seed-ai.ts`) | 已完成;`npm run db:seed:demo`,或用 `npx tsx prisma/seed-ai.ts --reset` 从干净状态重来 |
 | AI 提案和运行记录存进数据库(`AgentProposal`、`AgentRun`) | 已完成;只写 AI 自己的表 |
+| AI 聊天做成居中弹窗并带历史,每个对话有独立上下文;每个课程页有自己的助手 | 已完成;对话按用户存储(`AgentConversation`、`AgentMessage`) |
+| 课程、单元、资料、课时和选课关系都能修改和删除;教学知识页可以直接上传文件 | 已完成;删除课程需要输入课程名,并会列出一并删除的内容 |
+| 老师可以在聊天里附上照片(课表、作业、白板) | 已完成;真正识图需要配置 `AI_VISION_MODEL`。照片里读出的文字按不可信数据处理,图片本身不会保存 |
 | 带剧本的演示模型(`AI_MOCK=1`),不需要网络和 key,直接驱动真实工具 | 已完成 |
 | 2026 年 11 月 1 日之后的温哥华日历行为 | 已按当前时区数据验证;不列颠哥伦比亚省全年保持 UTC-7 |
 
@@ -203,6 +206,8 @@ docker compose up --build --renew-anon-volumes
 | `AI_MODEL` | 模型名,例如 `deepseek-chat` |
 | `AI_ADMIN_EMAILS` | 生产环境下允许打开 Agent 控制台的邮箱(逗号分隔;开发环境任何老师都可以) |
 | `AI_MOCK` | 设为 `1` 时用带剧本的演示模型代替真实模型(不需要网络和 key),但仍然使用真实工具和数据库 |
+| `AI_VISION_MODEL` | 可选。读取老师在聊天里附上的照片所用的视觉模型(例如 `gpt-4o-mini`)。DeepSeek 的聊天模型看不了图片,所以要单独配置;没配置时,附上照片会提示该设置什么 |
+| `AI_VISION_BASE_URL`、`AI_VISION_API_KEY` | 可选。视觉模型的接口地址和 key,默认沿用 `AI_BASE_URL` 和 `AI_API_KEY`;只有视觉模型在另一个服务商时才需要设置 |
 
 ### 常用命令
 
@@ -323,7 +328,9 @@ type ErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION" | 
 
 | 接口 | 请求 | 响应 |
 |---|---|---|
-| `POST /api/ai/chat` | `{ message; history? }`(最近 10 条,只含文字,不含身份) | `{ reply; proposals?; citations? }` |
+| `POST /api/ai/chat` | `{ message; conversationId?; courseId?; images? }`(不含身份;服务器自己读取该对话最近 10 条消息;`images` 是仅老师可用的照片) | `{ reply; conversationId; title; isNew; proposals?; citations? }` |
+| `GET /api/ai/conversations?courseId?` | | `{ conversations }`(仅本人) |
+| `GET / PATCH / DELETE /api/ai/conversations/:id` | PATCH 为 `{ title }` | 对话及其消息、改名后的对话,或 `{ ok }` |
 | `GET /api/ai/proposals?status=pending` | | `{ proposals }`(仅本人) |
 | `POST /api/ai/proposals/:id/confirm` | 无 | `{ status: "executed" \| "failed"; result?; error? }` |
 | `POST /api/ai/proposals/:id/discard` | 无 | `{ status: "discarded" }` |

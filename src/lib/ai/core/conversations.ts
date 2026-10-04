@@ -6,6 +6,8 @@ import type { Citation } from "@/contracts";
 // assistant is shown the recent messages of the conversation in use and nothing from the others.
 
 export type ConversationRecord = { id: string; actorId: string; courseId?: string; title: string; createdAt: string; updatedAt: string };
+/** A photo the user attached. Only its name is kept; the picture itself is not stored. */
+export type AttachmentRecord = { name: string };
 export type MessageRecord = {
   id: string;
   conversationId: string;
@@ -13,9 +15,19 @@ export type MessageRecord = {
   content: string;
   proposalIds: string[];
   citations: Citation[];
+  attachments: AttachmentRecord[];
+  /** What was read from the attached photos, for the model on later turns. Never shown as the user's words. */
+  modelContext?: string;
   createdAt: string;
 };
-export type NewMessage = { role: "user" | "assistant"; content: string; proposalIds?: string[]; citations?: Citation[] };
+export type NewMessage = {
+  role: "user" | "assistant";
+  content: string;
+  proposalIds?: string[];
+  citations?: Citation[];
+  attachments?: AttachmentRecord[];
+  modelContext?: string;
+};
 
 export const MAX_CONVERSATIONS = 100;
 export const MAX_MESSAGES_PER_CONVERSATION = 200;
@@ -92,7 +104,7 @@ export function createMemoryConversationStore(): ConversationStore & { clear(): 
       const record = own(actorId, conversationId);
       if (!record) return undefined;
       counter += 1;
-      const saved: MessageRecord = { id: `msg_${counter}`, conversationId, role: message.role, content: message.content, proposalIds: message.proposalIds ?? [], citations: message.citations ?? [], createdAt: stamp() };
+      const saved: MessageRecord = { id: `msg_${counter}`, conversationId, role: message.role, content: message.content, proposalIds: message.proposalIds ?? [], citations: message.citations ?? [], attachments: message.attachments ?? [], ...(message.modelContext ? { modelContext: message.modelContext } : {}), createdAt: stamp() };
       messages.get(conversationId)!.push(saved);
       record.updatedAt = saved.createdAt;
       return { ...saved };

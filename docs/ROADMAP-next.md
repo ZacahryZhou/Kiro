@@ -41,7 +41,7 @@ Contract facts that shape the plan: `RescheduleInput`, `SaveProgressInput` and `
 
 1. Plan first: list the files to add or change, then build.
 2. Definition of done: `npx tsc --noEmit`, `npx eslint src prisma`, `npm run check:ai`, `npx next build`, then a browser run with one teacher and one student account. For anything that touches permissions, prove cross-account denial with two different accounts.
-3. AI never writes business tables (audit grep must stay empty): `grep -rnE "prisma\.[a-zA-Z]+\.(create|update|delete|upsert)" src/lib/ai src/features src/app/api/ai` apart from `agentProposal`, `agentRun`, `agentMemory`.
+3. AI never writes business tables (audit grep must stay empty): `grep -rnE "prisma\.[a-zA-Z]+\.(create|update|delete|upsert)" src/lib/ai src/features src/app/api/ai` apart from the assistant's own tables `agentProposal`, `agentRun`, `agentMemory`, `agentConversation`, `agentMessage`.
 4. Services are `fn(actor, input) => Promise<Result<T>>`, never throw, and identity comes only from the session.
 5. English only for UI, errors, logs and commits. Commit trailers as in the repo history. No secrets in git.
 6. Before every push: `git fetch origin main`, merge, re-run the checks.

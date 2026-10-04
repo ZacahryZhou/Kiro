@@ -25,6 +25,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       role: m.role,
       content: m.content,
       ...(m.citations.length > 0 ? { citations: m.citations } : {}),
+      ...(m.attachments.length > 0 ? { attachments: m.attachments } : {}),
       ...(m.proposalIds.length > 0 ? { proposals: m.proposalIds.flatMap((pid) => (byId.has(pid) ? [byId.get(pid)!] : [])) } : {}),
     })),
   });
