@@ -4,6 +4,7 @@
 import { runAgent, type ChatTurn } from "../core/agent-loop";
 import { proposalStore } from "../domain/edu/proposal-types";
 import { eduProposals } from "../domain/edu/proposal-types";
+import { labels } from "../domain/edu/labels";
 import { actorFor, ids, resetStore, store } from "./fake-store";
 
 process.env.AI_MOCK = "1";
@@ -87,8 +88,8 @@ async function main() {
   check("Student: 'show everyone's attendance' only ever reaches the student's own data", out.proposals.length === 0 && out.toolCalls.every((c) => c.name === "getStudentWorkspace") && !/Sam|Casey/.test(out.reply), out.reply);
 
   // ----- fallback and honesty -----
-  out = await ask(alex, "Write me a poem");
-  check("An unsupported request gets the demo-mode help text", /Demo mode \(AI_MOCK=1\)/.test(out.reply) && out.proposals.length === 0);
+  out = await ask(actorFor("teacher2@example.test")!, "Show Jordan's attendance this week.");
+  check("An unsupported request gets neutral demo help without another teacher's student identities", /Demo mode \(AI_MOCK=1\)/.test(out.reply) && !/Jordan|Sam|s\+jordan@example\.test/i.test(out.reply + labels.teacherHint) && out.proposals.length === 0);
   check("The mock never reports a change as already made", !/\b(i (have )?(marked|recorded|created|scheduled))\b/i.test(out.reply));
 
   console.info(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);

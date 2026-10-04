@@ -1,7 +1,7 @@
 // Every piece of text shown in the AI panel lives here (the only file to change when re-skinning).
 export const labels = {
   title: "AI assistant",
-  teacherHint: "Try: \"Jordan came to math today and Sam is on leave\"",
+  teacherHint: "Ask about your schedule, or name every enrolled student's attendance status.",
   studentHint: "Ask about your schedule, or about something in your course materials.",
   inputLabel: "Message the assistant",
   inputPlaceholder: "Type a message",

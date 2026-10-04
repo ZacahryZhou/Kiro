@@ -10,8 +10,9 @@ type Params = { messages: ChatMessage[]; tools?: ToolSpec[] };
 
 const HELP_TEACHER =
   "Demo mode (AI_MOCK=1): the assistant is running without a language model, so it understands a few simple requests. " +
-  'Try: "What classes do I have next week?", "Who is in my math class?", "Jordan came to math today and Sam is on leave", ' +
-  '"Schedule math next week on Tuesday and Thursday at 10am", or "Create a course called Weekend Math, small class, math, $40 per session, add s+jordan@example.test".';
+  'Try: "What classes do I have next week?", "What courses do I teach?", ' +
+  '"Schedule math next week on Tuesday and Thursday at 10am", or "Create a course called Weekend Math, small class, math, $40 per session". ' +
+  "To take attendance, name each enrolled student and their status.";
 const HELP_STUDENT =
   "Demo mode (AI_MOCK=1): the assistant is running without a language model, so it understands a few simple requests. " +
   'Try: "What is on my schedule this week?" or a question about your course materials.';
