@@ -6,6 +6,7 @@ import { STEP_DEFS, type StepId } from "@/lib/ai/trace/steps";
 import type { TraceEvent } from "@/lib/ai/trace/bus";
 import { AiPanel } from "./AiPanel";
 import { ArchitectureGraph } from "./ArchitectureGraph";
+import { ToolCatalog } from "./ToolCatalog";
 
 type StepState = "idle" | "active" | "done" | "error";
 
@@ -130,6 +131,8 @@ export function AgentConsole({ role }: { role: Role }) {
       </header>
 
       <ArchitectureGraph states={states} activeStep={activeStep} />
+
+      <ToolCatalog />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
         <section className="flex flex-col gap-3" aria-label="Pipeline">

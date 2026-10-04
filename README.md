@@ -52,7 +52,7 @@ Kora's assistant is an **agent with tools**, not a chat box bolted onto a calend
 - **Grounded or silent.** Answers from materials carry quotes that code checks against the source text. If the quote is not there, the assistant says it could not find it.
 - **Untrusted input stays data.** Student messages, course materials and text read from photos can never change which tools run or for whom.
 - **Isolated by identity.** Who is asking comes only from the signed-in session. Teachers see only their own courses, students only their own data, private student notes never reach a student's agent, and every chat belongs to one user.
-- **Visible.** A live Agent Console lights up each step of a request and the files it touches.
+- **Visible.** A live Agent Console lights up each step of a request and the files it touches, and a "What the agents can do" panel lists every tool in plain words, split into read-only and "prepare a change".
 
 ### Talking to it
 

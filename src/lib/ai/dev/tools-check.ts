@@ -12,6 +12,7 @@ import {
 } from "../core/time";
 import { findTool, getToolsForRole } from "../domain/edu/tools";
 import { eduProposals } from "../domain/edu/proposal-types";
+import { TOOL_CATALOG, catalogFor } from "../domain/edu/tool-catalog";
 import { addMaterial } from "../services";
 import { actorFor, ids, resetStore, store } from "./fake-store";
 import { timeZoneDataProblem, vancouverWinterRule } from "./tz-sanity";
@@ -39,6 +40,13 @@ async function main() {
 
   // ----- tool sets -----
   const names = getToolsForRole("TEACHER").map((t) => t.name).sort();
+  for (const role of ["TEACHER", "STUDENT"] as const) {
+    const real = getToolsForRole(role).map((t) => t.name).sort();
+    const listed = TOOL_CATALOG.filter((e) => e.roles.includes(role)).map((e) => e.tool).sort();
+    check(`The console's tool list matches the ${role.toLowerCase()} tools exactly`, JSON.stringify(real) === JSON.stringify(listed), { real, listed });
+    check(`The console splits the ${role.toLowerCase()} tools into read-only and proposal the same way the code does`, catalogFor(role, "propose").every((e) => e.tool.startsWith("propose")) && catalogFor(role, "read").every((e) => !e.tool.startsWith("propose")));
+  }
+  check("Every console entry has a title and a summary", TOOL_CATALOG.every((e) => e.title.length > 0 && e.summary.length > 10));
   check("Teacher has 17 read-only tools plus thirteen proposal tools", JSON.stringify(names) === JSON.stringify(["checkConflicts", "findMyStudent", "getAttendanceTrends", "getCourseMaterials", "getMyProfile", "getQuizResults", "getStudentMemory", "getTeacherSchedule", "listAttendance", "listDeductions", "listMyCourses", "listMyDashboardLayouts", "listMyKnowledge", "listMyQuizzes", "listMyStudents", "listProgressRecords", "listStudentRequests", "proposeAddContent", "proposeAddStudent", "proposeAddStudentNote", "proposeCreateCourse", "proposeCreateSessions", "proposeDashboardLayout", "proposeKnowledge", "proposeKnowledgeFromMaterials", "proposeLessonPrep", "proposeMarkAttendance", "proposeProgressRecord", "proposeQuiz", "proposeReschedule"]), names);
   check("Students get the read tools, a tutor, a request list, a progress list and one proposal tool (leave requests to their own teacher)", JSON.stringify(getToolsForRole("STUDENT").map((t) => t.name).sort()) === JSON.stringify(["answerFromCourseMaterials", "explainWithTeacherNotes", "getMyProfile", "getStudentWorkspace", "listProgressRecords", "listStudentRequests", "proposeStudentRequest"]));
   const schemaText = JSON.stringify(getToolsForRole("TEACHER").map((t) => t.parameters));
