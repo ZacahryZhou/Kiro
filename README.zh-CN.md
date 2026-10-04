@@ -176,6 +176,7 @@ docker compose logs -f app           # 查看应用日志
 docker compose exec app npm run db:seed   # 创建演示账号(幂等)
 docker compose exec app npx tsx prisma/seed-ai.ts --reset   # 从干净状态导入 AI 演示数据
 npx tsx src/lib/ai/dev/run-all.ts    # 运行全部离线 AI 检查,输出一份汇总
+docker compose exec app npm run check:live   # 用真实模型跑测试清单(用你自己的 AI key,约 60 次调用);加 -- --list 只预览
 npx tsc --noEmit                     # 类型检查
 npm run lint                         # 代码检查
 ```

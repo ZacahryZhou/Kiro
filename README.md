@@ -175,6 +175,7 @@ docker compose logs -f app           # follow app logs
 docker compose exec app npm run db:seed   # seed accounts (idempotent)
 docker compose exec app npx tsx prisma/seed-ai.ts --reset   # AI demo data from a clean slate
 npx tsx src/lib/ai/dev/run-all.ts    # every offline AI check, one summary
+docker compose exec app npm run check:live   # the real-model test list (uses your own AI key, about 60 calls); add -- --list to preview
 npx tsc --noEmit                     # type check
 npm run lint                         # lint
 ```
