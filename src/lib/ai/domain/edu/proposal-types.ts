@@ -202,6 +202,22 @@ async function describeDashboard(actor: Actor, payload: ProposalPayloads["DASHBO
   ];
 }
 
+async function describeQuiz(actor: Actor, payload: ProposalPayloads["QUIZ"]): Promise<string[]> {
+  const count = <K extends string>(key: (q: ProposalPayloads["QUIZ"]["questions"][number]) => K, order: readonly K[], names: Record<K, string>) =>
+    order.map((k) => [k, payload.questions.filter((q) => key(q) === k).length] as const).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${names[k]}`).join(", ");
+  const topics = [...new Set(payload.questions.map((q) => q.topic))];
+  const level = (d: string) => (d === "EASY" ? "Easy" : d === "MEDIUM" ? "Medium" : "Hard");
+  const kind = (t: string) => labels.quiz.types[t as keyof typeof labels.quiz.types];
+  return [
+    `Quiz "${payload.title}" for ${(await courseName(actor, payload.courseId)) ?? "the course"}`,
+    `${payload.questions.length} questions: ${count((q) => q.type, ["MULTIPLE_CHOICE", "TRUE_FALSE", "SHORT_ANSWER"] as const, labels.quiz.types)}`,
+    `Difficulty: ${count((q) => q.difficulty, ["EASY", "MEDIUM", "HARD"] as const, labels.quiz.levels)}`,
+    `Topics: ${topics.slice(0, 6).join(", ")}${topics.length > 6 ? ` and ${topics.length - 6} more` : ""}`,
+    ...payload.questions.slice(0, 3).map((q, i) => `${i + 1}. [${level(q.difficulty)}, ${kind(q.type)}] ${q.prompt.length > 110 ? `${q.prompt.slice(0, 107)}...` : q.prompt}`),
+    "Every question is based on a quote from your materials. It is saved as a draft; students see it only after you publish it.",
+  ];
+}
+
 async function findSession(actor: Actor, sessionId: string) {
   const now = Date.now();
   const schedule = await services.getTeacherSchedule(actor, {
@@ -307,6 +323,11 @@ export const eduProposalHandlers: ProposalRegistry = {
     schema: ProposalPayloadSchemas.DASHBOARD_LAYOUT,
     execute: (actor, payload) => services.saveDashboardLayout(actor, payload),
     describe: describeDashboard,
+  },
+  QUIZ: {
+    schema: ProposalPayloadSchemas.QUIZ,
+    execute: (actor, payload) => services.createQuiz(actor, payload),
+    describe: describeQuiz,
   },
   MARK_ATTENDANCE: {
     schema: ProposalPayloadSchemas.MARK_ATTENDANCE,

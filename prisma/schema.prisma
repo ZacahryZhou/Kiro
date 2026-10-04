@@ -87,6 +87,7 @@ enum ProposalType {
   ADD_STUDENT_NOTE
   ADD_STUDENT
   DASHBOARD_LAYOUT
+  QUIZ
 }
 
 model User {
@@ -130,6 +131,7 @@ model Course {
   units          CourseUnit[]
   agentProposals AgentProposal[]
   agentMemories  AgentMemory[]
+  quizzes        Quiz[]
 }
 
 model Enrollment {
@@ -325,4 +327,52 @@ model DashboardLayout {
 
   @@unique([teacherId, name])
   @@index([teacherId, lastUsedAt])
+}
+
+enum QuizQuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+}
+
+enum QuizDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+/// A quiz written from a course's materials. It stays a draft until the teacher publishes it.
+model Quiz {
+  id        String   @id @default(cuid())
+  courseId  String
+  title     String   @db.VarChar(120)
+  published Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course    Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions QuizQuestion[]
+
+  @@index([courseId, createdAt])
+}
+
+model QuizQuestion {
+  id               String           @id @default(cuid())
+  quizId           String
+  order            Int
+  type             QuizQuestionType
+  difficulty       QuizDifficulty
+  topic            String           @db.VarChar(80)
+  prompt           String           @db.VarChar(1000)
+  /// Answer choices for multiple choice; null for the other types.
+  options          Json?
+  answer           String           @db.VarChar(500)
+  explanation      String?          @db.VarChar(1000)
+  /// The material and the exact words in it that this question is based on (checked by code).
+  sourceMaterialId String?
+  sourceQuote      String?          @db.VarChar(500)
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@unique([quizId, order])
 }

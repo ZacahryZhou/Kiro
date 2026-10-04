@@ -34,6 +34,9 @@ export function resultLines(type: ProposalType, result: unknown): string[] {
   if (type === "DASHBOARD_LAYOUT" && typeof data.name === "string") {
     return [`${labels.dashboard.saved}: "${data.name}"`];
   }
+  if (type === "QUIZ" && typeof data.questionCount === "number") {
+    return [`${labels.quiz.saved}: ${plural(data.questionCount, "question", "questions")}. Review it in the course's Quizzes tab, then publish it.`];
+  }
   if (type === "ADD_STUDENT") {
     return [data.alreadyJoined === true ? labels.result.studentAlreadyJoined : labels.result.studentAdded];
   }

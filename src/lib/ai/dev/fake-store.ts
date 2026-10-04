@@ -100,6 +100,8 @@ export type FakeProgress = {
 
 export type FakeLayout = { id: string; teacherId: string; name: string; theme: string; motion: string; items: unknown[]; lastUsedAt: number; updatedAt: string };
 
+export type FakeQuiz = { id: string; courseId: string; title: string; published: boolean; createdAt: string; questions: Record<string, unknown>[] };
+
 export type FakeState = {
   users: FakeUser[];
   courses: FakeCourse[];
@@ -114,6 +116,7 @@ export type FakeState = {
   requests: FakeRequest[];
   progress: FakeProgress[];
   layouts: FakeLayout[];
+  quizzes: FakeQuiz[];
 };
 
 export const ids = {
@@ -210,6 +213,7 @@ export function createState(now = new Date()): FakeState {
     requests: [],
     progress: [],
     layouts: [],
+    quizzes: [],
   };
 
   const session = (

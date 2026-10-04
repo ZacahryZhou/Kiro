@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 const CHECKS = [
   "fake-check", "provider-check", "tools-check", "agent-check", "proposals-check", "routes-check",
-  "student-check", "chat-check", "schedule-check", "policy-check", "lesson-prep-check", "mock-check", "trace-check", "reschedule-check", "request-check", "progress-check", "dashboard-check", "file-text-check",
+  "student-check", "chat-check", "schedule-check", "policy-check", "lesson-prep-check", "mock-check", "trace-check", "reschedule-check", "request-check", "progress-check", "dashboard-check", "file-text-check", "quiz-check",
 ];
 
 // Offline checks must run on the fake services: they pick them when NODE_ENV is unset.

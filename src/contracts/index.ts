@@ -3,3 +3,4 @@ export * from "./views";
 export * from "./inputs";
 export * from "./proposals";
 export * from "./dashboard";
+export * from "./quiz";

@@ -100,6 +100,43 @@ function answerFromSources(system: string, user: string): Completion | undefined
     : { found: false, answer: "", citations: [] }));
 }
 
+
+// ---------- the isolated quiz-writing call ----------
+
+const FALLBACK_TERMS = ["variable", "constant", "equation", "fraction", "ratio", "formula"];
+
+function writeQuiz(system: string, user: string): Completion | undefined {
+  if (!system.startsWith("You write quiz questions from course materials.")) return undefined;
+  const data = parseJsonObject(user) as { slots?: { index: number; type: string; difficulty: string; topic?: string }[]; materials?: { materialId: string; title: string; content: string }[] } | null;
+  const sentences: { materialId: string; title: string; text: string; term: string }[] = [];
+  for (const material of data?.materials ?? []) {
+    for (const raw of material.content.split(/(?<=[.!?])\s+|\n+/)) {
+      const text = raw.replace(/\s+/g, " ").trim();
+      if (text.length < 25 || text.length > 220) continue;
+      const term = text.split(/[^A-Za-z0-9+=-]+/).filter((w) => w.length >= 5 && !STOP.has(w.toLowerCase())).sort((a, b) => b.length - a.length)[0];
+      if (term) sentences.push({ materialId: material.materialId, title: material.title, text, term });
+    }
+  }
+  const questions = (data?.slots ?? []).flatMap((slot, position) => {
+    if (sentences.length === 0) return [];
+    const base = sentences[(slot.index * 2 + position) % sentences.length];
+    const others = [...new Set([...sentences.map((x) => x.term), ...FALLBACK_TERMS])].filter((t) => t.toLowerCase() !== base.term.toLowerCase());
+    const blanked = base.text.replace(base.term, "____");
+    const common = { slot: slot.index, type: slot.type, difficulty: slot.difficulty, topic: slot.topic ?? base.title, sourceMaterialId: base.materialId, sourceQuote: base.text, explanation: `The materials say: "${base.text}"` };
+    if (slot.type === "MULTIPLE_CHOICE") {
+      const options = [base.term, ...others.slice(slot.index % Math.max(1, others.length - 3), (slot.index % Math.max(1, others.length - 3)) + 3)];
+      const rotated = options.slice(slot.index % 4).concat(options.slice(0, slot.index % 4));
+      return [{ ...common, prompt: `Complete the statement from the materials: "${blanked}"`, options: rotated, answer: base.term }];
+    }
+    if (slot.type === "TRUE_FALSE") {
+      const isTrue = slot.index % 2 === 0;
+      return [{ ...common, prompt: `True or false: ${isTrue ? base.text : base.text.replace(base.term, others[0] ?? "nothing")}`, answer: isTrue ? "True" : "False" }];
+    }
+    return [{ ...common, prompt: `Complete the statement from the materials: "${blanked}"`, answer: base.term }];
+  });
+  return say(JSON.stringify({ questions }));
+}
+
 // ---------- teacher flows ----------
 
 type Student = { studentId: string; name: string };
@@ -147,6 +184,39 @@ function teacherFlow(text: string, messages: ChatMessage[]): Completion {
   const first = done[0]?.data;
 
   // Pending leave or different-time requests.
+  // Write a quiz from the course materials: counts, mix and topics come from the sentence; code and a separate writing step do the rest.
+  if ((/\b(quiz|exam)\b/i.test(text) || /\b(?:a|the|my)\s+test\b/i.test(text)) && /\b(make|create|write|generate|build|draft|prepare)\b/i.test(text) && !/\bhome\s?page\b/i.test(text)) {
+    const num = (re: RegExp) => { const m = re.exec(text); return m ? Number(m[1]) : undefined; };
+    const count = num(/(\d+)\s*(?:quiz\s+|exam\s+|test\s+)?questions?\b/i) ?? num(/\b(?:quiz|exam|test)\s+(?:of|with)\s+(\d+)\b/i);
+    if (step === 0) {
+      if (!count) return say("How many questions do you want in the quiz?");
+      return call("listMyCourses", {}, 1);
+    }
+    const courses = ((first?.courses as { courseId: string; name: string }[]) ?? []);
+    const named = courses.filter((c) => words(text).some((w) => w.length > 3 && c.name.toLowerCase().includes(w)));
+    const pick = courses.length === 1 ? courses[0] : named.length === 1 ? named[0] : undefined;
+    if (!pick) return say(courses.length === 0 ? "You have no courses to write a quiz for yet." : `Which course is the quiz for: ${(named.length > 1 ? named : courses).map((c) => c.name).join(" or ")}?`);
+    if (step === 1) {
+      const topicText = /(?:covering|cover|about|topics?:?|on)\s+([^.;]+?)(?:\.|;|$)/i.exec(text.replace(/\b\d+\s*(?:multiple[- ]choice|mc|true\/false|true or false|short[- ]answer|easy|medium|hard)\b/gi, ""))?.[1];
+      const topics = topicText ? topicText.split(/,|\band\b/i).map((t) => t.replace(/\b(the|my|from|unit)\b/gi, "").trim()).filter((t) => t.length > 2 && !/\b(questions?|quiz|course|class)\b/i.test(t)).slice(0, 8) : [];
+      const unit = /\bfrom\s+(?:the\s+)?([A-Za-z][\w ]+?)\s+unit\b/i.exec(text)?.[1];
+      const args: Record<string, unknown> = { courseId: pick.courseId, count };
+      const set = (key: string, re: RegExp) => { const v = num(re); if (v !== undefined) args[key] = v; };
+      set("multipleChoice", /(\d+)\s*(?:multiple[- ]choice|mc)\b/i);
+      set("trueFalse", /(\d+)\s*(?:true\/false|true or false|true-false|tf)\b/i);
+      set("shortAnswer", /(\d+)\s*short[- ]answer\b/i);
+      set("easy", /(\d+)\s*easy\b/i);
+      set("medium", /(\d+)\s*medium\b/i);
+      set("hard", /(\d+)\s*hard\b/i);
+      if (topics.length) args.topics = topics;
+      if (unit) args.unit = unit;
+      return call("proposeQuiz", args, 2);
+    }
+    const data = done[1].data;
+    if (errorLine(data)) return say(`I couldn't write that quiz: ${errorLine(data)}`);
+    return say(`${proposalReply(data)}${typeof data.warning === "string" ? ` ${data.warning}` : ""}`);
+  }
+
   // Design the home page: pick widgets, colours and motion from the sentence; code places them.
   if (/\b(home\s?page|home\s?screen|dashboard)\b/i.test(text) && /\b(design|set\s?up|arrange|build|make|show|layout|only|want|create)\b/i.test(text)) {
     const picks: { type: string; studentName?: string; courseName?: string }[] = [];
@@ -464,6 +534,8 @@ export function eduMockModel(params: Params): Completion {
   const user = lastUserText(params.messages);
   const qa = answerFromSources(system, user);
   if (qa) return qa;
+  const quiz = writeQuiz(system, user);
+  if (quiz) return quiz;
 
   const names = new Set((params.tools ?? []).map((t) => t.name));
   if (names.has("proposeMarkAttendance")) return teacherFlow(user, params.messages);

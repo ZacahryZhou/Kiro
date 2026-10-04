@@ -4,6 +4,8 @@ import { EmptyState, ErrorAlert, PageHeader } from "@/components/page";
 import { requireRole } from "@/lib/auth/actor";
 import { NEXT_ACTION_LABELS } from "@/lib/progress";
 import { formatLocalDate } from "@/lib/time";
+import { StudentQuizzes } from "@/components/student-quizzes";
+import { listStudentQuizzes } from "@/services/quiz";
 import { getCourseMaterials, listMyCourses, listProgressRecords } from "@/services/read";
 
 function safeExternalUrl(value: string | undefined): string | undefined {
@@ -29,7 +31,7 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
   const course = coursesResult.data.courses.find((item) => item.id === id);
   if (!course) notFound();
 
-  const [materialsResult, progressResult] = await Promise.all([getCourseMaterials(actor, { courseId: id }), listProgressRecords(actor, { courseId: id })]);
+  const [materialsResult, progressResult, quizzesResult] = await Promise.all([getCourseMaterials(actor, { courseId: id }), listProgressRecords(actor, { courseId: id }), listStudentQuizzes(actor, { courseId: id })]);
   const timeZone = process.env.APP_TZ || "America/Vancouver";
   const progress = progressResult.ok ? progressResult.data.records : [];
   return (
@@ -40,6 +42,8 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
         title={course.name}
         description={`${course.subject} · Teacher: ${course.teacherName}`}
       />
+
+      {quizzesResult.ok && <StudentQuizzes quizzes={quizzesResult.data.quizzes} />}
 
       {!materialsResult.ok ? (
         <ErrorAlert message={materialsResult.error.message} />

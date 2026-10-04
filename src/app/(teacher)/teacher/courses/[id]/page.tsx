@@ -3,6 +3,8 @@ import { FileText, MapPin, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorAlert, Initial, PageHeader, SectionHeading } from "@/components/page";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TeacherQuizzes } from "@/components/teacher-quizzes";
+import { listMyQuizzes } from "@/services/quiz";
 import { AddStudentForm, CreateSessionsForm, MarkAttendanceForm, ProgressForm, RescheduleSessionForm, TeacherCourseMaterials } from "@/components/teacher-course-forms";
 import { NEXT_ACTION_LABELS } from "@/lib/progress";
 import { requireRole } from "@/lib/auth/actor";
@@ -36,7 +38,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   if (!course) notFound();
 
   const timeZone = process.env.APP_TZ || "America/Vancouver";
-  const [studentsResult, scheduleResult, attendanceResult, deductionsResult, materialsResult, progressResult] = await Promise.all([
+  const [studentsResult, scheduleResult, attendanceResult, deductionsResult, materialsResult, progressResult, quizzesResult] = await Promise.all([
     listMyStudents(actor, { courseId: id }),
     getTeacherSchedule(actor, {
       from: "1970-01-01T00:00:00.000Z",
@@ -47,6 +49,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     listDeductions(actor, { courseId: id }),
     getCourseMaterials(actor, { courseId: id }),
     listProgressRecords(actor, { courseId: id }),
+    listMyQuizzes(actor, { courseId: id }),
   ]);
 
   const sessionsByDate = new Map<string, SessionView[]>();
@@ -81,10 +84,11 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       </div>
 
       <Tabs defaultValue="students" className="space-y-5">
-        <TabsList className="grid h-auto w-full grid-cols-2 sm:w-[min(100%,44rem)] sm:grid-cols-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:w-[min(100%,52rem)] sm:grid-cols-6">
           <TabsTrigger value="students">Students</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
           <TabsTrigger value="materials">Materials</TabsTrigger>
+          <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="progress">Progress</TabsTrigger>
         </TabsList>
@@ -173,6 +177,11 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           ) : (
             <TeacherCourseMaterials courseId={id} units={materialsResult.data.units} />
           )}
+        </TabsContent>
+
+        <TabsContent value="quizzes" className="space-y-4">
+          <SectionHeading title="Quizzes" description="Written by the assistant from your materials. Review a draft, then publish it so students can practise." />
+          {!quizzesResult.ok ? <ErrorAlert message={quizzesResult.error.message} /> : <TeacherQuizzes courseId={id} quizzes={quizzesResult.data.quizzes} />}
         </TabsContent>
 
         <TabsContent value="attendance" className="space-y-4">

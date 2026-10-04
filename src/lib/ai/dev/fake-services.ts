@@ -5,6 +5,7 @@ import {
   CheckConflictsInput,
   ConfirmAttendanceInput,
   CreateCourseInput,
+  CreateQuizInput,
   CreateSessionsInput,
   CreateUnitInput,
   DashboardLayoutInput,
@@ -20,6 +21,7 @@ import {
   type ConflictView,
   type CourseView,
   type DashboardLayoutView,
+  type QuizView,
   type DeductionView,
   type ErrorCode,
   type Result,
@@ -958,4 +960,25 @@ export async function saveDashboardLayout(actor: Actor, input: z.input<typeof Da
   if (existing) Object.assign(existing, { theme: layout.theme, motion: layout.motion, items: layout.items, lastUsedAt: now, updatedAt: new Date(now).toISOString() });
   else store.layouts.push(row);
   return ok(layoutView(row, row.id));
+}
+
+// ---------- quizzes (contract v0.7) ----------
+
+export async function createQuiz(actor: Actor, input: z.input<typeof CreateQuizInput>): Promise<Result<{ quizId: string; questionCount: number }>> {
+  if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers can create quizzes.");
+  const parsed = CreateQuizInput.safeParse(input);
+  if (!parsed.success) return fail("VALIDATION", parsed.error.issues[0]?.message ?? "That quiz is not valid.");
+  const course = ownCourse(actor, parsed.data.courseId);
+  if (!course.ok) return course as Result<never>;
+  const own = new Set(store.materials.filter((m) => store.units.some((u) => u.id === m.unitId && u.courseId === course.data.id)).map((m) => m.id));
+  if (parsed.data.questions.some((q) => q.sourceMaterialId && !own.has(q.sourceMaterialId))) return fail("VALIDATION", "A question cites a material that is not in this course.");
+  const quiz = { id: nextId("q"), courseId: course.data.id, title: parsed.data.title, published: false, createdAt: new Date().toISOString(), questions: parsed.data.questions.map((q, index) => ({ id: nextId("qq"), order: index + 1, ...q })) };
+  store.quizzes.push(quiz);
+  return ok({ quizId: quiz.id, questionCount: quiz.questions.length });
+}
+
+export async function listMyQuizzes(actor: Actor, input: { courseId?: string } = {}): Promise<Result<{ quizzes: QuizView[] }>> {
+  if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers can view quiz answer keys.");
+  const mine = store.quizzes.filter((q) => store.courses.some((c) => c.id === q.courseId && c.teacherId === actor.userId) && (!input.courseId || q.courseId === input.courseId));
+  return ok({ quizzes: mine.map((q) => ({ id: q.id, courseId: q.courseId, courseName: store.courses.find((c) => c.id === q.courseId)?.name ?? "", title: q.title, published: q.published, createdAt: q.createdAt, questions: q.questions as unknown as QuizView["questions"] })) });
 }

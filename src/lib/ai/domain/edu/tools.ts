@@ -20,6 +20,8 @@ import type { ToolSpec } from "../../core/types";
 import * as services from "../../services";
 import { materialsQaSystemPrompt } from "./prompts";
 import { DASHBOARD_MOTIONS, DASHBOARD_THEMES, WIDGET_TYPES, DashboardLayoutInput } from "@/contracts";
+import { generateQuestions, planSlots, type QuizSource } from "./quiz-gen";
+import { CreateQuizInput, MAX_QUESTIONS } from "@/contracts";
 import { packWidgets, WIDGET_WIDTHS, type WidgetRequest } from "@/lib/dashboard-pack";
 import { eduProposals, money, sessionsDeducted } from "./proposal-types";
 
@@ -1598,6 +1600,120 @@ const proposeDashboardLayout = defineTool({
   },
 });
 
+
+const listMyQuizzes = defineTool({
+  name: "listMyQuizzes",
+  description: "List the quizzes the teacher has saved for a course (title, number of questions, whether students can see it). Does not include the answer key.",
+  parameters: obj({ courseId: { type: "string", description: "Optional course ID to list only that course's quizzes." } }),
+  schema: z.object({ courseId: id.optional() }),
+  async run(actor, args) {
+    const result = await services.listMyQuizzes(actor, args);
+    if (!result.ok) return serviceFailure(result.error);
+    return succeed({
+      quizzes: result.data.quizzes.map((quiz) => ({ title: quiz.title, course: quiz.courseName, questions: quiz.questions.length, published: quiz.published })),
+      total: result.data.quizzes.length,
+    });
+  },
+});
+
+const MAX_QUIZ_SOURCE_CHARS = 24_000;
+
+const proposeQuiz = defineTool({
+  name: "proposeQuiz",
+  description:
+    "Write a quiz from a course's text materials. This does NOT save anything: the teacher reviews it and must confirm, and it is saved as a draft. " +
+    "Give how many questions (1 to 30). Optionally give counts per type (multipleChoice, trueFalse, shortAnswer; they must add up to count), counts per difficulty (easy, medium, hard; they must add up to count), a list of topics to cover, a unit title to use only part of the materials, and a quiz title. " +
+    "If the teacher gives no mix, code uses about 60% multiple choice, 20% true/false, 20% short answer and 40% easy, 40% medium, 20% hard. Do not write the questions yourself: code asks a separate step to write them and keeps only the ones backed by a quote from the materials. " +
+    "Easy means recalling a stated fact, medium means applying one idea, hard means combining ideas or several steps.",
+  parameters: obj(
+    {
+      courseId: { type: "string" },
+      count: { type: "integer", description: `Number of questions, 1 to ${MAX_QUESTIONS}.` },
+      multipleChoice: { type: "integer" },
+      trueFalse: { type: "integer" },
+      shortAnswer: { type: "integer" },
+      easy: { type: "integer" },
+      medium: { type: "integer" },
+      hard: { type: "integer" },
+      topics: { type: "array", items: { type: "string" }, description: "Up to 8 knowledge points to cover." },
+      unit: { type: "string", description: "Optional unit title (or part of it) to restrict the source materials." },
+      title: { type: "string", description: "Optional quiz title." },
+    },
+    ["courseId", "count"],
+  ),
+  schema: z.object({
+    courseId: id,
+    count: z.number().int().min(1).max(MAX_QUESTIONS),
+    multipleChoice: z.number().int().min(0).max(MAX_QUESTIONS).optional(),
+    trueFalse: z.number().int().min(0).max(MAX_QUESTIONS).optional(),
+    shortAnswer: z.number().int().min(0).max(MAX_QUESTIONS).optional(),
+    easy: z.number().int().min(0).max(MAX_QUESTIONS).optional(),
+    medium: z.number().int().min(0).max(MAX_QUESTIONS).optional(),
+    hard: z.number().int().min(0).max(MAX_QUESTIONS).optional(),
+    topics: z.array(z.string().trim().min(1).max(80)).max(8).optional(),
+    unit: z.string().trim().min(1).max(80).optional(),
+    title: z.string().trim().min(1).max(120).optional(),
+  }),
+  async run(actor, args, ctx) {
+    if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers can create quizzes.");
+    if (!ctx) return failed("INTERNAL", "The quiz writer is not available right now.");
+    const courses = await services.listMyCourses(actor);
+    if (!courses.ok) return serviceFailure(courses.error);
+    const course = courses.data.courses.find((item) => item.id === args.courseId);
+    if (!course) return failed("NOT_FOUND", "That course was not found among your courses.");
+
+    const plan = planSlots({
+      count: args.count,
+      types: { MULTIPLE_CHOICE: args.multipleChoice, TRUE_FALSE: args.trueFalse, SHORT_ANSWER: args.shortAnswer },
+      levels: { EASY: args.easy, MEDIUM: args.medium, HARD: args.hard },
+      topics: args.topics,
+    });
+    if (!plan.ok) return failed("VALIDATION", plan.message);
+
+    const materials = await services.getCourseMaterials(actor, { courseId: course.id });
+    if (!materials.ok) return serviceFailure(materials.error);
+    const needle = args.unit?.toLowerCase();
+    const units = materials.data.units.filter((unit) => !needle || unit.title.toLowerCase().includes(needle));
+    if (needle && units.length === 0) return failed("NOT_FOUND", `No unit matches "${args.unit}". Units: ${materials.data.units.map((u) => u.title).join(", ") || "none"}.`);
+    let budget = MAX_QUIZ_SOURCE_CHARS;
+    const sources: QuizSource[] = [];
+    for (const unit of units) {
+      for (const material of unit.materials) {
+        if (material.kind !== "TEXT" || !material.content || budget <= 0) continue;
+        const content = material.content.slice(0, Math.min(8_000, budget));
+        budget -= content.length;
+        sources.push({ materialId: material.id, title: material.title, content });
+      }
+    }
+    if (sources.length === 0) return failed("NOT_FOUND", "This course has no text materials to write a quiz from. Ask the teacher to add or upload some first.");
+
+    const generated = await generateQuestions(plan.slots, { course: course.name, subject: course.subject, sources, complete: ctx.complete });
+    if (generated.callError && generated.questions.length === 0) return failed("INTERNAL", `The quiz writer failed: ${generated.callError}`);
+    if (generated.questions.length === 0) return failed("NOT_FOUND", "I could not write questions that are backed by quotes from the materials. The materials may be too short or off topic. Try another unit or add more material.");
+
+    const title = args.title ?? `${course.name} quiz${args.topics?.length ? `: ${args.topics.slice(0, 2).join(", ")}` : ""}`.slice(0, 120);
+    const parsed = CreateQuizInput.safeParse({ courseId: course.id, title: title.slice(0, 120), questions: generated.questions });
+    if (!parsed.success) return failed("VALIDATION", parsed.error.issues[0]?.message ?? "That quiz is not valid.");
+    const shortfall = generated.missing.length;
+    const summary = `Create the quiz "${parsed.data.title}" (${shortfall > 0 ? `${generated.questions.length} of the ${args.count} questions you asked for` : `${generated.questions.length} ${generated.questions.length === 1 ? "question" : "questions"}`}) for ${course.name}`;
+    const created = await eduProposals.create({ actor, type: "QUIZ", payload: parsed.data, courseId: course.id, summary });
+    if (!created.ok) return serviceFailure(created.error);
+    return {
+      ok: true,
+      proposal: created.data,
+      content: JSON.stringify({
+        status: "PENDING_CONFIRMATION",
+        proposalId: created.data.id,
+        summary,
+        questions: generated.questions.length,
+        requested: args.count,
+        ...(shortfall > 0 ? { warning: `Only ${generated.questions.length} of ${args.count} questions could be backed by quotes from the materials, so ${shortfall} were left out. Tell the teacher.` } : {}),
+        note: "The quiz has not been saved yet. The teacher must review and confirm it; it is saved as a draft.",
+      }),
+    };
+  },
+});
+
 // ---------- tool sets ----------
 
 const TEACHER_TOOLS: Tool[] = [
@@ -1615,6 +1731,7 @@ const TEACHER_TOOLS: Tool[] = [
   listStudentRequests,
   listProgressRecords,
   listMyDashboardLayouts,
+  listMyQuizzes,
   proposeMarkAttendance,
   proposeCreateCourse,
   proposeCreateSessions,
@@ -1625,6 +1742,7 @@ const TEACHER_TOOLS: Tool[] = [
   proposeAddStudentNote,
   proposeLessonPrep,
   proposeDashboardLayout,
+  proposeQuiz,
 ];
 
 /** Students get no write or memory tools. The one proposal they can make is a leave or different-time request to their own teacher. */

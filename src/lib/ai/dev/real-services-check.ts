@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- dev check script reads untyped service results */
 // Application-runtime smoke check. Run against an isolated migrated development database:
 // NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts
 import { prisma } from "@/lib/db/prisma";
@@ -9,6 +10,7 @@ import * as coreRead from "@/services/read";
 import * as coreWrite from "@/services/write";
 import * as dashboard from "@/services/dashboard";
 import { addMaterialsFromFile, deleteMaterial } from "@/services/materials-upload";
+import * as quizzes from "@/services/quiz";
 import type { Actor } from "@/contracts";
 
 async function main() {
@@ -270,7 +272,8 @@ async function main() {
     check(!otherConfirm.ok, "another teacher cannot confirm this proposal");
     const foreign = await designTool.run(otherTeacher, { name: "Mine", widgets: [{ type: "STUDENT_FOCUS", studentName: "Jordan" }] });
     check(!foreign.ok && !foreign.proposal, "another teacher cannot pin Jordan by name");
-    await prisma.dashboardLayout.deleteMany({ where: { teacherId: teacher.userId } });
+    const leftoverLayouts = await dashboard.listMyLayouts(teacher);
+    if (leftoverLayouts.ok) for (const layout of leftoverLayouts.data.layouts) await dashboard.deleteDashboardLayout(teacher, { layoutId: layout.id });
 
     // ----- file upload into a unit -----
     const uploadUnit = await prisma.courseUnit.findFirst({ where: { courseId: course.id } });
@@ -301,6 +304,68 @@ async function main() {
     check(!!studentDelete && !studentDelete.ok && studentDelete.error.code === "FORBIDDEN", "a student cannot delete a material");
     const ownDelete = uploaded.ok ? await deleteMaterial(teacher, { materialId: uploaded.data.materialIds[0] }) : undefined;
     check(!!ownDelete && ownDelete.ok && !(await prisma.material.findUnique({ where: { id: uploaded.ok ? uploaded.data.materialIds[0] : "" } })), "the teacher deletes their own material");
+
+    // ----- quizzes -----
+    const quizMaterial = await prisma.material.findFirst({ where: { unit: { courseId: course.id }, kind: "TEXT" } });
+    if (!quizMaterial?.content) throw new Error("The demo course has no text material for a quiz.");
+    const quote = quizMaterial.content.slice(0, 40);
+    const quizInput = { courseId: course.id, title: "Real quiz", questions: [
+      { type: "MULTIPLE_CHOICE" as const, difficulty: "EASY" as const, topic: "basics", prompt: "Pick the right one", options: ["right", "wrong", "other"], answer: "right", explanation: "Because.", sourceMaterialId: quizMaterial.id, sourceQuote: quote },
+      { type: "TRUE_FALSE" as const, difficulty: "MEDIUM" as const, topic: "basics", prompt: "The sky is blue.", answer: "True", sourceMaterialId: quizMaterial.id, sourceQuote: quote },
+      { type: "SHORT_ANSWER" as const, difficulty: "HARD" as const, topic: "basics", prompt: "Name a colour.", answer: "blue", sourceMaterialId: quizMaterial.id, sourceQuote: quote },
+    ] };
+    const quizDraft = await quizzes.createQuiz(teacher, quizInput);
+    check(quizDraft.ok && quizDraft.data.questionCount === 3, "a teacher saves a quiz with its questions");
+    const quizId = quizDraft.ok ? quizDraft.data.quizId : "";
+    const keyView = await quizzes.listMyQuizzes(teacher, { courseId: course.id });
+    check(keyView.ok && keyView.data.quizzes[0]?.published === false && keyView.data.quizzes[0].questions[0].answer === "right" && !!keyView.data.quizzes[0].questions[0].sourceTitle, "the teacher sees a draft quiz with the answer key and the source title");
+    check((await quizzes.listMyQuizzes(otherTeacher)).ok && (await quizzes.listMyQuizzes(otherTeacher) as any).data.quizzes.length === 0, "another teacher sees no quizzes");
+    check(!(await quizzes.createQuiz(otherTeacher, quizInput)).ok, "another teacher cannot save a quiz into this course");
+    const wrongMaterial = await prisma.material.findFirst({ where: { unit: { course: { id: { not: course.id } } } } });
+    check(!wrongMaterial || !(await quizzes.createQuiz(teacher, { ...quizInput, title: "Cross", questions: [{ ...quizInput.questions[0], sourceMaterialId: wrongMaterial.id }] })).ok, "a quiz cannot cite a material from another course");
+    check(!(await quizzes.createQuiz(teacher, { ...quizInput, title: "Bad", questions: [{ ...quizInput.questions[0], answer: "not an option" }] })).ok, "a multiple-choice answer outside the options is refused");
+    const draftToStudent = await quizzes.listStudentQuizzes(jordan);
+    check(draftToStudent.ok && draftToStudent.data.quizzes.length === 0, "a student sees nothing while the quiz is a draft");
+    check(!(await quizzes.checkQuizAnswers(jordan, { quizId, answers: [] })).ok, "a student cannot answer a draft quiz");
+    check(!(await quizzes.setQuizPublished(otherTeacher, { quizId, published: true })).ok, "another teacher cannot publish this quiz");
+    check(!(await quizzes.setQuizPublished(jordan, { quizId, published: true })).ok, "a student cannot publish a quiz");
+    check((await quizzes.setQuizPublished(teacher, { quizId, published: true })).ok, "the teacher publishes the quiz");
+    const quizStudentView = await quizzes.listStudentQuizzes(jordan);
+    const studentQuestions = quizStudentView.ok ? quizStudentView.data.quizzes[0]?.questions ?? [] : [];
+    check(quizStudentView.ok && studentQuestions.length === 3 && !JSON.stringify(quizStudentView.data).includes("explanation") && !JSON.stringify(quizStudentView.data).includes("sourceQuote") && !("answer" in (studentQuestions[0] ?? {})), "the student sees the questions with no answer, explanation or source");
+    const samUser2 = await prisma.user.findUnique({ where: { email: "s+sam@example.test" } });
+    const outsider = await prisma.user.findFirst({ where: { role: "STUDENT", enrollments: { none: { courseId: course.id } } } });
+    check(!outsider || (await quizzes.listStudentQuizzes({ userId: outsider.id, role: "STUDENT" })) .ok && ((await quizzes.listStudentQuizzes({ userId: outsider.id, role: "STUDENT" })) as any).data.quizzes.length === 0, "a student who is not in the course sees no quiz");
+    check(!outsider || !(await quizzes.checkQuizAnswers({ userId: outsider.id, role: "STUDENT" }, { quizId, answers: [] })).ok, "a student who is not in the course cannot answer it");
+    check(!!samUser2, "the second enrolled student exists");
+    const answers = studentQuestions.map((q) => ({ questionId: q.id, answer: q.type === "MULTIPLE_CHOICE" ? "right" : q.type === "TRUE_FALSE" ? "false" : "azure" }));
+    const quizMarked = await quizzes.checkQuizAnswers(jordan, { quizId, answers });
+    check(quizMarked.ok && quizMarked.data.graded === 2 && quizMarked.data.score === 1 && quizMarked.data.results.find((r) => r.correctAnswer === "blue")?.correct === null, "multiple choice and true/false are marked; short answers are left to the student");
+    check(quizMarked.ok && quizMarked.data.results.every((r) => r.correctAnswer.length > 0), "the key and explanations come back only after answering");
+    const blankMark = await quizzes.checkQuizAnswers(jordan, { quizId, answers: [] });
+    check(blankMark.ok && blankMark.data.score === 0 && blankMark.data.graded === 2, "unanswered questions count as wrong");
+    check(!(await quizzes.checkQuizAnswers(teacher, { quizId, answers: [] })).ok, "a teacher cannot use the student practice check");
+    check((await quizzes.setQuizPublished(teacher, { quizId, published: false })).ok && (await quizzes.listStudentQuizzes(jordan) as any).data.quizzes.length === 0, "unpublishing hides the quiz from students again");
+    check(!(await quizzes.deleteQuiz(otherTeacher, { quizId })).ok && !!(await prisma.quiz.findUnique({ where: { id: quizId } })), "another teacher cannot delete the quiz");
+    check((await quizzes.deleteQuiz(teacher, { quizId })).ok && (await prisma.quizQuestion.count({ where: { quizId } })) === 0, "deleting a quiz removes its questions too");
+
+    // ----- the AI writes a quiz against the real database -----
+    process.env.AI_MOCK = "1";
+    const quizTool = findTool("TEACHER", "proposeQuiz");
+    if (!quizTool) throw new Error("Quiz tool is unavailable.");
+    const { chatCompletion } = await import("../core/provider");
+    const { eduMockModel } = await import("../domain/edu/mock-model");
+    const written = await quizTool.run(teacher, { courseId: course.id, count: 4, title: "AI quiz" }, { complete: ((p: any, o: any) => chatCompletion(p, { mock: eduMockModel, ...o })) as any });
+    const quizzesBefore = await prisma.quiz.count({ where: { courseId: course.id } });
+    check(written.ok && written.proposal?.type === "QUIZ" && quizzesBefore === 0, "an AI quiz proposal is stored without creating a quiz");
+    const writtenConfirm = await eduProposals.confirm(teacher, written.proposal!.id);
+    const savedQuiz = await prisma.quiz.findFirst({ where: { courseId: course.id, title: "AI quiz" }, include: { questions: true } });
+    check(writtenConfirm.ok && writtenConfirm.data.status === "executed" && savedQuiz?.published === false && savedQuiz.questions.length > 0 && savedQuiz.questions.every((q) => !!q.sourceQuote), "confirming saves a draft quiz whose questions all carry a source quote");
+    await eduProposals.confirm(teacher, written.proposal!.id);
+    check((await prisma.quiz.count({ where: { courseId: course.id, title: "AI quiz" } })) === 1, "confirming twice never saves a second quiz");
+    check(!(await eduProposals.confirm(otherTeacher, written.proposal!.id)).ok, "another teacher cannot confirm this quiz proposal");
+    delete process.env.AI_MOCK;
+    if (savedQuiz) await quizzes.deleteQuiz(teacher, { quizId: savedQuiz.id });
   } finally {
     // Leave the database in its pristine fixture state.
     await seedFixtures(prisma, { reset: true });

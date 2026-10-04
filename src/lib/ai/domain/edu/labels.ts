@@ -35,6 +35,11 @@ export const labels = {
     motions: { calm: "Calm", lively: "Lively", off: "No motion" },
     saved: "Home page layout saved and now active",
   },
+  quiz: {
+    types: { MULTIPLE_CHOICE: "multiple choice", TRUE_FALSE: "true/false", SHORT_ANSWER: "short answer" },
+    levels: { EASY: "easy", MEDIUM: "medium", HARD: "hard" },
+    saved: "Quiz saved as a draft",
+  },
   proposal: {
     heading: "Review before anything changes",
     notChanged: "Nothing has been changed yet.",
