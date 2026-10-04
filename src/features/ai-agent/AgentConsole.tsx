@@ -5,6 +5,7 @@ import type { Role } from "@/contracts";
 import { STEP_DEFS, type StepId } from "@/lib/ai/trace/steps";
 import type { TraceEvent } from "@/lib/ai/trace/bus";
 import { AiPanel } from "./AiPanel";
+import { ArchitectureGraph } from "./ArchitectureGraph";
 
 type StepState = "idle" | "active" | "done" | "error";
 
@@ -127,6 +128,8 @@ export function AgentConsole({ role }: { role: Role }) {
           </button>
         </div>
       </header>
+
+      <ArchitectureGraph states={states} activeStep={activeStep} />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
         <section className="flex flex-col gap-3" aria-label="Pipeline">
