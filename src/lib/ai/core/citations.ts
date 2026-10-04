@@ -23,7 +23,21 @@ const modelAnswer = z.object({
     .default([]),
 });
 
-const collapse = (text: string) => text.replace(/\s+/g, " ").trim();
+/**
+ * Compares text the way a person reads it: spacing, letter case, curly versus straight quotes, dashes,
+ * ellipsis marks and invisible characters do not matter. Words and numbers still have to match exactly.
+ */
+const collapse = (text: string) =>
+  text
+    .normalize("NFKC")
+    .replace(/[\u200b-\u200d\u00ad\ufeff]/g, "")
+    .replace(/[\u2018\u2019\u201a\u2032]/g, "'")
+    .replace(/[\u201c\u201d\u201e\u2033]/g, '"')
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .replace(/\u2026/g, "...")
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .trim();
 
 /** Extracts the first JSON object from model text (it may be wrapped in code fences or prose). */
 export function parseJsonObject(text: string): unknown | null {
@@ -50,7 +64,7 @@ export function verifyAnswer(raw: unknown, sources: CitationSource[]): VerifiedA
     if (!source || quote.length < MIN_QUOTE_CHARS || !collapse(source.content).includes(quote)) {
       return { found: false }; // one bad citation rejects the whole answer
     }
-    verified.push({ materialId: source.materialId, unitId: source.unitId, title: source.title, quote });
+    verified.push({ materialId: source.materialId, unitId: source.unitId, title: source.title, quote: citation.quote.replace(/\s+/g, " ").trim() });
   }
   return { found: true, answer: answer.trim().slice(0, MAX_ANSWER_CHARS), citations: verified };
 }
@@ -68,19 +82,32 @@ export async function answerWithCitations(params: {
   extra?: Record<string, unknown>;
 }): Promise<VerifiedAnswer> {
   if (params.sources.length === 0) return { found: false };
-  const completion = await params.complete({
-    messages: [
-      { role: "system", content: params.system },
-      {
-        role: "user",
-        content: JSON.stringify({
-          question: params.question,
-          ...(params.extra ?? {}),
-          materials: params.sources.map(({ materialId, title, content }) => ({ materialId, title, content })),
-        }),
-      },
-    ],
-  });
-  if (!completion.ok || !completion.data.content) return { found: false };
-  return verifyAnswer(parseJsonObject(completion.data.content), params.sources);
+  const ask = (note?: string) =>
+    params.complete({
+      messages: [
+        { role: "system", content: params.system },
+        {
+          role: "user",
+          content: JSON.stringify({
+            question: params.question,
+            ...(params.extra ?? {}),
+            materials: params.sources.map(({ materialId, title, content }) => ({ materialId, title, content })),
+          }),
+        },
+        ...(note ? [{ role: "system" as const, content: note }] : []),
+      ],
+    });
+  const attempt = async (note?: string): Promise<VerifiedAnswer> => {
+    const completion = await ask(note);
+    if (!completion.ok || !completion.data.content) return { found: false };
+    return verifyAnswer(parseJsonObject(completion.data.content), params.sources);
+  };
+  const first = await attempt();
+  if (first.found) return first;
+  // Models often shorten or reword a quote. One more try, told to copy it exactly, before saying "not found".
+  return attempt(
+    "System note (not from the user): your previous answer was rejected because a quote was not copied word for word from its material, or no quote was given. " +
+      "If the materials do answer the question, answer again and give each quote as a short exact copy (one sentence or less) of text that appears in that material. " +
+      "If they do not answer it, return found: false.",
+  );
 }

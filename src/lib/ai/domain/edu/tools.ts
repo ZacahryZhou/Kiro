@@ -562,6 +562,14 @@ const proposeMarkAttendance = defineTool({
 // ---------- student tools (read-only) ----------
 
 const MAX_QA_SOURCE_CHARS = 24_000;
+const MIN_USEFUL_SOURCE_CHARS = 1_500;
+
+/** The part of a source that still fits the budget: all of it, the start of it, or null when almost no room is left. */
+function fitSource(content: string, used: number): string | null {
+  const room = MAX_QA_SOURCE_CHARS - used;
+  if (content.length <= room) return content;
+  return room >= MIN_USEFUL_SOURCE_CHARS ? content.slice(0, room) : null;
+}
 export const NOT_FOUND_REPLY = "I couldn't find that in the course materials.";
 
 const getStudentWorkspace = defineTool({
@@ -641,9 +649,10 @@ const answerFromCourseMaterials = defineTool({
       if (!materials.ok) return serviceFailure(materials.error);
       for (const unit of materials.data.units) {
         for (const m of unit.materials) {
-          if (m.kind !== "TEXT" || !m.content || size + m.content.length > MAX_QA_SOURCE_CHARS) continue;
-          size += m.content.length;
-          sources.push({ materialId: m.id, unitId: unit.id, title: m.title, content: m.content });
+          const fitted = m.kind === "TEXT" && m.content ? fitSource(m.content, size) : null;
+          if (!fitted) continue;
+          size += fitted.length;
+          sources.push({ materialId: m.id, unitId: unit.id, title: m.title, content: fitted });
         }
       }
     }
@@ -1914,9 +1923,10 @@ const explainWithTeacherNotes = defineTool({
       if (!materials.ok) return serviceFailure(materials.error);
       for (const unit of materials.data.units) {
         for (const m of unit.materials) {
-          if (m.kind !== "TEXT" || !m.content || size + m.content.length > MAX_QA_SOURCE_CHARS) continue;
-          size += m.content.length;
-          sources.push({ materialId: m.id, unitId: unit.id, title: m.title, content: m.content });
+          const fitted = m.kind === "TEXT" && m.content ? fitSource(m.content, size) : null;
+          if (!fitted) continue;
+          size += fitted.length;
+          sources.push({ materialId: m.id, unitId: unit.id, title: m.title, content: fitted });
         }
       }
     }
