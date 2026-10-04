@@ -266,10 +266,10 @@ export function ChatWorkspace({
   const activeTitle = chats.find((c) => c.id === activeId)?.title ?? labels.chat.newChat;
 
   return (
-    <section aria-label={productName} className={`flex min-h-0 w-full overflow-hidden bg-card ${modal ? "h-full" : "h-[34rem] rounded-2xl border"}`} data-testid="chat-workspace">
+    <section aria-label={productName} className={`flex min-h-0 w-full overflow-hidden bg-card ${modal ? "h-full" : "h-[min(34rem,75dvh)] rounded-2xl border"}`} data-testid="chat-workspace">
       {sidebar}
-      <div className={`min-w-0 flex-1 flex-col ${showHistory ? "hidden md:flex" : "flex"}`}>
-        <header className={`flex items-center gap-2 border-b px-3 py-2.5 ${modal ? "pr-12" : ""}`}>
+      <div className={`min-h-0 min-w-0 flex-1 flex-col ${showHistory ? "hidden md:flex" : "flex"}`}>
+        <header className={`flex shrink-0 items-center gap-2 border-b px-3 py-2.5 ${modal ? "pr-12" : ""}`}>
           <button type="button" onClick={() => setShowHistory(true)} aria-label={labels.chat.history} className="flex size-8 items-center justify-center rounded-lg border hover:bg-muted md:hidden"><History className="size-4" aria-hidden /></button>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-sm font-semibold" data-testid="chat-title">{activeTitle}</h2>
@@ -299,7 +299,7 @@ export function ChatWorkspace({
           <MessageList messages={messages} busy={busy} />
         )}
 
-        <form onSubmit={send} className="border-t p-3">
+        <form onSubmit={send} className="shrink-0 border-t p-3">
           <div className="flex items-end gap-2">
             <label htmlFor={`ai-input-${variant}${courseId ? `-${courseId}` : ""}`} className="sr-only">{labels.inputLabel}</label>
             <textarea

@@ -15,13 +15,16 @@ export type PanelMessage = {
 };
 
 export function MessageList({ messages, busy }: { messages: PanelMessage[]; busy: boolean }) {
-  const end = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    end.current?.scrollIntoView?.({ block: "end" }); // keep the newest message in view
+    // Keep the newest message in view by scrolling the list itself, never the page around it.
+    const element = list.current;
+    if (element) element.scrollTop = element.scrollHeight;
   }, [messages, busy]);
 
   return (
-    <div className="flex-1 space-y-3 overflow-y-auto p-3" role="log" aria-live="polite" aria-label={labels.title}>
+    // min-h-0 lets the list shrink to the space left by the header and input, so it scrolls instead of growing.
+    <div ref={list} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3" role="log" aria-live="polite" aria-label={labels.title}>
       {messages.map((message) => (
         <div key={message.id} className={message.role === "user" ? "text-right" : "text-left"}>
           <p className="mb-0.5 text-xs text-muted-foreground">
@@ -52,7 +55,6 @@ export function MessageList({ messages, busy }: { messages: PanelMessage[]; busy
         </div>
       ))}
       {busy ? <p className="text-sm text-muted-foreground">{labels.thinking}</p> : null}
-      <div ref={end} />
     </div>
   );
 }
