@@ -97,6 +97,6 @@ Around the agent is a normal product: sign-in, schedule and calendar, courses, m
 
 **Built with (tags):** next.js, react, typescript, tailwindcss, shadcn-ui, postgresql, prisma, auth.js, zod, docker, deepseek, openai-compatible-api
 
-**Try it out:** the GitHub repository (`https://github.com/ZacahryZhou/kiro`) and your demo video. To run it: clone, copy `.env.example` to `.env`, `docker compose up --build`, then the two seed commands in the README. `AI_MOCK=1` needs no API key. `docs/DEMO-SCRIPT.md` walks through the demo.
+**Try it out:** the GitHub repository (`https://github.com/ZacahryZhou/Kiro`) and your demo video. To run it: clone, copy `.env.example` to `.env`, `docker compose up --build`, then the two seed commands in the README. `AI_MOCK=1` needs no API key. `docs/DEMO-SCRIPT.md` walks through the demo.
 
 **Good screenshots for the gallery:** the chat pop-up with a proposal preview card, the Agent Console architecture graph lighting up, the customisable home page, and a student course page with the course tutor.

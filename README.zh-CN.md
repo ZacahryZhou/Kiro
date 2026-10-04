@@ -188,8 +188,8 @@ Kiro 的助手是一个**会用工具的 Agent**,不是贴在日历旁边的聊�
 前提:已安装并启动 Docker Desktop、Git,可选 Node 22 和 VS Code。
 
 ```bash
-git clone https://github.com/ZacahryZhou/kiro.git
-cd kiro
+git clone https://github.com/ZacahryZhou/Kiro.git
+cd Kiro
 cp .env.example .env        # 然后按下面的说明修改
 docker compose up --build   # 应用在 http://localhost:3000,数据库在 :5432
 ```

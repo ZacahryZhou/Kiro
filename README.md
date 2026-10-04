@@ -187,8 +187,8 @@ Manual forms are available for creating courses, enrolling students, scheduling 
 Prerequisites: Docker Desktop (running), Git, and optionally Node 22 and VS Code.
 
 ```bash
-git clone https://github.com/ZacahryZhou/kiro.git
-cd kiro
+git clone https://github.com/ZacahryZhou/Kiro.git
+cd Kiro
 cp .env.example .env        # then edit the values below
 docker compose up --build   # app on http://localhost:3000, database on :5432
 ```
