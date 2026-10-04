@@ -213,6 +213,7 @@ docker compose down -v               # stop and WIPE the database
 docker compose logs -f app           # follow app logs
 docker compose exec app npm run db:seed   # seed accounts (idempotent)
 docker compose exec app npx tsx prisma/seed-ai.ts --reset   # AI demo data from a clean slate
+docker compose exec app npm run db:reset-real -- --yes   # delete ALL courses and students, keep teachers, create your own course and two students (run without --yes to preview; options: --students a@x,b@x --course NAME --subject NAME)
 npx tsx src/lib/ai/dev/run-all.ts    # every offline AI check, one summary
 docker compose exec app npm run check:live   # the real-model test list (uses your own AI key, about 60 calls); add -- --list to preview
 npm run typecheck                    # type check

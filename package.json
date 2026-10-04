@@ -11,6 +11,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:demo": "tsx prisma/seed-ai.ts",
+    "db:reset-real": "tsx prisma/reset-real-data.ts",
     "check:ai": "tsx src/lib/ai/dev/run-all.ts",
     "check:live": "tsx --env-file-if-exists=.env src/lib/ai/dev/live-check.ts"
   },
