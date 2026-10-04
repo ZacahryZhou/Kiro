@@ -9,7 +9,7 @@ export function Brand({ href = "/", tone = "light", tagline }: { href?: string; 
         <GraduationCap className="size-5" aria-hidden />
       </span>
       <span className="leading-tight">
-        <span className={`block text-lg font-semibold tracking-tight ${dark ? "text-white" : ""}`}>Kora</span>
+        <span className={`block text-lg font-semibold tracking-tight ${dark ? "text-white" : ""}`}>Kiro</span>
         {tagline && <span className={`block text-[11px] ${dark ? "text-white/70" : "text-muted-foreground"}`}>{tagline}</span>}
       </span>
     </Link>

@@ -97,8 +97,8 @@ export async function seedFixtures(prisma: PrismaClient, options: { reset?: bool
   for (const course of courses) {
     await prisma.course.upsert({
       where: { id: course.id },
-      create: { ...course, location: "Online", description: "Kora AI acceptance fixture." },
-      update: { ...course, location: "Online", description: "Kora AI acceptance fixture." },
+      create: { ...course, location: "Online", description: "Kiro AI acceptance fixture." },
+      update: { ...course, location: "Online", description: "Kiro AI acceptance fixture." },
     });
   }
   const enrollments = [
@@ -228,7 +228,7 @@ if (require.main === module) {
   const reset = process.argv.includes("--reset");
   seedFixtures(prisma, { reset })
     .then(() => {
-      console.info(`Kora AI acceptance fixtures are ready${reset ? " (reset first)" : ""}: two teachers, three students, three courses, conflict sessions, materials, attendance and memories.`);
+      console.info(`Kiro AI acceptance fixtures are ready${reset ? " (reset first)" : ""}: two teachers, three students, three courses, conflict sessions, materials, attendance and memories.`);
     })
     .catch(() => {
       console.error("Failed to initialize AI acceptance fixtures. Check the database connection and migrations.");

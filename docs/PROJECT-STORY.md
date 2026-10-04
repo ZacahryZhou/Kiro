@@ -1,4 +1,4 @@
-# Kora: Devpost text
+# Kiro: Devpost text
 
 Everything under "About the project" is paste-ready Markdown for the Devpost **About the project** box (select the box, delete what is there, paste). The other Devpost fields are at the bottom. It describes what the repository does today; a live language model needs your own `AI_API_KEY`, and the scripted demo mode (`AI_MOCK=1`) needs none.
 
@@ -14,7 +14,7 @@ An AI assistant looks like the obvious fix: just say "Jordan came today, Sam is 
 
 ## What it does
 
-Kora is a teaching platform for one-to-one lessons and small classes, built around an **AI agent with tools**. Teachers and students each get their own agent. It reads their real data, prepares changes, shows exactly what would happen, and waits for a person to say yes.
+Kiro is a teaching platform for one-to-one lessons and small classes, built around an **AI agent with tools**. Teachers and students each get their own agent. It reads their real data, prepares changes, shows exactly what would happen, and waits for a person to say yes.
 
 **Say it, see it, confirm it.**
 
@@ -82,7 +82,7 @@ Around the agent is a normal product: sign-in, schedule and calendar, courses, m
 - Let the model draft and let code decide. It is the simplest way to make generated content trustworthy.
 - Writing the contract before the code removed most integration surprises.
 
-## What's next for Kora
+## What's next for Kiro
 
 - Meet teachers where they already are: a chat-app front end (Telegram first) that reuses the same agent and the same confirm-first rule, and a calendar feed for Google and Apple Calendar.
 - Self-service registration, password reset by email, and notifications.
@@ -97,6 +97,6 @@ Around the agent is a normal product: sign-in, schedule and calendar, courses, m
 
 **Built with (tags):** next.js, react, typescript, tailwindcss, shadcn-ui, postgresql, prisma, auth.js, zod, docker, deepseek, openai-compatible-api
 
-**Try it out:** the GitHub repository (`https://github.com/ZacahryZhou/Kora`) and your demo video. To run it: clone, copy `.env.example` to `.env`, `docker compose up --build`, then the two seed commands in the README. `AI_MOCK=1` needs no API key. `docs/DEMO-SCRIPT.md` walks through the demo.
+**Try it out:** the GitHub repository (`https://github.com/ZacahryZhou/kiro`) and your demo video. To run it: clone, copy `.env.example` to `.env`, `docker compose up --build`, then the two seed commands in the README. `AI_MOCK=1` needs no API key. `docs/DEMO-SCRIPT.md` walks through the demo.
 
 **Good screenshots for the gallery:** the chat pop-up with a proposal preview card, the Agent Console architecture graph lighting up, the customisable home page, and a student course page with the course tutor.

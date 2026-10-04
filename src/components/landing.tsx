@@ -67,11 +67,11 @@ export function Landing() {
                 <span className="mt-1 block text-muted-foreground">An assistant you can trust with the schedule.</span>
               </h1>
               <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
-                Kora is a shared learning space for teachers and students. Tell the AI what happened in plain language; it prepares the change, and you decide whether it happens.
+                Kiro is a shared learning space for teachers and students. Tell the AI what happened in plain language; it prepares the change, and you decide whether it happens.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link href="/login" className={ctaPrimary}>
-                  Sign in to Kora
+                  Sign in to Kiro
                   <ArrowRight className="size-4" aria-hidden />
                 </Link>
                 <a href="#how-it-works" className={ctaOutline}>See how it works</a>
@@ -155,7 +155,7 @@ export function Landing() {
 
         <section className="mx-auto max-w-6xl px-6 pb-20 pt-10">
           <div className="kora-dark-panel rounded-[2rem] px-8 py-12 text-center text-white md:px-12">
-            <h2 className="text-3xl font-semibold tracking-tight">Ready to try Kora?</h2>
+            <h2 className="text-3xl font-semibold tracking-tight">Ready to try Kiro?</h2>
             <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-white/75 md:text-base">
               Sign in with your teacher or student account to open your workspace.
             </p>
@@ -170,7 +170,7 @@ export function Landing() {
       <footer className="border-t py-8">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 text-sm text-muted-foreground">
           <Brand tagline="Learning collaboration" />
-          <p>Kora · Teachers propose, you confirm.</p>
+          <p>Kiro · Teachers propose, you confirm.</p>
         </div>
       </footer>
     </div>

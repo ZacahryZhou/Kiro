@@ -128,7 +128,7 @@
     @apply font-sans;
   }
 }
-/* Kora page surfaces: soft backdrop and hero mesh used by the landing page, login and workspace. */
+/* Kiro page surfaces: soft backdrop and hero mesh used by the landing page, login and workspace. */
 @layer components {
   .kora-backdrop {
     background-color: var(--background);

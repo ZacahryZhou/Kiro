@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kora | Learning Collaboration",
+  title: "Kiro | Learning Collaboration",
   description: "A shared learning space for teachers and students.",
 };
 

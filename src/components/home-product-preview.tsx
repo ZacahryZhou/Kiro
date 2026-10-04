@@ -9,7 +9,7 @@ export function HomeProductPreview() {
           <span className="flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <Sparkles className="size-3.5" aria-hidden />
           </span>
-          <p className="text-sm font-semibold">Kora AI</p>
+          <p className="text-sm font-semibold">Kiro AI</p>
           <span className="ml-auto text-[11px] text-muted-foreground">Example</span>
         </div>
         <div className="space-y-3 p-4">

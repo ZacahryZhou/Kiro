@@ -64,7 +64,7 @@ export function AiLauncher({ role }: { role: Role }) {
         data-testid="ai-launcher"
       >
         <Sparkles className="size-4" aria-hidden />
-        Ask Kora AI
+        Ask Kiro AI
         <span className="sr-only"> ({labels.title})</span>
         {pending > 0 && (
           <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-semibold text-white" aria-label={`${pending} changes waiting for your decision`} data-testid="ai-pending-badge">{pending}</span>

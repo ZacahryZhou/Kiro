@@ -1,4 +1,4 @@
-# Kora Demo Script (about 4 minutes)
+# Kiro Demo Script (about 4 minutes)
 
 Use this for the demo video or a live walkthrough. It follows the required line (sign-in, schedules, AI attendance, student materials Q&A, access isolation) and then shows the extras.
 
@@ -12,7 +12,7 @@ Use this for the demo video or a live walkthrough. It follows the required line 
 
 ## 1. The idea (20 seconds)
 
-Show the landing page at `/`. Say: "Kora is a tutoring workspace where an AI assistant does the busywork, but it can never change anything until the teacher confirms."
+Show the landing page at `/`. Say: "Kiro is a tutoring workspace where an AI assistant does the busywork, but it can never change anything until the teacher confirms."
 
 ## 2. Sign-in and schedule (20 seconds)
 
@@ -20,7 +20,7 @@ Sign in as Alex. Point at the sidebar (the name and role are shown), the weekly 
 
 ## 3. AI attendance with confirmation (60 seconds)
 
-1. Click **Ask Kora AI** and type: `Jordan came and Sam is on leave`.
+1. Click **Ask Kiro AI** and type: `Jordan came and Sam is on leave`.
 2. Show the preview card: "Review before anything changes", the per-student lines, "1 session deducted" for Jordan and none for Sam.
 3. Say: "Nothing has changed yet." Open the course page's Attendance tab in the background to show it is still empty (optional).
 4. Click **Confirm**. Show "Done. The change has been applied." and the attendance and deduction now on the course page.

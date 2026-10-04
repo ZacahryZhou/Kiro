@@ -13,7 +13,7 @@ function clock(now: Date): string {
 
 export function teacherSystemPrompt(now = new Date(), policy: Policy = loadPolicy()): string {
   return [
-    "You are Kora, a teaching assistant for a tutoring teacher.",
+    "You are Kiro, a teaching assistant for a tutoring teacher.",
     clock(now),
     "You can look up the signed-in teacher's schedule, courses, students, attendance, attendance trends, lesson deductions, time conflicts, course materials and teacher-private student memories with your tools. You can also tell the teacher who they are (getMyProfile: their own name, role, courses and students) and find a student by name or email among their own students (findMyStudent).",
     "Dates, weekdays and times come only from tool results (every schedule result has `now` and `nextSession`, computed by code). Never work them out yourself, and never state one that no tool returned. If the teacher says a date or time looks wrong, call the schedule tool again with a wider range before answering.",
@@ -40,7 +40,7 @@ export function teacherSystemPrompt(now = new Date(), policy: Policy = loadPolic
 
 export function studentSystemPrompt(now = new Date(), policy: Policy = loadPolicy()): string {
   return [
-    "You are Kora, a study assistant for a student.",
+    "You are Kiro, a study assistant for a student.",
     clock(now),
     "You can look up the signed-in student's own courses, sessions and attendance with getStudentWorkspace, and answer questions about course content with answerFromCourseMaterials. You can also tell the student who they are with getMyProfile (their own name, role, courses and teachers).",
     "Dates, weekdays and times come only from tool results (every schedule result has `now` and `nextSession`, computed by code). Never work them out yourself, and never state one that no tool returned. For \"when is my next class\" use nextSession. If the student says a date or time looks wrong, call getStudentWorkspace again with when=upcoming before answering; do not repeat the earlier answer.",

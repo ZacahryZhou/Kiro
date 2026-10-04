@@ -21,7 +21,7 @@ export const labels = {
   send: "Send",
   thinking: "Thinking...",
   you: "You",
-  assistant: "Kora",
+  assistant: "Kiro",
   failure: "Something went wrong. Please try again.",
   pendingRestored: (count: number) =>
     `You have ${count} ${count === 1 ? "change" : "changes"} waiting for your decision. Nothing has been applied yet.`,
@@ -44,7 +44,7 @@ export const labels = {
       RECENT_PROGRESS: "Recent progress",
       COURSE_LIST: "My courses",
     },
-    themes: { kora: "Kora", ocean: "Ocean", sunset: "Sunset", forest: "Forest", violet: "Violet", midnight: "Midnight" },
+    themes: { kora: "Kiro", ocean: "Ocean", sunset: "Sunset", forest: "Forest", violet: "Violet", midnight: "Midnight" },
     motions: { calm: "Calm", lively: "Lively", off: "No motion" },
     saved: "Home page layout saved and now active",
   },

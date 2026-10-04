@@ -7,7 +7,7 @@ Use these with the student account (for example `1@student.text`) on the course 
 1. Sign in as the teacher (`t@example.test`) and make sure the course MACM101 exists with the student enrolled.
 2. Open **Teaching knowledge**, find **Upload a lesson file**, choose MACM101, and upload `teacher-notes-macm101.md`. The success message says students can now ask the course tutor.
 3. Optional: add a note of kind **Teaching style** with the text of the "How I teach" section, so the tutor also follows the teacher's way of explaining.
-4. Sign in as the student, open the MACM101 course page, and use the course tutor there. The global "Ask Kora AI" pop-up (Ctrl/Cmd+K) works too.
+4. Sign in as the student, open the MACM101 course page, and use the course tutor there. The global "Ask Kiro AI" pop-up (Ctrl/Cmd+K) works too.
 
 How to read the results: a good answer explains in plain language, matches the notes, and shows source tags under the reply. A good "not found" is the exact sentence *I couldn't find that in your teacher's notes or the course materials. It may be worth asking your teacher.*
 

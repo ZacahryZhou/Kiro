@@ -1,4 +1,4 @@
-# Kora: Remaining Development Roadmap
+# Kiro: Remaining Development Roadmap
 
 > Covers everything not built yet, in the order to build it. It follows the working rules in `CLAUDE.md` (one step at a time, plan first, verify, one commit per step) and the API contract.
 > **Ownership:** the project owner now develops the core-product track (formerly Nick's) and the front end. The AI track stays in `src/features/ai-agent/**`, `src/lib/ai/**`, `src/app/api/ai/**` and `src/contracts/**`. Core steps are marked **[Core]**, AI steps **[AI]**. If one person does both, still keep them as separate commits so a core change never hides inside an AI change.
@@ -85,7 +85,7 @@ Contract: "A student request creates a pending record only; it does not change t
 
 ## Phase E: borrow features from EduSync (choose per item)
 
-Order by risk. Each item is a [Core] page that reads existing data unless noted; reuse the layout in `src/components/page.tsx` and `workspace-shell.tsx`; keep Kora fonts and colours.
+Order by risk. Each item is a [Core] page that reads existing data unless noted; reuse the layout in `src/components/page.tsx` and `workspace-shell.tsx`; keep Kiro fonts and colours.
 
 | Step | Feature | Schema change | Notes |
 |---|---|---|---|

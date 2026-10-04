@@ -5,7 +5,7 @@ import type { Role } from "@/contracts";
 import { labels } from "@/lib/ai/domain/edu/labels";
 import { AiPanel } from "./AiPanel";
 
-/** A card with the assistant for one course. It is its own entry, separate from the general "Ask Kora AI" pop-up. */
+/** A card with the assistant for one course. It is its own entry, separate from the general "Ask Kiro AI" pop-up. */
 export function CourseAssistant({ role, courseId, courseName }: { role: Role; courseId: string; courseName: string }) {
   const title = role === "TEACHER" ? labels.courseChat.teacherTitle : labels.courseChat.studentTitle;
   return (

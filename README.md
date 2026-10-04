@@ -1,12 +1,12 @@
 <p align="right"><b>English</b> | <a href="README.zh-CN.md">简体中文</a></p>
 
-# Kora
+# Kiro
 
 **An AI agent that does the admin of a tutoring business, and never changes your data without asking.**
 
-Kora is a teaching platform for small tutoring providers (one-to-one lessons and small classes). Teachers and students talk to an AI agent in plain language: take attendance, move a class, write a quiz, explain a topic from the teacher's own notes. The product's defining rule is trust: **the AI never writes business data on its own.** Every teacher write goes through *AI proposal → teacher confirmation → service function*.
+Kiro is a teaching platform for small tutoring providers (one-to-one lessons and small classes). Teachers and students talk to an AI agent in plain language: take attendance, move a class, write a quiz, explain a topic from the teacher's own notes. The product's defining rule is trust: **the AI never writes business data on its own.** Every teacher write goes through *AI proposal → teacher confirmation → service function*.
 
-> Kora was previously named EduSync. A few internal identifiers (for example the local database name `edusync`) keep the old name.
+> Kiro was previously named EduSync and, briefly, Kora. A few internal identifiers (for example the local database name `edusync`) keep the old name.
 
 ---
 
@@ -32,7 +32,7 @@ Kora is a teaching platform for small tutoring providers (one-to-one lessons and
 
 ## The AI agent at a glance
 
-Kora's assistant is an **agent with tools**, not a chat box bolted onto a calendar. It reads your real data, prepares changes, shows exactly what would happen, and waits for a person to say yes. Teachers and students each get their own agent, tuned and restricted for their role.
+Kiro's assistant is an **agent with tools**, not a chat box bolted onto a calendar. It reads your real data, prepares changes, shows exactly what would happen, and waits for a person to say yes. Teachers and students each get their own agent, tuned and restricted for their role.
 
 | You say | The agent does | What keeps it safe |
 |---|---|---|
@@ -187,8 +187,8 @@ Manual forms are available for creating courses, enrolling students, scheduling 
 Prerequisites: Docker Desktop (running), Git, and optionally Node 22 and VS Code.
 
 ```bash
-git clone https://github.com/ZacahryZhou/Kora.git
-cd Kora
+git clone https://github.com/ZacahryZhou/kiro.git
+cd kiro
 cp .env.example .env        # then edit the values below
 docker compose up --build   # app on http://localhost:3000, database on :5432
 ```
@@ -433,7 +433,7 @@ All text materials of the course go into the context. The model must return `{ f
 
 ## Interface
 
-The workspace uses one shared layout: a left sidebar (Schedule and Courses for teachers, My learning for students, plus the Agent console for allowed admins), a header with the signed-in name and role, and a floating **Ask Kora AI** button that opens the assistant. The panel stays mounted while closed, so the conversation and any pending proposal cards survive closing and reopening. On phones the sidebar becomes a top bar with a horizontal menu.
+The workspace uses one shared layout: a left sidebar (Schedule and Courses for teachers, My learning for students, plus the Agent console for allowed admins), a header with the signed-in name and role, and a floating **Ask Kiro AI** button that opens the assistant. The panel stays mounted while closed, so the conversation and any pending proposal cards survive closing and reopening. On phones the sidebar becomes a top bar with a horizontal menu.
 
 - Teachers also get a customisable Home, Knowledge (what the students' tutor teaches from), a Quizzes tab on every course, file upload for materials, Calendar (month view), Students (own students only, with attendance, progress and requests), Requests (leave and different-time requests with an unread count) and Settings; students get Calendar and Settings.
 - `/` shows a landing page to signed-out visitors and redirects signed-in users to their workspace.

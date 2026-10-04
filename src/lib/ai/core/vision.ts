@@ -80,7 +80,7 @@ export async function readImages(images: CheckedImage[], options: { fetch?: type
 
   const model = process.env.AI_VISION_MODEL?.trim();
   if (!model) {
-    return err("VALIDATION", "Reading photos needs a vision model, and none is set up on this server. Ask whoever runs Kora to set AI_VISION_MODEL (see the README), or type the text instead.");
+    return err("VALIDATION", "Reading photos needs a vision model, and none is set up on this server. Ask whoever runs Kiro to set AI_VISION_MODEL (see the README), or type the text instead.");
   }
   const baseUrl = (process.env.AI_VISION_BASE_URL?.trim() || process.env.AI_BASE_URL?.trim() || "").replace(/\/+$/, "");
   const apiKey = process.env.AI_VISION_API_KEY?.trim() || process.env.AI_API_KEY?.trim();

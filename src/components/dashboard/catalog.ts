@@ -17,7 +17,7 @@ export const WIDGET_META: Record<WidgetType, WidgetMeta> = {
 };
 
 export const THEME_META: Record<DashboardTheme, { label: string; swatch: [string, string, string] }> = {
-  kora: { label: "Kora", swatch: ["oklch(0.97 0.012 250)", "oklch(0.82 0.1 215)", "oklch(0.25 0.03 255)"] },
+  kora: { label: "Kiro", swatch: ["oklch(0.97 0.012 250)", "oklch(0.82 0.1 215)", "oklch(0.25 0.03 255)"] },
   ocean: { label: "Ocean", swatch: ["oklch(0.95 0.04 225)", "oklch(0.65 0.12 225)", "oklch(0.45 0.12 235)"] },
   sunset: { label: "Sunset", swatch: ["oklch(0.96 0.04 60)", "oklch(0.75 0.15 45)", "oklch(0.6 0.19 25)"] },
   forest: { label: "Forest", swatch: ["oklch(0.95 0.04 150)", "oklch(0.7 0.11 155)", "oklch(0.45 0.1 160)"] },
