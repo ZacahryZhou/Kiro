@@ -20,6 +20,17 @@
 | E4 registration and forgot password, E5 notifications, assignments, tuition | **Not started: need the owner's decision** |
 | F hardening | Done except the real-model rehearsal and a Docker rebuild on the owner's machine |
 
+## Overnight round (2026-10-05)
+
+| Item | Result |
+|---|---|
+| Customisable teacher home (widgets, drag and resize, six colour themes, motion styles, layout history, AI-designed layouts) | Done |
+| File upload for materials (.txt, .md, .pdf, .docx; preview and remove) | Done (no OCR for scanned PDFs) |
+| AI-written quizzes from materials (grounded questions, draft, publish, student practice) | Done |
+| Teaching knowledge, simulated teacher knowledge base, student tutor (`explainWithTeacherNotes`) | Done |
+| User-walkthrough friction fixes (assistant examples, phone tabs, Tidy up, student badges) | Done |
+| Still open: E4 registration and forgot password, E5 notifications, assignments, tuition; OCR; retrieval for materials beyond 24k characters; recording quiz attempts | Needs the owner's decision |
+
 ## Current state (2026-10-04, before this round)
 
 Done: sign-in, schedules, courses, materials, attendance and deductions, AI attendance, student materials Q&A with verified citations, AI course creation, AI scheduling with conflict checks, AI content entry, attendance trends, teacher-only student notes, lesson preparation, "who am I" and student lookup, live Agent Console, redesigned front end.

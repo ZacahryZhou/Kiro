@@ -110,7 +110,11 @@ Each AI feature follows the same pattern: the teacher says one sentence, the AI 
 | 12 | Student leave request | (student) "I need to take leave next Tuesday" | `STUDENT_REQUEST` preview; after the student confirms it is a pending request for the teacher; schedule and attendance unchanged | C · Integrated |
 | 13 | Progress record | "Record progress for Jordan: goal: fractions; output: solved 8 of 10; next: practice" | `PROGRESS_RECORD` preview from the teacher's own words; the student later reads it without the private note | C · Integrated |
 | 14 | Add a student to a course | "Add Sam to my Physics course" | `ADD_STUDENT` preview; names are matched only among the teacher's own students | C · Integrated |
-| 15 | Tuition adjustment | "Add 3 sessions for Jordan" | Out of the current MVP; needs a new table, function and proposal type agreed in the contract | C · Out of scope |
+| 15 | Customisable home page | "Design my home page: today, my requests and Jordan's progress in ocean colours" | `DASHBOARD_LAYOUT` preview with a thumbnail; code places the widgets, validates every student and course, and the layout is saved to a history (teachers can also drag, resize and pick colours by hand) | C · Integrated |
+| 16 | Course files | Drop a PDF, Word, .txt or .md file on a unit | The text is extracted on the server and stored as ordinary text materials (long files are split into numbered parts), so student Q&A and citations work unchanged | C · Integrated (no OCR for scanned PDFs) |
+| 17 | AI-written quizzes | "Create a quiz of 8 questions for my math course: 5 multiple choice, 2 true/false, 1 short answer; 3 easy, 3 medium, 2 hard; covering slope" | `QUIZ` preview. Code plans the mix; a separate step drafts the questions; code keeps only questions whose answer is backed by a word-for-word quote from a material. Saved as a draft; the teacher publishes it for students to practise | C · Integrated |
+| 18 | Teaching knowledge and student tutor | (teacher) "Create teaching notes from the materials of my math course"; (student) "Explain how the balance method works" | `KNOWLEDGE` preview, then notes the students' tutor teaches from; the student gets a step-by-step explanation with verified citations, or an honest "not covered" reply. Kept apart from the private student memory | C · Integrated |
+| 19 | Tuition adjustment | "Add 3 sessions for Jordan" | Out of the current MVP; needs a new table, function and proposal type agreed in the contract | C · Out of scope |
 
 **Intended demo line:** feature 1 → 2 → 3 → access isolation, on the showcase fixture. It runs with a live model (`AI_API_KEY`, `AI_MODEL`) or, with no network or key, in the scripted demo mode (`AI_MOCK=1`), which understands a few plain requests and drives the same real tools, proposals, confirmation and database (it is not a language model, so it does not show how a real model chooses tools).
 
@@ -240,7 +244,7 @@ Conventions: IDs are `cuid()` strings; times are ISO 8601 UTC strings stored as 
 
 The teacher and student agents are the same loop with different system prompts and tool sets. Students have no write tools; the one proposal they can prepare is a leave or different-time request to their own teacher, and it still needs their confirmation.
 
-Teacher tools, read-only: `getTeacherSchedule`, `listMyCourses`, `listMyStudents`, `listAttendance`, `listDeductions`, `checkConflicts`, `getCourseMaterials`, `getAttendanceTrends`, `getStudentMemory`, `getMyProfile`, `findMyStudent`, `listStudentRequests`, `listProgressRecords`. Teacher tools that only prepare a pending proposal: `proposeMarkAttendance`, `proposeCreateCourse`, `proposeCreateSessions`, `proposeAddContent`, `proposeAddStudent`, `proposeReschedule`, `proposeProgressRecord`, `proposeAddStudentNote`, `proposeLessonPrep`. Student tools: `getStudentWorkspace`, `answerFromCourseMaterials`, `getMyProfile`, `listStudentRequests`, `listProgressRecords` (read-only) and `proposeStudentRequest`.
+Teacher tools, read-only (16): `getTeacherSchedule`, `listMyCourses`, `listMyStudents`, `listAttendance`, `listDeductions`, `checkConflicts`, `getCourseMaterials`, `getAttendanceTrends`, `getStudentMemory`, `getMyProfile`, `findMyStudent`, `listStudentRequests`, `listProgressRecords`, `listMyDashboardLayouts`, `listMyQuizzes`, `listMyKnowledge`. Teacher tools that only prepare a pending proposal (13): `proposeMarkAttendance`, `proposeCreateCourse`, `proposeCreateSessions`, `proposeAddContent`, `proposeAddStudent`, `proposeReschedule`, `proposeProgressRecord`, `proposeAddStudentNote`, `proposeLessonPrep`, `proposeDashboardLayout`, `proposeQuiz`, `proposeKnowledge`, `proposeKnowledgeFromMaterials`. Student tools (7): `getStudentWorkspace`, `answerFromCourseMaterials`, `explainWithTeacherNotes`, `getMyProfile`, `listStudentRequests`, `listProgressRecords` (read-only) and `proposeStudentRequest`.
 
 The behaviour rules both agents follow are written in `docs/AI-REPLY-POLICY.md` (section 0 is loaded into their instructions at run time).
 
@@ -257,10 +261,25 @@ The behaviour rules both agents follow are written in `docs/AI-REPLY-POLICY.md` 
 | `STUDENT_REQUEST` (Tier B) | `StudentRequestInput` | `submitStudentRequest` |
 | `ADD_STUDENT_NOTE` (bonus) | `AddStudentNoteInput` | AI side writes `AgentMemory` (no service function) |
 | `ADD_STUDENT` (v0.6) | `AddStudentInput` | `addExistingStudentToCourse` |
+| `DASHBOARD_LAYOUT` (v0.7) | `{ name; theme; motion; items: widget[] }` | `saveDashboardLayout` |
+| `QUIZ` (v0.7) | `{ courseId; title; questions[] }` | `createQuiz` (saved as a draft) |
+| `KNOWLEDGE` (v0.7) | `{ entries: { kind; title; content; courseId? }[] }` | `saveKnowledgeEntries` |
 
 Every type above is built and has an AI tool. A `STUDENT_REQUEST` is prepared by a student's assistant and confirmed by that student; a request is only a note to the teacher and never changes the schedule or attendance.
 
 Proposals are validated with Zod and pre-checked with read-only functions (for example, that the student is really enrolled) before they are created. Business data **must remain unchanged** until confirmation. `CREATE_COURSE` is not rolled back as a whole: if an email is unregistered the course stays, the proposal is `executed`, and the result lists per-email outcomes.
+
+### Quizzes, notes and the student tutor
+
+These three features follow the same rule as the rest of the agent: **the model drafts, code decides what is kept**.
+
+- **Quizzes.** `proposeQuiz` turns the request into one slot per question in code (how many of each type and difficulty, topics shared out, easy to hard). A separate, constrained model call writes the questions from the course's text materials. Code then keeps a question only if it fits its slot, has valid options and answer, and carries a `sourceQuote` that is a word-for-word substring of the cited material. If some cannot be backed, the proposal says so (for example "7 of the 8 questions you asked for"). The teacher reviews the answer key and sources, then publishes the draft; students practise it with instant marking of multiple-choice and true/false, and the key is revealed only after they submit. Nothing is stored about their attempts.
+- **Teaching knowledge.** Teachers keep lesson summaries, key points, common mistakes, worked examples, FAQs and a teaching style in the Knowledge page, dictate them, or have the assistant build them from uploaded materials (grounded the same way as quizzes). The notes are written for students to read and live in their own table: they are never mixed with the private student memory (`AgentMemory`), which stays teacher-only.
+- **Student tutor.** `explainWithTeacherNotes` explains a topic using only the notes and course materials of the courses the student is enrolled in. The teaching style is passed as data, never as a citable source. The explanation must cite notes or materials with quotes that code verifies; otherwise the student gets "I couldn't find that in your teacher's notes or the course materials. It may be worth asking your teacher."
+
+### Customisable home page
+
+`/teacher` renders the teacher's active layout: nine widgets (week at a glance, today, this week, month calendar, requests, student focus, attendance trend, recent progress, courses) on a 12-column drag-and-resize grid (`react-grid-layout`), six colour themes and three motion styles. A layout is plain JSON validated by `src/contracts/dashboard.ts`, so it cannot carry code. The assistant only chooses widgets, colours and roughly how wide; `packWidgets` places them. Layouts are kept as a history and the most recently used one is shown; the weekly schedule moved to `/teacher/schedule`.
 
 ### Confirmation endpoint
 
@@ -312,7 +331,7 @@ All text materials of the course go into the context. The model must return `{ f
 
 The workspace uses one shared layout: a left sidebar (Schedule and Courses for teachers, My learning for students, plus the Agent console for allowed admins), a header with the signed-in name and role, and a floating **Ask Kora AI** button that opens the assistant. The panel stays mounted while closed, so the conversation and any pending proposal cards survive closing and reopening. On phones the sidebar becomes a top bar with a horizontal menu.
 
-- Teachers also get Calendar (month view), Students (own students only, with attendance, progress and requests), Requests (leave and different-time requests with an unread count) and Settings; students get Calendar and Settings.
+- Teachers also get a customisable Home, Knowledge (what the students' tutor teaches from), a Quizzes tab on every course, file upload for materials, Calendar (month view), Students (own students only, with attendance, progress and requests), Requests (leave and different-time requests with an unread count) and Settings; students get Calendar and Settings.
 - `/` shows a landing page to signed-out visitors and redirects signed-in users to their workspace.
 - `/login` is a split layout with a product preview. Teacher pages show weekly stats; student pages show courses, upcoming sessions and attendance at a glance.
 - Shared building blocks live in `src/components/page.tsx` (page header, stat card, empty state, error alert), `brand.tsx`, `sidebar-nav.tsx` and `workspace-shell.tsx`. Fonts and colours are unchanged.

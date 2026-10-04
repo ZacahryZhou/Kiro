@@ -111,7 +111,11 @@
 | 12 | 学生请假请求 | (学生)"下周二我想请假" | `STUDENT_REQUEST` 预览;学生确认后变成给老师的待处理请求,课表和出勤不变 | C · 已接入 |
 | 13 | 学习进度记录 | "记录 Jordan 的进度:目标:分数;成果:10 题对 8 题;下一步:练习" | 按老师自己的话生成 `PROGRESS_RECORD` 预览;学生之后能看到(看不到老师私人备注) | C · 已接入 |
 | 14 | 把学生加进课程 | "把 Sam 加进我的物理课" | `ADD_STUDENT` 预览;姓名只在老师自己的学生里匹配 | C · 已接入 |
-| 15 | 学费增减 | "给 Jordan 加 3 次课" | 不在当前 MVP 内;需要先在契约里约定新表、新函数和新提案类型 | C · 不在范围内 |
+| 15 | 可自定义的主页 | "帮我设计主页:今天的课、待处理请求、Jordan 的进度,用海洋配色" | `DASHBOARD_LAYOUT` 预览(带缩略图);由代码排版,并校验每个学生和课程;布局存入历史(老师也可以手动拖拽、缩放、选配色) | C · 已接入 |
+| 16 | 课程文件 | 把 PDF、Word、.txt 或 .md 拖到某个单元上 | 服务器提取文字并存成普通文字材料(长文件自动分成编号的几份),学生问答和引用照常工作 | C · 已接入(扫描版 PDF 没有 OCR) |
+| 17 | AI 出 quiz | "给我的数学课出 8 道题:5 道选择、2 道判断、1 道简答;3 易 3 中 2 难;涵盖斜率" | `QUIZ` 预览。题型和难度的配比由代码计划;单独一步写题;代码只保留答案能在材料里找到原文引用的题。保存为草稿,老师发布后学生可练习 | C · 已接入 |
+| 18 | 教学知识库与学生助教 | (老师)"根据我数学课的材料生成教学笔记";(学生)"讲讲平衡法怎么用" | `KNOWLEDGE` 预览,保存后成为学生助教讲课的依据;学生得到分步骤的讲解和经过代码核对的引用,没覆盖到的话题会老实说"老师还没讲到"。与老师私有的学生记忆完全分开 | C · 已接入 |
+| 19 | 学费增减 | "给 Jordan 加 3 次课" | 不在当前 MVP 内;需要先在契约里约定新表、新函数和新提案类型 | C · 不在范围内 |
 
 **最少要演示的一条线:** 功能 1 → 2 → 3 → 权限隔离,在演示数据上进行。可以用真实模型(`AI_API_KEY`、`AI_MODEL`)运行;没有网络和 key 时,用带剧本的演示模式(`AI_MOCK=1`),它能理解几类简单的话,并驱动同样的真实工具、提案、确认和数据库(它不是语言模型,所以展示不了真实模型是怎么选工具的)。
 
@@ -241,7 +245,7 @@ type ErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION" | 
 
 老师 Agent 和学生 Agent 是同一个循环,只是系统提示和工具集不同。学生没有写入工具;他们唯一能准备的提案是给自己老师的请假或换时间请求,而且仍然需要学生自己确认。
 
-老师的只读工具:`getTeacherSchedule`、`listMyCourses`、`listMyStudents`、`listAttendance`、`listDeductions`、`checkConflicts`、`getCourseMaterials`、`getAttendanceTrends`、`getStudentMemory`、`getMyProfile`、`findMyStudent`、`listStudentRequests`、`listProgressRecords`。老师只准备待确认提案的工具:`proposeMarkAttendance`、`proposeCreateCourse`、`proposeCreateSessions`、`proposeAddContent`、`proposeAddStudent`、`proposeReschedule`、`proposeProgressRecord`、`proposeAddStudentNote`、`proposeLessonPrep`。学生的工具:`getStudentWorkspace`、`answerFromCourseMaterials`、`getMyProfile`、`listStudentRequests`、`listProgressRecords`(只读)和 `proposeStudentRequest`。
+老师的只读工具(16 个):`getTeacherSchedule`、`listMyCourses`、`listMyStudents`、`listAttendance`、`listDeductions`、`checkConflicts`、`getCourseMaterials`、`getAttendanceTrends`、`getStudentMemory`、`getMyProfile`、`findMyStudent`、`listStudentRequests`、`listProgressRecords`、`listMyDashboardLayouts`、`listMyQuizzes`、`listMyKnowledge`。老师只准备待确认提案的工具(13 个):`proposeMarkAttendance`、`proposeCreateCourse`、`proposeCreateSessions`、`proposeAddContent`、`proposeAddStudent`、`proposeReschedule`、`proposeProgressRecord`、`proposeAddStudentNote`、`proposeLessonPrep`、`proposeDashboardLayout`、`proposeQuiz`、`proposeKnowledge`、`proposeKnowledgeFromMaterials`。学生的工具(7 个):`getStudentWorkspace`、`answerFromCourseMaterials`、`explainWithTeacherNotes`、`getMyProfile`、`listStudentRequests`、`listProgressRecords`(只读)和 `proposeStudentRequest`。
 
 两个 Agent 都遵守的行为规则写在 `docs/AI-REPLY-POLICY.md` 里(第 0 节会在运行时被加载进它们的指令)。
 

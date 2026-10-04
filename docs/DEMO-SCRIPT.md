@@ -47,6 +47,13 @@ In the private window sign in as Jordan.
 - `Record progress for Sam: goal: fractions; output: solved 7 of 10; next: practice` previews a progress record.
 - Open `/admin/agent` (the **Agent console** menu item, shown to allowed admins) and send a message in the embedded panel: each step and the files it uses light up. Use **Replay** to step through a finished run.
 
+## 7. New this round (about 90 seconds, optional)
+
+1. **Home page.** As Alex on `/teacher`, press **Customise**: drag a widget by its title bar, pick **Ocean** and **Lively**, press **Save layout**. Reopen the layout menu to show the history, and switch back to Classic. Then ask the assistant: `Design my home page called Evening prep: show today, my requests and Jordan's progress in sunset colours` and show the layout thumbnail before confirming.
+2. **Quiz.** Open the course page, ask: `Create a quiz of 5 questions for my math course: 3 multiple choice, 1 true/false, 1 short answer; 2 easy, 2 medium, 1 hard; covering linear equations.` Point out that the card says how many questions the materials could really support, confirm, open the **Quizzes** tab, show the answer key with the quote each question is based on, and **Publish**. As Jordan, open the course, practise the quiz and show that the key appears only after checking.
+3. **Teaching notes and the tutor.** As Alex open **Knowledge** (a simulated teacher knowledge base is seeded). As Jordan, ask `Please explain how the balance method works` and show the step-by-step answer with its **Sources**; then ask `Please explain photosynthesis` and show the honest "not in your teacher's notes" reply.
+4. **File upload.** On a unit's materials, drop a short PDF or Word file; open **Preview the text** to show exactly what was kept, then ask Jordan's assistant a question about it.
+
 ## Closing line
 
 "The assistant proposes, a person confirms, and plain, tested code does the writing. Every step is isolated per person and visible in the console."
@@ -55,3 +62,4 @@ In the private window sign in as Jordan.
 
 - Lesson preparation, free-form content entry and attendance trends need a live model; the scripted mode does not demo them.
 - Registration, notifications, assignments and tuition are not built.
+- Scanned or image-only PDFs have no OCR; quiz, notes and tutor writing need a live model for real wording (the scripted mode builds simple template questions from the materials); quiz attempts are not stored.
