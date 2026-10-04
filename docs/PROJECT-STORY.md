@@ -72,7 +72,7 @@ Around the agent is a normal product: sign-in, schedule and calendar, courses, m
 - An agent with 30 tools that still cannot write a single business row on its own.
 - Grounded generation: quizzes, notes and tutor answers are kept only when code can find their quote in the teacher's own material.
 - A student tutor that teaches from the teacher's notes and says "I couldn't find that" when the answer is not there.
-- 640 offline checks across 23 scripts, real-database checks for permissions and cross-account denial, and a real-model checklist anyone can run with their own key.
+- 659 offline checks across 24 scripts, real-database checks for permissions and cross-account denial, and a real-model checklist anyone can run with their own key.
 - A complete product around it that starts with one command, including a mock mode that needs no key and no network.
 
 ## What we learned

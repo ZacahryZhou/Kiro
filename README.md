@@ -60,7 +60,7 @@ Kora's assistant is an **agent with tools**, not a chat box bolted onto a calend
 - **An assistant on every course.** Each course page has its own assistant, locked to that course in code and with its own history, so a student can ask the course tutor about the material while the global assistant stays general.
 - **Photos for teachers.** Attach, paste or drop up to four photos (a timetable, a worksheet, a whiteboard). They are read once and never stored.
 
-**By the numbers:** 30 teacher tools (17 read-only, 13 that prepare proposals) and 7 student tools · 12 proposal types · a model-and-tool loop of at most 6 rounds · 640 offline checks across 23 scripts, plus real-database and real-model checks.
+**By the numbers:** 30 teacher tools (17 read-only, 13 that prepare proposals) and 7 student tools · 12 proposal types · a model-and-tool loop of at most 6 rounds · 659 offline checks across 24 scripts, plus real-database and real-model checks.
 
 ## How it works
 
@@ -276,7 +276,7 @@ Run all offline AI checks (fake services, no key) with `npx tsx src/lib/ai/dev/r
 
 ### What is tested
 
-- **Offline checks** (`npm run check:ai`): 23 scripts, 640 checks, no network or key, on in-memory fake services.
+- **Offline checks** (`npm run check:ai`): 24 scripts, 659 checks, no network or key, on in-memory fake services.
 - **Real-database checks** (`NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts`, inside the app container): 134 checks covering services, permissions, cross-account denial and the confirm path.
 - **Real-model checks** (`npm run check:live`): 20 scenarios against your own provider key; prints PASS, FAIL or REVIEW.
 - Every feature was also run in a browser with two or more accounts (see `docs/DEMO-SCRIPT.md`).
@@ -560,7 +560,9 @@ All of these must pass for the project to count as complete.
 | `docs/ROADMAP-next.md` | Remaining work after the front-end redesign, in build order (phases A–F) |
 | `docs/HANDOFF.md` | Append-only message board between the two owners |
 | `docs/DEMO-SCRIPT.md` | A four-minute demo script, plus optional sections for the newest features |
-| `docs/PROJECT-STORY.md` | The project write-up for the submission (Inspiration, What it does, How we built it, ...) |
+| `docs/PROJECT-STORY.md` | Paste-ready Devpost text (the "About the project" box plus the other form fields) |
+| `docs/test-data/teacher-notes-macm101.md` | A fictional teacher's detailed teaching notes (discrete maths) to upload as a lesson file for testing the student tutor |
+| `docs/test-data/student-tutor-test-questions.md` | 44 questions for the student tutor with the expected behaviour: answered from notes, not found, refusals, schedule and requests |
 | `docs/PROMPTS.md` | Opening prompts for each owner's AI assistant |
 | `docs/H0-CHECKLIST.md` | Pre-work checklist (environment, repository, kickoff) |
 | `docs/zachary/` | Original Chinese working documents for the AI track: roadmap (S1–S8, with the 13-feature list), old contract, rules, beginner guide, checklist, prompts. Reference only; the English files above are authoritative |
