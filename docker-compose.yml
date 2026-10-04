@@ -1,0 +1,38 @@
+# Development setup maintained by Nick. Start with: docker compose up --build → http://localhost:3000
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: edusync
+      POSTGRES_PASSWORD: edusync
+      POSTGRES_DB: edusync
+    ports:
+      - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edusync"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://edusync:edusync@db:5432/edusync
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      # These two volumes keep installed packages and the Next.js cache between runs. After pulling new
+      # dependencies, start with: docker compose up --build --renew-anon-volumes (the database is kept).
+      - /app/node_modules
+      - /app/.next
+
+volumes:
+  dbdata:

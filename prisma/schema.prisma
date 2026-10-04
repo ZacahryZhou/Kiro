@@ -1,0 +1,471 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  TEACHER
+  STUDENT
+}
+
+enum CourseType {
+  ONE_ON_ONE
+  SMALL_CLASS
+}
+
+enum SessionStatus {
+  SCHEDULED
+  RESCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LEAVE
+  ABSENT
+}
+
+enum DeductionReason {
+  PRESENT
+  ABSENT
+}
+
+enum MaterialKind {
+  TEXT
+  LINK
+}
+
+enum MemoryKind {
+  AVAILABILITY
+  NOTE
+}
+
+enum AgentRunStatus {
+  OK
+  ERROR
+}
+
+enum ProposalStatus {
+  pending
+  confirmed
+  executed
+  failed
+  discarded
+}
+
+enum StudentRequestKind {
+  LEAVE
+  RESCHEDULE
+}
+
+enum StudentRequestStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+enum ProgressNextAction {
+  PRACTICE
+  REVIEW
+  EXTRA_MATERIAL
+  RECAP_NEXT
+}
+
+enum ProposalType {
+  CREATE_COURSE
+  CREATE_SESSIONS
+  ADD_CONTENT
+  MARK_ATTENDANCE
+  RESCHEDULE
+  PROGRESS_RECORD
+  STUDENT_REQUEST
+  ADD_STUDENT_NOTE
+  ADD_STUDENT
+  DASHBOARD_LAYOUT
+  QUIZ
+  KNOWLEDGE
+}
+
+model User {
+  id           String @id @default(cuid())
+  name         String
+  email        String @unique
+  role         Role
+  passwordHash String
+
+  courses           Course[]
+  enrollments       Enrollment[]
+  sessionChanges    SessionChange[]
+  attendance        Attendance[]     @relation("StudentAttendance")
+  markedAttendance  Attendance[]     @relation("MarkedAttendance")
+  deductions        Deduction[]
+  agentRuns         AgentRun[]
+  agentProposals    AgentProposal[]
+  studentMemories   AgentMemory[]    @relation("StudentMemories")
+  teacherMemories   AgentMemory[]    @relation("TeacherMemories")
+  studentRequests   StudentRequest[] @relation("RequestStudent")
+  resolvedRequests  StudentRequest[] @relation("RequestResolver")
+  progressAsStudent ProgressRecord[] @relation("ProgressStudent")
+  progressAsTeacher ProgressRecord[] @relation("ProgressTeacher")
+  dashboardLayouts  DashboardLayout[]
+  knowledgeEntries  KnowledgeEntry[]
+  agentConversations AgentConversation[]
+  quizAttempts       QuizAttempt[]
+}
+
+model Course {
+  id                   String     @id @default(cuid())
+  teacherId            String
+  name                 String
+  subject              String
+  type                 CourseType
+  location             String?
+  description          String?
+  pricePerSessionCents Int        @default(0)
+
+  teacher        User            @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  enrollments    Enrollment[]
+  sessions       Session[]
+  deductions     Deduction[]
+  units          CourseUnit[]
+  agentProposals AgentProposal[]
+  agentMemories  AgentMemory[]
+  quizzes        Quiz[]
+  knowledge      KnowledgeEntry[]
+  agentConversations AgentConversation[]
+}
+
+model Enrollment {
+  id        String @id @default(cuid())
+  courseId  String
+  studentId String
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  student   User   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@unique([courseId, studentId])
+}
+
+model Session {
+  id              String        @id @default(cuid())
+  courseId        String
+  startAt         DateTime      @db.Timestamptz(3)
+  durationMin     Int
+  location        String?
+  linkUrl         String?
+  status          SessionStatus @default(SCHEDULED)
+  originalStartAt DateTime?     @db.Timestamptz(3)
+
+  course          Course           @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  changes         SessionChange[]
+  attendance      Attendance[]
+  deductions      Deduction[]
+  studentRequests StudentRequest[]
+  progressRecords ProgressRecord[]
+
+  @@index([courseId, startAt])
+}
+
+model SessionChange {
+  id          String        @id @default(cuid())
+  sessionId   String
+  changedById String
+  fromStatus  SessionStatus
+  toStatus    SessionStatus
+  oldStartAt  DateTime?     @db.Timestamptz(3)
+  newStartAt  DateTime?     @db.Timestamptz(3)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  session     Session       @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  changedBy   User          @relation(fields: [changedById], references: [id], onDelete: Restrict)
+}
+
+/// A student's leave or reschedule request. It is only a pending record: approving it never edits the schedule or attendance.
+model StudentRequest {
+  id               String               @id @default(cuid())
+  sessionId        String
+  studentId        String
+  kind             StudentRequestKind
+  note             String?
+  preferredStartAt DateTime?            @db.Timestamptz(3)
+  status           StudentRequestStatus @default(PENDING)
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  resolvedAt       DateTime?            @db.Timestamptz(3)
+  resolvedById     String?
+  session          Session              @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  student          User                 @relation("RequestStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  resolvedBy       User?                @relation("RequestResolver", fields: [resolvedById], references: [id], onDelete: Restrict)
+
+  @@index([studentId, createdAt])
+  @@index([sessionId, status])
+}
+
+/// A teacher's note on what a student worked on in one session. One record per session and student; saving again replaces it.
+model ProgressRecord {
+  id         String             @id @default(cuid())
+  sessionId  String
+  studentId  String
+  teacherId  String
+  goal       String
+  output     String
+  issue      String?
+  nextAction ProgressNextAction
+  note       String?
+  createdAt  DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime           @updatedAt @db.Timestamptz(3)
+  session    Session            @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  student    User               @relation("ProgressStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  teacher    User               @relation("ProgressTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, studentId])
+  @@index([studentId, createdAt])
+}
+
+model Attendance {
+  id         String           @id @default(cuid())
+  sessionId  String
+  studentId  String
+  status     AttendanceStatus
+  markedById String
+  markedAt   DateTime         @default(now()) @db.Timestamptz(3)
+  session    Session          @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  student    User             @relation("StudentAttendance", fields: [studentId], references: [id], onDelete: Restrict)
+  markedBy   User             @relation("MarkedAttendance", fields: [markedById], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, studentId])
+}
+
+model Deduction {
+  id          String          @id @default(cuid())
+  sessionId   String
+  studentId   String
+  courseId    String
+  amountCents Int
+  reason      DeductionReason
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  session     Session         @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  student     User            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  course      Course          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, studentId])
+}
+
+model CourseUnit {
+  id        String     @id @default(cuid())
+  courseId  String
+  title     String
+  order     Int
+  course    Course     @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  materials Material[]
+}
+
+model Material {
+  id      String       @id @default(cuid())
+  unitId  String
+  title   String
+  kind    MaterialKind
+  content String?
+  url     String?
+  unit    CourseUnit   @relation(fields: [unitId], references: [id], onDelete: Restrict)
+}
+
+model AgentRun {
+  id            String         @id @default(cuid())
+  actorId       String
+  role          Role
+  intentSummary String
+  toolCalls     Json
+  status        AgentRunStatus
+  error         String?
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+  actor         User           @relation(fields: [actorId], references: [id], onDelete: Restrict)
+}
+
+model AgentProposal {
+  id          String         @id @default(cuid())
+  type        ProposalType
+  actorId     String
+  courseId    String?
+  payload     Json
+  summary     String
+  status      ProposalStatus @default(pending)
+  result      Json?
+  error       String?
+  createdAt   DateTime       @default(now()) @db.Timestamptz(3)
+  confirmedAt DateTime?      @db.Timestamptz(3)
+  executedAt  DateTime?      @db.Timestamptz(3)
+  actor       User           @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  course      Course?        @relation(fields: [courseId], references: [id], onDelete: Restrict)
+}
+
+model AgentMemory {
+  id        String     @id @default(cuid())
+  courseId  String
+  studentId String
+  teacherId String
+  kind      MemoryKind
+  content   String     @db.VarChar(500)
+  createdAt DateTime   @default(now()) @db.Timestamptz(3)
+  course    Course     @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  student   User       @relation("StudentMemories", fields: [studentId], references: [id], onDelete: Restrict)
+  teacher   User       @relation("TeacherMemories", fields: [teacherId], references: [id], onDelete: Restrict)
+
+  @@index([teacherId, studentId])
+}
+
+/// A teacher's saved home-page arrangement ("wallpaper"). `items` holds the widget list as JSON
+/// validated by the DashboardLayoutInput contract; the most recently used layout is the active one.
+model DashboardLayout {
+  id         String    @id @default(cuid())
+  teacherId  String
+  name       String
+  theme      String
+  motion     String
+  items      Json
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  teacher User @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, name])
+  @@index([teacherId, lastUsedAt])
+}
+
+enum QuizQuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+}
+
+enum QuizDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+/// A quiz written from a course's materials. It stays a draft until the teacher publishes it.
+model Quiz {
+  id        String   @id @default(cuid())
+  courseId  String
+  title     String   @db.VarChar(120)
+  published Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course    Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+
+  @@index([courseId, createdAt])
+}
+
+/// One submission of a published quiz by a student. Scores are computed by code from the answer key.
+model QuizAttempt {
+  id        String   @id @default(cuid())
+  quizId    String
+  studentId String
+  /// Multiple-choice and true/false questions that were marked, and how many were right.
+  graded    Int
+  score     Int
+  total     Int
+  /// [{ questionId, answer, correct: boolean | null }] as submitted.
+  answers   Json
+  createdAt DateTime @default(now())
+
+  quiz    Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([quizId, studentId, createdAt])
+  @@index([studentId, createdAt])
+}
+
+model QuizQuestion {
+  id               String           @id @default(cuid())
+  quizId           String
+  order            Int
+  type             QuizQuestionType
+  difficulty       QuizDifficulty
+  topic            String           @db.VarChar(80)
+  prompt           String           @db.VarChar(1000)
+  /// Answer choices for multiple choice; null for the other types.
+  options          Json?
+  answer           String           @db.VarChar(500)
+  explanation      String?          @db.VarChar(1000)
+  /// The material and the exact words in it that this question is based on (checked by code).
+  sourceMaterialId String?
+  sourceQuote      String?          @db.VarChar(500)
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@unique([quizId, order])
+}
+
+enum KnowledgeKind {
+  LESSON_SUMMARY
+  KNOWLEDGE_POINT
+  COMMON_MISTAKE
+  EXAMPLE
+  FAQ
+  TEACHING_STYLE
+}
+
+/// What a teacher wants their students' AI tutor to know and teach: lesson summaries, key points,
+/// common mistakes, worked examples, FAQs and how they like to explain. It is written for students
+/// to see. It is NOT the private AgentMemory about individual students and never mixes with it.
+model KnowledgeEntry {
+  id        String        @id @default(cuid())
+  teacherId String
+  /// Null means the entry applies to all of the teacher's courses.
+  courseId  String?
+  kind      KnowledgeKind
+  title     String        @db.VarChar(120)
+  content   String        @db.VarChar(4000)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  teacher User    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  course  Course? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([teacherId, courseId])
+}
+
+/// One chat between a signed-in user and the assistant. Owned by that user only; each conversation
+/// has its own context (the assistant is only ever shown the messages of the conversation in use).
+model AgentConversation {
+  id        String   @id @default(cuid())
+  actorId   String
+  /// Set for a chat that belongs to one course page (the course tutor); null for the global assistant.
+  courseId  String?
+  title     String   @db.VarChar(120)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  actor    User           @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  course   Course?        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  messages AgentMessage[]
+
+  @@index([actorId, courseId, updatedAt])
+}
+
+model AgentMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   @db.VarChar(12)
+  content        String   @db.Text
+  /// Proposals this assistant message prepared; their current status is read from AgentProposal.
+  proposalIds    String[]
+  citations      Json?
+  /// Names of the photos the user attached. The photos themselves are not stored.
+  attachments    Json?
+  /// What was read from those photos, kept so later turns can refer back to them. Never shown as the user's own words.
+  modelContext   String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
