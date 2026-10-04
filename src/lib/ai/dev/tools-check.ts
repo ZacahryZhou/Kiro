@@ -39,8 +39,8 @@ async function main() {
 
   // ----- tool sets -----
   const names = getToolsForRole("TEACHER").map((t) => t.name).sort();
-  check("Teacher has 9 read-only tools plus six proposal tools", JSON.stringify(names) === JSON.stringify(["checkConflicts", "getAttendanceTrends", "getCourseMaterials", "getStudentMemory", "getTeacherSchedule", "listAttendance", "listDeductions", "listMyCourses", "listMyStudents", "proposeAddContent", "proposeAddStudentNote", "proposeCreateCourse", "proposeCreateSessions", "proposeLessonPrep", "proposeMarkAttendance"]), names);
-  check("Students get exactly two read-only tools", JSON.stringify(getToolsForRole("STUDENT").map((t) => t.name).sort()) === JSON.stringify(["answerFromCourseMaterials", "getStudentWorkspace"]));
+  check("Teacher has 11 read-only tools plus six proposal tools", JSON.stringify(names) === JSON.stringify(["checkConflicts", "findMyStudent", "getAttendanceTrends", "getCourseMaterials", "getMyProfile", "getStudentMemory", "getTeacherSchedule", "listAttendance", "listDeductions", "listMyCourses", "listMyStudents", "proposeAddContent", "proposeAddStudentNote", "proposeCreateCourse", "proposeCreateSessions", "proposeLessonPrep", "proposeMarkAttendance"]), names);
+  check("Students get exactly three read-only tools", JSON.stringify(getToolsForRole("STUDENT").map((t) => t.name).sort()) === JSON.stringify(["answerFromCourseMaterials", "getMyProfile", "getStudentWorkspace"]));
   const schemaText = JSON.stringify(getToolsForRole("TEACHER").map((t) => t.parameters));
   check("No tool parameter is called userId or role", !/"userId"|"role"/.test(schemaText));
   check("No tool can write directly (six propose* tools only prepare pending proposals)", getToolsForRole("TEACHER").every((t) => !/^(create|add|confirm|reschedule|delete|update|discard)/.test(t.name)) && getToolsForRole("TEACHER").filter((t) => t.name.startsWith("propose")).length === 6);
@@ -113,6 +113,29 @@ async function main() {
   check("checkConflicts reports no conflict for a free slot", free.ok && free.data.hasConflict === false);
   check("checkConflicts rejects a bad time", (await run("checkConflicts", alex, { courseId: ids.courseA, date: "2031-03-04", time: "4pm", durationMin: 60 })).data.error?.code === "INVALID_ARGUMENTS");
   check("checkConflicts on another teacher's course -> FORBIDDEN", (await run("checkConflicts", taylor, { courseId: ids.courseA, date: "2031-03-04", time: "10:00", durationMin: 60 })).data.error?.code === "FORBIDDEN");
+
+  // ----- own profile and student lookup -----
+  const runAs = async (role: "TEACHER" | "STUDENT", tool: string, actor: typeof alex, args: unknown = {}) => {
+    const result = await findTool(role, tool)!.run(actor, args);
+    return { ok: result.ok, content: result.content, data: JSON.parse(result.content) as Record<string, any> };
+  };
+  const alexProfile = await runAs("TEACHER", "getMyProfile", alex);
+  check("getMyProfile (teacher): own name, role, 2 courses and 2 distinct students counted by code", alexProfile.ok && alexProfile.data.name === "Alex Morgan" && alexProfile.data.role === "teacher" && alexProfile.data.courseCount === 2 && alexProfile.data.totalStudents === 2 && alexProfile.data.courses.some((c: any) => c.students.includes("Sam Patel")), alexProfile.data);
+  const taylorProfile = await runAs("TEACHER", "getMyProfile", taylor);
+  check("getMyProfile (another teacher) shows only her own account and students", taylorProfile.data.name === "Taylor Chen" && taylorProfile.data.totalStudents === 1 && !/Jordan|Sam|Alex/.test(taylorProfile.content), taylorProfile.data);
+  const jordanProfile = await runAs("STUDENT", "getMyProfile", jordan);
+  check("getMyProfile (student): own name, role and courses with their teachers, no other students", jordanProfile.data.name === "Jordan Lee" && jordanProfile.data.role === "student" && jordanProfile.data.courses.length === 2 && jordanProfile.data.courses.every((c: any) => c.teacher === "Alex Morgan") && !/Sam|Casey/.test(jordanProfile.content), jordanProfile.data);
+  const spoofProfile = await runAs("TEACHER", "getMyProfile", taylor, { userId: alex.userId, role: "TEACHER" });
+  check("getMyProfile ignores a supplied userId", spoofProfile.data.name === "Taylor Chen");
+  const found = await runAs("TEACHER", "findMyStudent", alex, { query: "jor" });
+  check("findMyStudent finds Jordan by part of the name, with both courses", found.ok && found.data.total === 1 && found.data.matches[0].name === "Jordan Lee" && found.data.matches[0].courses.length === 2, found.data);
+  check("findMyStudent also matches by email", (await runAs("TEACHER", "findMyStudent", alex, { query: "student2@" })).data.matches[0]?.name === "Sam Patel");
+  const notMine = await runAs("TEACHER", "findMyStudent", alex, { query: "casey" });
+  check("findMyStudent cannot find another teacher's student, and hints nothing more", notMine.ok && notMine.data.total === 0 && /enrolled in your courses/.test(notMine.data.note));
+  check("findMyStudent for another teacher does not see Jordan", (await runAs("TEACHER", "findMyStudent", taylor, { query: "jordan" })).data.total === 0);
+  check("findMyStudent rejects a one-letter query", (await runAs("TEACHER", "findMyStudent", alex, { query: "j" })).data.error?.code === "INVALID_ARGUMENTS");
+  check("A student running findMyStudent is refused", (await runAs("TEACHER", "findMyStudent", jordan, { query: "sam" })).data.error?.code === "FORBIDDEN");
+  check("Students do not have the student lookup tool", findTool("STUDENT", "findMyStudent") === undefined);
 
   // ----- materials -----
   const unitId = store.units.find((u) => u.courseId === ids.courseA)!.id;

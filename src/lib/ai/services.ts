@@ -4,9 +4,10 @@ import * as read from "@/services/read";
 import * as write from "@/services/write";
 import * as fake from "./dev/fake-services";
 import * as memory from "./core/memory";
+import * as profile from "./core/profile";
 import { useRealBackend } from "./runtime";
 
-const realServices = { ...read, ...write, ...memory };
+const realServices = { ...read, ...write, ...memory, ...profile };
 const activeServices: typeof fake = useRealBackend
   ? realServices as unknown as typeof fake
   : fake;
@@ -25,6 +26,7 @@ export const createSessions = activeServices.createSessions;
 export const confirmAttendance = activeServices.confirmAttendance;
 export const createCourseUnit = activeServices.createCourseUnit;
 export const addMaterial = activeServices.addMaterial;
+export const getMyProfile = activeServices.getMyProfile;
 export const getStudentMemory = activeServices.getStudentMemory;
 export const saveStudentMemory = activeServices.saveStudentMemory;
 export const rescheduleSession = activeServices.rescheduleSession;

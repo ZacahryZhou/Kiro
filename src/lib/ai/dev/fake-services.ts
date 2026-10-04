@@ -729,3 +729,11 @@ export async function rescheduleSession(
   session.status = "RESCHEDULED";
   return ok({ sessionId: session.id, oldStartAt, newStartAt: parsed.data.newStartAt });
 }
+
+export async function getMyProfile(
+  actor: Actor,
+): Promise<Result<{ profile: { name: string; email: string; role: Actor["role"] } }>> {
+  const user = store.users.find((u) => u.id === actor.userId);
+  if (!user) return fail("NOT_FOUND", "Account not found.");
+  return ok({ profile: { name: user.name, email: user.email, role: user.role } });
+}

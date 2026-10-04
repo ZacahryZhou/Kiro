@@ -15,7 +15,7 @@ const HELP_TEACHER =
   "To take attendance, name each enrolled student and their status.";
 const HELP_STUDENT =
   "Demo mode (AI_MOCK=1): the assistant is running without a language model, so it understands a few simple requests. " +
-  'Try: "What is on my schedule this week?" or a question about your course materials.';
+  'Try: "Who am I?", "What is on my schedule this week?" or a question about your course materials.';
 
 const call = (name: string, args: unknown, n: number): Completion => {
   const id = `mock_${n}`;
@@ -205,6 +205,24 @@ function teacherFlow(text: string, messages: ChatMessage[]): Completion {
     return say(proposalReply(data));
   }
 
+  // Who am I.
+  if (/\bwho am i\b|\bmy (name|profile|account|role)\b|\bwhat('s| is) my name\b|\babout me\b/i.test(text)) {
+    if (step === 0) return call("getMyProfile", {}, 1);
+    const p = first as { name?: string; courseCount?: number; totalStudents?: number; courses?: { name: string; students: string[] }[] } | undefined;
+    if (!p?.name) return say("I couldn't load your account details.");
+    const lines = (p.courses ?? []).map((c) => `${c.name} (${c.students.length > 0 ? c.students.join(", ") : "no students yet"})`);
+    return say(`You're signed in as ${p.name}, a teacher. You teach ${p.courseCount ?? 0} ${p.courseCount === 1 ? "course" : "courses"} with ${p.totalStudents ?? 0} ${p.totalStudents === 1 ? "student" : "students"}${lines.length > 0 ? `: ${lines.join("; ")}` : ""}.`);
+  }
+
+  // Find one student by name.
+  const lookup = /(?:find|search for|look up|who is|tell me about|is)\s+(?:the\s+)?(?:student\s+)?([A-Za-z]{2,}(?:\s[A-Za-z]{2,})?)\b/i.exec(text);
+  if (lookup && !/^(in|my|the|a|an|there|it|this|that|enrolled|taking)\b/i.test(lookup[1]) && /\b(find|search|look up|who is|tell me about|is .+ (my|a) student)\b/i.test(text)) {
+    if (step === 0) return call("findMyStudent", { query: lookup[1].trim() }, 1);
+    const matches = ((first?.matches as { name: string; email: string; courses: { name: string }[] }[]) ?? []);
+    if (matches.length === 0) return say(`I couldn't find a student called "${lookup[1].trim()}" in your courses.`);
+    return say(matches.map((m) => `${m.name} (${m.email}) is in ${m.courses.map((c) => c.name).join(" and ")}.`).join(" "));
+  }
+
   // Who is in a course.
   if (/\b(who|which students|students)\b.*\b(in|enrolled|taking)\b/i.test(text) || /\bmy students\b|\broster\b/i.test(text)) {
     if (step === 0) return call("listMyCourses", {}, 1);
@@ -242,6 +260,14 @@ function teacherFlow(text: string, messages: ChatMessage[]): Completion {
 function studentFlow(text: string, messages: ChatMessage[]): Completion {
   const done = results(messages);
   const first = done[0]?.data;
+  if (/\bwho am i\b|\bmy (name|profile|account|role)\b|\bwhat('s| is) my name\b|\babout me\b/i.test(text)) {
+    if (done.length === 0) return call("getMyProfile", {}, 1);
+    const p = first as { name?: string; courses?: { name: string; teacher: string }[] } | undefined;
+    if (!p?.name) return say("I couldn't load your account details.");
+    const lines = (p.courses ?? []).map((c) => `${c.name} with ${c.teacher}`);
+    return say(`You're signed in as ${p.name}, a student${lines.length > 0 ? `, in ${lines.join("; ")}` : ""}.`);
+  }
+
   if (/\b(schedule|classes|sessions|lessons|attendance|calendar|courses)\b/i.test(text) && !/\b(define|explain|how do|formula)\b/i.test(text)) {
     if (done.length === 0) return call("getStudentWorkspace", { when: when(text) }, 1);
     const sessions = ((first?.sessions as { weekday: string; localDate: string; localTime: string; courseName: string }[]) ?? []);

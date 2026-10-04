@@ -1044,6 +1044,83 @@ function pick({ localDate, localTime }: { localDate: string; localTime: string }
   return { localDate, localTime };
 }
 
+
+// ---------- identity and student lookup (own information only) ----------
+
+const getMyProfile = defineTool({
+  name: "getMyProfile",
+  description:
+    "Get the signed-in user's own account details: name, role and email, plus their courses. " +
+    "For a teacher it also lists the students enrolled in each course; for a student it lists their teachers. " +
+    "Use it when the user asks who they are, what their name is, or what is in their account. It never returns anyone else's account.",
+  parameters: obj({}),
+  schema: z.object({}),
+  async run(actor) {
+    const profile = await services.getMyProfile(actor);
+    if (!profile.ok) return serviceFailure(profile.error);
+    const courses = await services.listMyCourses(actor);
+    if (!courses.ok) return serviceFailure(courses.error);
+
+    if (actor.role === "STUDENT") {
+      return succeed({
+        name: profile.data.profile.name,
+        role: "student",
+        email: profile.data.profile.email,
+        courses: capped(courses.data.courses).items.map((c) => ({ name: c.name, subject: c.subject, teacher: c.teacherName })),
+      });
+    }
+
+    const rows: { courseId: string; name: string; students: string[] }[] = [];
+    const distinct = new Set<string>();
+    for (const course of courses.data.courses.slice(0, 20)) {
+      const roster = await services.listMyStudents(actor, { courseId: course.id });
+      const students = roster.ok ? roster.data.students : [];
+      students.forEach((s) => distinct.add(s.id));
+      rows.push({ courseId: course.id, name: course.name, students: students.slice(0, 30).map((s) => s.name) });
+    }
+    return succeed({
+      name: profile.data.profile.name,
+      role: "teacher",
+      email: profile.data.profile.email,
+      courseCount: courses.data.courses.length,
+      totalStudents: distinct.size, // counted by code
+      courses: rows,
+    });
+  },
+});
+
+const findMyStudent = defineTool({
+  name: "findMyStudent",
+  description:
+    "Find a student by name or email among the students enrolled in the signed-in teacher's own courses. " +
+    "Returns the student's course IDs so you can use them in other tools. Students who are not in the teacher's courses cannot be found.",
+  parameters: obj({ query: { type: "string", description: "Part of the student's name or email." } }, ["query"]),
+  schema: z.object({ query: z.string().trim().min(2).max(80) }),
+  async run(actor, args) {
+    if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers can look up students.");
+    const courses = await services.listMyCourses(actor);
+    if (!courses.ok) return serviceFailure(courses.error);
+    const needle = args.query.toLowerCase();
+    const found = new Map<string, { studentId: string; name: string; email: string; courses: { courseId: string; name: string }[] }>();
+    for (const course of courses.data.courses.slice(0, 50)) {
+      const roster = await services.listMyStudents(actor, { courseId: course.id });
+      if (!roster.ok) continue;
+      for (const student of roster.data.students) {
+        if (!student.name.toLowerCase().includes(needle) && !student.email.toLowerCase().includes(needle)) continue;
+        const entry = found.get(student.id) ?? { studentId: student.id, name: student.name, email: student.email, courses: [] };
+        entry.courses.push({ courseId: course.id, name: course.name });
+        found.set(student.id, entry);
+      }
+    }
+    const matches = [...found.values()];
+    return succeed({
+      matches: matches.slice(0, 10),
+      total: matches.length,
+      ...(matches.length === 0 ? { note: "No student with that name or email is enrolled in your courses." } : {}),
+    });
+  },
+});
+
 // ---------- tool sets ----------
 
 const TEACHER_TOOLS: Tool[] = [
@@ -1056,6 +1133,8 @@ const TEACHER_TOOLS: Tool[] = [
   getCourseMaterials,
   getStudentMemory,
   getAttendanceTrends,
+  getMyProfile,
+  findMyStudent,
   proposeMarkAttendance,
   proposeCreateCourse,
   proposeCreateSessions,
@@ -1065,7 +1144,7 @@ const TEACHER_TOOLS: Tool[] = [
 ];
 
 /** Students never get proposal, write or memory tools. */
-const STUDENT_TOOLS: Tool[] = [getStudentWorkspace, answerFromCourseMaterials];
+const STUDENT_TOOLS: Tool[] = [getStudentWorkspace, answerFromCourseMaterials, getMyProfile];
 
 export function getToolsForRole(role: Role): Tool[] {
   return role === "TEACHER" ? TEACHER_TOOLS : STUDENT_TOOLS;

@@ -58,6 +58,19 @@ async function main() {
   out = await ask(actorFor("teacher2@example.test")!, "Who is in my math class?");
   check("Another teacher asking about 'math' gets no names", !/Jordan|Sam/.test(out.reply), out.reply);
 
+  // ----- identity and lookup -----
+  reset();
+  out = await ask(alex, "Who am I?");
+  check("Who am I (teacher): name, role, courses and students, from the profile tool", out.toolCalls[0]?.name === "getMyProfile" && /Alex Morgan/.test(out.reply) && /teacher/.test(out.reply) && /Jordan Lee/.test(out.reply) && /2 students/.test(out.reply), out.reply);
+  out = await ask(actorFor("teacher2@example.test")!, "what's my name and who are my students in my account");
+  check("A different teacher sees only her own account and student", /Taylor Chen/.test(out.reply) && /Casey Kim/.test(out.reply) && !/Jordan|Sam|Alex/.test(out.reply), out.reply);
+  out = await ask(jordan, "who am i");
+  check("Who am I (student): own name and teachers only", /Jordan Lee/.test(out.reply) && /student/.test(out.reply) && /Alex Morgan/.test(out.reply) && !/Sam|Casey/.test(out.reply), out.reply);
+  out = await ask(alex, "Find Jordan");
+  check("Find a student: Jordan with both courses", out.toolCalls[0]?.name === "findMyStudent" && /Jordan Lee/.test(out.reply) && /Physics/.test(out.reply), out.reply);
+  out = await ask(alex, "Who is Casey?");
+  check("Find a student outside the teacher's courses: not found, no details", /couldn't find/.test(out.reply) && !/Casey Kim|English/.test(out.reply), out.reply);
+
   // ----- teacher: course creation -----
   reset();
   const courses = business();
