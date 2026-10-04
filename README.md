@@ -428,6 +428,7 @@ All of these must pass for the project to count as complete.
 | `docs/api-contract.md` | The interface contract between the two tracks; wins over `CLAUDE.md` on conflict |
 | `docs/AI-REPLY-POLICY.md` | The reply rules loaded into teacher and student AI prompts |
 | `docs/ROADMAP-nick.md` | Core product roadmap (N1–N6) |
+| `docs/ROADMAP-next.md` | Remaining work after the front-end redesign, in build order (phases A–F) |
 | `docs/HANDOFF.md` | Append-only message board between the two owners |
 | `docs/PROMPTS.md` | Opening prompts for each owner's AI assistant |
 | `docs/H0-CHECKLIST.md` | Pre-work checklist (environment, repository, kickoff) |

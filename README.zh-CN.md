@@ -428,6 +428,7 @@ docs/zachary/         中文原始工作文档(仅供参考)
 | `docs/api-contract.md` | 两条线之间的接口契约,与 `CLAUDE.md` 冲突时以它为准 |
 | `docs/AI-REPLY-POLICY.md` | 被加载进老师和学生 AI 提示词里的回复规则 |
 | `docs/ROADMAP-nick.md` | 基础产品路线(N1–N6) |
+| `docs/ROADMAP-next.md` | 前端重做之后剩余的工作,按开发顺序排列(阶段 A–F) |
 | `docs/HANDOFF.md` | 两位负责人之间只追加的留言板 |
 | `docs/PROMPTS.md` | 给各自 AI 助手的开场提示词 |
 | `docs/H0-CHECKLIST.md` | 开工前检查清单(环境、仓库、开工) |
