@@ -34,6 +34,9 @@ export function resultLines(type: ProposalType, result: unknown): string[] {
   if (type === "DASHBOARD_LAYOUT" && typeof data.name === "string") {
     return [`${labels.dashboard.saved}: "${data.name}"`];
   }
+  if (type === "KNOWLEDGE" && typeof data.saved === "number") {
+    return [`${labels.knowledge.saved}: ${plural(data.saved, "note", "notes")}. Students and their tutor can use them now.`];
+  }
   if (type === "QUIZ" && typeof data.questionCount === "number") {
     return [`${labels.quiz.saved}: ${plural(data.questionCount, "question", "questions")}. Review it in the course's Quizzes tab, then publish it.`];
   }

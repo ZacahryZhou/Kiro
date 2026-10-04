@@ -88,6 +88,7 @@ enum ProposalType {
   ADD_STUDENT
   DASHBOARD_LAYOUT
   QUIZ
+  KNOWLEDGE
 }
 
 model User {
@@ -112,6 +113,7 @@ model User {
   progressAsStudent ProgressRecord[] @relation("ProgressStudent")
   progressAsTeacher ProgressRecord[] @relation("ProgressTeacher")
   dashboardLayouts  DashboardLayout[]
+  knowledgeEntries  KnowledgeEntry[]
 }
 
 model Course {
@@ -132,6 +134,7 @@ model Course {
   agentProposals AgentProposal[]
   agentMemories  AgentMemory[]
   quizzes        Quiz[]
+  knowledge      KnowledgeEntry[]
 }
 
 model Enrollment {
@@ -375,4 +378,33 @@ model QuizQuestion {
   quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
 
   @@unique([quizId, order])
+}
+
+enum KnowledgeKind {
+  LESSON_SUMMARY
+  KNOWLEDGE_POINT
+  COMMON_MISTAKE
+  EXAMPLE
+  FAQ
+  TEACHING_STYLE
+}
+
+/// What a teacher wants their students' AI tutor to know and teach: lesson summaries, key points,
+/// common mistakes, worked examples, FAQs and how they like to explain. It is written for students
+/// to see. It is NOT the private AgentMemory about individual students and never mixes with it.
+model KnowledgeEntry {
+  id        String        @id @default(cuid())
+  teacherId String
+  /// Null means the entry applies to all of the teacher's courses.
+  courseId  String?
+  kind      KnowledgeKind
+  title     String        @db.VarChar(120)
+  content   String        @db.VarChar(4000)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  teacher User    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  course  Course? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([teacherId, courseId])
 }

@@ -102,6 +102,8 @@ export type FakeLayout = { id: string; teacherId: string; name: string; theme: s
 
 export type FakeQuiz = { id: string; courseId: string; title: string; published: boolean; createdAt: string; questions: Record<string, unknown>[] };
 
+export type FakeKnowledge = { id: string; teacherId: string; courseId?: string; kind: string; title: string; content: string; updatedAt: string };
+
 export type FakeState = {
   users: FakeUser[];
   courses: FakeCourse[];
@@ -117,6 +119,7 @@ export type FakeState = {
   progress: FakeProgress[];
   layouts: FakeLayout[];
   quizzes: FakeQuiz[];
+  knowledge: FakeKnowledge[];
 };
 
 export const ids = {
@@ -214,6 +217,7 @@ export function createState(now = new Date()): FakeState {
     progress: [],
     layouts: [],
     quizzes: [],
+    knowledge: [],
   };
 
   const session = (

@@ -11,6 +11,7 @@ import * as coreWrite from "@/services/write";
 import * as dashboard from "@/services/dashboard";
 import { addMaterialsFromFile, deleteMaterial } from "@/services/materials-upload";
 import * as quizzes from "@/services/quiz";
+import * as knowledge from "@/services/knowledge";
 import type { Actor } from "@/contracts";
 
 async function main() {
@@ -366,6 +367,54 @@ async function main() {
     check(!(await eduProposals.confirm(otherTeacher, written.proposal!.id)).ok, "another teacher cannot confirm this quiz proposal");
     delete process.env.AI_MOCK;
     if (savedQuiz) await quizzes.deleteQuiz(teacher, { quizId: savedQuiz.id });
+
+    // ----- teaching knowledge (the simulated teacher knowledge base from the demo seed) -----
+    const mine = await knowledge.listMyKnowledge(teacher);
+    check(mine.ok && mine.data.entries.length >= 12 && mine.data.entries.some((e) => e.kind === "TEACHING_STYLE" && !e.courseId), "the demo teacher has a seeded knowledge base, including an all-courses teaching style");
+    const theirs = await knowledge.listMyKnowledge(otherTeacher);
+    check(theirs.ok && theirs.data.entries.length === 1 && !theirs.data.entries.some((e) => e.title.includes("balance")), "another teacher sees only their own notes");
+    const forJordan = await knowledge.listKnowledgeForStudent(jordan);
+    check(forJordan.ok && forJordan.data.entries.some((e) => e.title === "The balance method") && forJordan.data.entries.some((e) => e.title === "Speed and velocity") && !forJordan.data.entries.some((e) => e.kind === "TEACHING_STYLE"), "an enrolled student reads the notes of their courses, without teaching-style instructions");
+    const forTutor = await knowledge.listKnowledgeForStudent(jordan, { includeStyle: true });
+    check(forTutor.ok && forTutor.data.entries.some((e) => e.kind === "TEACHING_STYLE"), "the tutor can also read the teaching style");
+    check(forJordan.ok && !forJordan.data.entries.some((e) => e.title.includes("thesis")), "a student never gets another teacher's notes");
+    const kCasey = await prisma.user.findUnique({ where: { email: "s+casey@example.test" } });
+    const forCasey = kCasey ? await knowledge.listKnowledgeForStudent({ userId: kCasey.id, role: "STUDENT" }) : undefined;
+    check(!!forCasey && forCasey.ok && forCasey.data.entries.length === 1 && forCasey.data.entries[0].title.includes("thesis"), "a student in another course sees only their own teacher's notes");
+    check(!(await knowledge.listKnowledgeForStudent(teacher)).ok && !(await knowledge.listMyKnowledge(jordan)).ok, "teachers and students cannot use each other's note readers");
+    const memoryText = (await prisma.agentMemory.findMany({ select: { content: true } })).map((m) => m.content);
+    check(forTutor.ok && memoryText.length > 0 && !JSON.stringify(forTutor.data).includes(memoryText[0]), "private student memory never appears among the notes a student or the tutor can read");
+    const savedNote = await knowledge.saveKnowledgeEntry(teacher, { courseId: course.id, kind: "FAQ", title: "Test note", content: "Q: test? A: yes." });
+    check(savedNote.ok && savedNote.data.courseName === course.name, "a teacher saves a note for their course");
+    const noteId = savedNote.ok ? savedNote.data.id : "";
+    check(!(await knowledge.saveKnowledgeEntry(otherTeacher, { id: noteId, kind: "FAQ", title: "Hijack", content: "x" })).ok, "another teacher cannot edit this note");
+    check(!(await knowledge.saveKnowledgeEntry(otherTeacher, { courseId: course.id, kind: "FAQ", title: "Foreign", content: "x" })).ok, "another teacher cannot add a note to this course");
+    check(!(await knowledge.saveKnowledgeEntry(jordan, { kind: "FAQ", title: "Student", content: "x" })).ok, "a student cannot write notes");
+    check((await knowledge.saveKnowledgeEntry(teacher, { id: noteId, kind: "FAQ", title: "Test note v2", content: "Q: test? A: still yes." })).ok && (await prisma.knowledgeEntry.findUnique({ where: { id: noteId } }))?.title === "Test note v2", "a teacher edits their own note");
+    check(!(await knowledge.saveKnowledgeEntries(teacher, { entries: [{ kind: "FAQ", title: "ok", content: "ok" }, { kind: "FAQ", title: "bad", content: "x", courseId: "no-such-course" }] })).ok && !(await prisma.knowledgeEntry.findFirst({ where: { title: "ok", teacherId: teacher.userId } })), "a batch with one bad note saves none of them");
+    check(!(await knowledge.deleteKnowledgeEntry(otherTeacher, { entryId: noteId })).ok && (await knowledge.deleteKnowledgeEntry(teacher, { entryId: noteId })).ok, "only the author can delete a note");
+
+    // ----- the AI saves notes and the student tutor teaches from them, against the real database -----
+    process.env.AI_MOCK = "1";
+    const { chatCompletion: realComplete } = await import("../core/provider");
+    const { eduMockModel: mockModel } = await import("../domain/edu/mock-model");
+    const complete = ((p: any, o: any) => realComplete(p, { mock: mockModel, ...o })) as any;
+    const notesTool = findTool("TEACHER", "proposeKnowledge");
+    const dictatedNotes = notesTool ? await notesTool.run(teacher, { entries: [{ kind: "KNOWLEDGE_POINT", title: "Parallel lines", content: "Two lines with equal slopes are parallel, so they never meet.", courseId: course.id }] }, { complete }) : undefined;
+    const notesBefore = await prisma.knowledgeEntry.count({ where: { title: "Parallel lines" } });
+    check(!!dictatedNotes?.ok && dictatedNotes.proposal?.type === "KNOWLEDGE" && notesBefore === 0, "an AI notes proposal is stored without saving any note");
+    const notesConfirm = dictatedNotes?.proposal ? await eduProposals.confirm(teacher, dictatedNotes.proposal.id) : undefined;
+    check(!!notesConfirm && notesConfirm.ok && notesConfirm.data.status === "executed" && (await prisma.knowledgeEntry.count({ where: { title: "Parallel lines" } })) === 1, "confirming saves the note");
+    if (dictatedNotes?.proposal) await eduProposals.confirm(teacher, dictatedNotes.proposal.id);
+    check((await prisma.knowledgeEntry.count({ where: { title: "Parallel lines" } })) === 1, "confirming twice never saves a second copy");
+    check(!!dictatedNotes?.proposal && !(await eduProposals.confirm(otherTeacher, dictatedNotes.proposal.id)).ok, "another teacher cannot confirm this notes proposal");
+    const tutorTool = findTool("STUDENT", "explainWithTeacherNotes");
+    const lesson = tutorTool ? await tutorTool.run(jordan, { question: "Can you explain how the balance method works?" }, { complete }) : undefined;
+    check(!!lesson?.finalReply && /subtract b from both sides|balanced scale|same operation on both sides/i.test(lesson.finalReply) && (lesson.citations ?? []).some((c) => c.title.startsWith("Key point")), "the tutor explains from the teacher's seeded notes and cites them");
+    const nope = kCasey && tutorTool ? await tutorTool.run({ userId: kCasey.id, role: "STUDENT" }, { question: "Explain the balance method for equations" }, { complete }) : undefined;
+    check(!!nope?.finalReply && /couldn't find/.test(nope.finalReply), "a student outside this teacher's courses cannot be taught from their notes");
+    delete process.env.AI_MOCK;
+    for (const leftover of await prisma.knowledgeEntry.findMany({ where: { title: "Parallel lines" }, select: { id: true } })) await knowledge.deleteKnowledgeEntry(teacher, { entryId: leftover.id });
   } finally {
     // Leave the database in its pristine fixture state.
     await seedFixtures(prisma, { reset: true });

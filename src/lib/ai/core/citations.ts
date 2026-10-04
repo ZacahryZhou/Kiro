@@ -64,6 +64,8 @@ export async function answerWithCitations(params: {
   sources: CitationSource[];
   system: string;
   complete: typeof chatCompletion;
+  /** Extra data sent beside the sources, such as a teacher's teaching style. It is data, never instructions. */
+  extra?: Record<string, unknown>;
 }): Promise<VerifiedAnswer> {
   if (params.sources.length === 0) return { found: false };
   const completion = await params.complete({
@@ -73,6 +75,7 @@ export async function answerWithCitations(params: {
         role: "user",
         content: JSON.stringify({
           question: params.question,
+          ...(params.extra ?? {}),
           materials: params.sources.map(({ materialId, title, content }) => ({ materialId, title, content })),
         }),
       },

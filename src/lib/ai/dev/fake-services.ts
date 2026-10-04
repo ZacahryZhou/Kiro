@@ -9,6 +9,7 @@ import {
   CreateSessionsInput,
   CreateUnitInput,
   DashboardLayoutInput,
+  KnowledgeBatchInput,
   MAX_LAYOUTS,
   RescheduleInput,
   ResolveStudentRequestInput,
@@ -21,6 +22,8 @@ import {
   type ConflictView,
   type CourseView,
   type DashboardLayoutView,
+  type KnowledgeView,
+  type StudentKnowledgeView,
   type QuizView,
   type DeductionView,
   type ErrorCode,
@@ -981,4 +984,46 @@ export async function listMyQuizzes(actor: Actor, input: { courseId?: string } =
   if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers can view quiz answer keys.");
   const mine = store.quizzes.filter((q) => store.courses.some((c) => c.id === q.courseId && c.teacherId === actor.userId) && (!input.courseId || q.courseId === input.courseId));
   return ok({ quizzes: mine.map((q) => ({ id: q.id, courseId: q.courseId, courseName: store.courses.find((c) => c.id === q.courseId)?.name ?? "", title: q.title, published: q.published, createdAt: q.createdAt, questions: q.questions as unknown as QuizView["questions"] })) });
+}
+
+// ---------- teaching knowledge (contract v0.7) ----------
+
+function knowledgeView(row: (typeof store.knowledge)[number]): KnowledgeView {
+  const course = row.courseId ? store.courses.find((c) => c.id === row.courseId) : undefined;
+  return { id: row.id, ...(row.courseId ? { courseId: row.courseId, courseName: course?.name } : {}), kind: row.kind as KnowledgeView["kind"], title: row.title, content: row.content, updatedAt: row.updatedAt };
+}
+
+export async function saveKnowledgeEntries(actor: Actor, input: z.input<typeof KnowledgeBatchInput>): Promise<Result<{ saved: number; entryIds: string[] }>> {
+  if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers can write teaching notes.");
+  const parsed = KnowledgeBatchInput.safeParse(input);
+  if (!parsed.success) return fail("VALIDATION", parsed.error.issues[0]?.message ?? "Those notes are not valid.");
+  for (const entry of parsed.data.entries) {
+    if (entry.courseId && !store.courses.some((c) => c.id === entry.courseId && c.teacherId === actor.userId)) return fail("FORBIDDEN", "A note points at a course you do not teach.");
+    if (entry.id && !store.knowledge.some((k) => k.id === entry.id && k.teacherId === actor.userId)) return fail("NOT_FOUND", "A note you are editing was not found.");
+  }
+  const now = new Date().toISOString();
+  const ids = parsed.data.entries.map((entry) => {
+    const existing = entry.id ? store.knowledge.find((k) => k.id === entry.id) : undefined;
+    if (existing) {
+      Object.assign(existing, { courseId: entry.courseId, kind: entry.kind, title: entry.title, content: entry.content, updatedAt: now });
+      return existing.id;
+    }
+    const row = { id: nextId("k"), teacherId: actor.userId, courseId: entry.courseId, kind: entry.kind, title: entry.title, content: entry.content, updatedAt: now };
+    store.knowledge.push(row);
+    return row.id;
+  });
+  return ok({ saved: ids.length, entryIds: ids });
+}
+
+export async function listMyKnowledge(actor: Actor, input: { courseId?: string } = {}): Promise<Result<{ entries: KnowledgeView[] }>> {
+  if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers can view their teaching notes.");
+  return ok({ entries: store.knowledge.filter((k) => k.teacherId === actor.userId && (!input.courseId || !k.courseId || k.courseId === input.courseId)).map(knowledgeView) });
+}
+
+export async function listKnowledgeForStudent(actor: Actor, input: { courseId?: string; includeStyle?: boolean } = {}): Promise<Result<{ entries: StudentKnowledgeView[] }>> {
+  if (actor.role !== "STUDENT") return fail("FORBIDDEN", "Only students can read their teachers' notes this way.");
+  const courseIds = new Set(store.enrollments.filter((e) => e.studentId === actor.userId && (!input.courseId || e.courseId === input.courseId)).map((e) => e.courseId));
+  const teacherIds = new Set(store.courses.filter((c) => courseIds.has(c.id)).map((c) => c.teacherId));
+  const rows = store.knowledge.filter((k) => (k.courseId ? courseIds.has(k.courseId) : teacherIds.has(k.teacherId)) && (input.includeStyle || k.kind !== "TEACHING_STYLE"));
+  return ok({ entries: rows.map((row) => ({ ...knowledgeView(row), teacherName: store.users.find((u) => u.id === row.teacherId)?.name ?? "Your teacher" })) });
 }

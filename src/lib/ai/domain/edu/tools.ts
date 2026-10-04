@@ -18,10 +18,11 @@ import { answerWithCitations, parseJsonObject, type CitationSource } from "../..
 import { chatCompletion } from "../../core/provider";
 import type { ToolSpec } from "../../core/types";
 import * as services from "../../services";
-import { materialsQaSystemPrompt } from "./prompts";
+import { materialsQaSystemPrompt, tutorSystemPrompt } from "./prompts";
+import { generateNotes, NOTE_KINDS_FROM_MATERIALS } from "./knowledge-gen";
 import { DASHBOARD_MOTIONS, DASHBOARD_THEMES, WIDGET_TYPES, DashboardLayoutInput } from "@/contracts";
 import { generateQuestions, planSlots, type QuizSource } from "./quiz-gen";
-import { CreateQuizInput, MAX_QUESTIONS } from "@/contracts";
+import { CreateQuizInput, KNOWLEDGE_KINDS, MAX_QUESTIONS, type KnowledgeKind } from "@/contracts";
 import { packWidgets, WIDGET_WIDTHS, type WidgetRequest } from "@/lib/dashboard-pack";
 import { eduProposals, money, sessionsDeducted } from "./proposal-types";
 
@@ -1616,6 +1617,28 @@ const listMyQuizzes = defineTool({
   },
 });
 
+
+/** Text materials of one course (optionally one unit) as sources for a writing step, within a size budget. */
+async function gatherTextSources(actor: Actor, courseId: string, unit: string | undefined, budget: number, purpose: string): Promise<{ ok: true; sources: { materialId: string; title: string; content: string }[] } | { ok: false; result: ToolResult }> {
+  const materials = await services.getCourseMaterials(actor, { courseId });
+  if (!materials.ok) return { ok: false, result: serviceFailure(materials.error) };
+  const needle = unit?.toLowerCase();
+  const units = materials.data.units.filter((u) => !needle || u.title.toLowerCase().includes(needle));
+  if (needle && units.length === 0) return { ok: false, result: failed("NOT_FOUND", `No unit matches "${unit}". Units: ${materials.data.units.map((u) => u.title).join(", ") || "none"}.`) };
+  let left = budget;
+  const sources: { materialId: string; title: string; content: string }[] = [];
+  for (const u of units) {
+    for (const material of u.materials) {
+      if (material.kind !== "TEXT" || !material.content || left <= 0) continue;
+      const content = material.content.slice(0, Math.min(8_000, left));
+      left -= content.length;
+      sources.push({ materialId: material.id, title: material.title, content });
+    }
+  }
+  if (sources.length === 0) return { ok: false, result: failed("NOT_FOUND", `This course has no text materials to write ${purpose} from. Ask the teacher to add or upload some first.`) };
+  return { ok: true, sources };
+}
+
 const MAX_QUIZ_SOURCE_CHARS = 24_000;
 
 const proposeQuiz = defineTool({
@@ -1670,22 +1693,9 @@ const proposeQuiz = defineTool({
     });
     if (!plan.ok) return failed("VALIDATION", plan.message);
 
-    const materials = await services.getCourseMaterials(actor, { courseId: course.id });
-    if (!materials.ok) return serviceFailure(materials.error);
-    const needle = args.unit?.toLowerCase();
-    const units = materials.data.units.filter((unit) => !needle || unit.title.toLowerCase().includes(needle));
-    if (needle && units.length === 0) return failed("NOT_FOUND", `No unit matches "${args.unit}". Units: ${materials.data.units.map((u) => u.title).join(", ") || "none"}.`);
-    let budget = MAX_QUIZ_SOURCE_CHARS;
-    const sources: QuizSource[] = [];
-    for (const unit of units) {
-      for (const material of unit.materials) {
-        if (material.kind !== "TEXT" || !material.content || budget <= 0) continue;
-        const content = material.content.slice(0, Math.min(8_000, budget));
-        budget -= content.length;
-        sources.push({ materialId: material.id, title: material.title, content });
-      }
-    }
-    if (sources.length === 0) return failed("NOT_FOUND", "This course has no text materials to write a quiz from. Ask the teacher to add or upload some first.");
+    const gathered = await gatherTextSources(actor, course.id, args.unit, MAX_QUIZ_SOURCE_CHARS, "a quiz");
+    if (!gathered.ok) return gathered.result;
+    const sources: QuizSource[] = gathered.sources;
 
     const generated = await generateQuestions(plan.slots, { course: course.name, subject: course.subject, sources, complete: ctx.complete });
     if (generated.callError && generated.questions.length === 0) return failed("INTERNAL", `The quiz writer failed: ${generated.callError}`);
@@ -1714,6 +1724,177 @@ const proposeQuiz = defineTool({
   },
 });
 
+
+const listMyKnowledge = defineTool({
+  name: "listMyKnowledge",
+  description: "List the teaching notes the teacher has saved for their students' AI tutor (kind, title, course, a short preview). Use it before adding notes so you do not duplicate one.",
+  parameters: obj({ courseId: { type: "string", description: "Optional course ID; also returns the notes that apply to all courses." } }),
+  schema: z.object({ courseId: id.optional() }),
+  async run(actor, args) {
+    const result = await services.listMyKnowledge(actor, args);
+    if (!result.ok) return serviceFailure(result.error);
+    return succeed({
+      notes: result.data.entries.map((entry) => ({ kind: entry.kind, title: entry.title, course: entry.courseName ?? "All courses", preview: entry.content.slice(0, 120) })),
+      total: result.data.entries.length,
+    });
+  },
+});
+
+const knowledgeKindEnum = z.enum(KNOWLEDGE_KINDS);
+
+const proposeKnowledge = defineTool({
+  name: "proposeKnowledge",
+  description:
+    "Save teaching notes the teacher dictated for their students' AI tutor. This does NOT save anything until the teacher confirms. Kinds: LESSON_SUMMARY, KNOWLEDGE_POINT, COMMON_MISTAKE, EXAMPLE, FAQ, TEACHING_STYLE (how the teacher likes to explain). " +
+    "Use only what the teacher said; do not add facts of your own. Notes are visible to students, so never include private information about a student. Omit courseId for notes that apply to all the teacher's courses.",
+  parameters: obj(
+    {
+      entries: {
+        type: "array",
+        description: "One to twelve notes.",
+        items: obj(
+          {
+            kind: { type: "string", enum: [...KNOWLEDGE_KINDS] },
+            title: { type: "string", description: "A short, specific title." },
+            content: { type: "string", description: "The note, in the teacher's own words, at most 4000 characters." },
+            courseId: { type: "string", description: "A course ID from listMyCourses, or omit for all courses." },
+          },
+          ["kind", "title", "content"],
+        ),
+      },
+    },
+    ["entries"],
+  ),
+  schema: z.object({
+    entries: z.array(z.object({ kind: knowledgeKindEnum, title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000), courseId: id.optional() })).min(1).max(12),
+  }),
+  async run(actor, args) {
+    if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers can write teaching notes.");
+    const courses = await services.listMyCourses(actor);
+    if (!courses.ok) return serviceFailure(courses.error);
+    for (const entry of args.entries) {
+      if (entry.courseId && !courses.data.courses.some((c) => c.id === entry.courseId)) return failed("NOT_FOUND", "One of the notes points at a course that was not found among your courses.");
+    }
+    const summary = `Save ${args.entries.length} teaching ${args.entries.length === 1 ? "note" : "notes"} for your students' tutor`;
+    const created = await eduProposals.create({ actor, type: "KNOWLEDGE", payload: { entries: args.entries }, summary });
+    if (!created.ok) return serviceFailure(created.error);
+    return {
+      ok: true,
+      proposal: created.data,
+      content: JSON.stringify({ status: "PENDING_CONFIRMATION", proposalId: created.data.id, summary, note: "Nothing has been saved yet. The teacher must confirm. Students and their tutor can read these notes once saved." }),
+    };
+  },
+});
+
+const MAX_NOTES_SOURCE_CHARS = 24_000;
+
+const proposeKnowledgeFromMaterials = defineTool({
+  name: "proposeKnowledgeFromMaterials",
+  description:
+    "Build teaching notes for the students' tutor from a course's text materials. This does NOT save anything until the teacher confirms. Do not write the notes yourself: code asks a separate step to draft them and keeps only the ones backed by a quote from the materials. " +
+    "Optionally choose kinds (default LESSON_SUMMARY, KNOWLEDGE_POINT, COMMON_MISTAKE, FAQ; EXAMPLE also allowed), a unit title to use only part of the materials, and how many notes (default 6, at most 12).",
+  parameters: obj(
+    {
+      courseId: { type: "string" },
+      unit: { type: "string", description: "Optional unit title (or part of it)." },
+      kinds: { type: "array", items: { type: "string", enum: [...NOTE_KINDS_FROM_MATERIALS] } },
+      maxNotes: { type: "integer", description: "How many notes to write, 1 to 12." },
+    },
+    ["courseId"],
+  ),
+  schema: z.object({
+    courseId: id,
+    unit: z.string().trim().min(1).max(80).optional(),
+    kinds: z.array(z.enum(NOTE_KINDS_FROM_MATERIALS as [KnowledgeKind, ...KnowledgeKind[]])).min(1).max(5).optional(),
+    maxNotes: z.number().int().min(1).max(12).optional(),
+  }),
+  async run(actor, args, ctx) {
+    if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers can write teaching notes.");
+    if (!ctx) return failed("INTERNAL", "The note writer is not available right now.");
+    const courses = await services.listMyCourses(actor);
+    if (!courses.ok) return serviceFailure(courses.error);
+    const course = courses.data.courses.find((item) => item.id === args.courseId);
+    if (!course) return failed("NOT_FOUND", "That course was not found among your courses.");
+    const gathered = await gatherTextSources(actor, course.id, args.unit, MAX_NOTES_SOURCE_CHARS, "notes");
+    if (!gathered.ok) return gathered.result;
+    const wanted = args.kinds ?? (["LESSON_SUMMARY", "KNOWLEDGE_POINT", "COMMON_MISTAKE", "FAQ"] as KnowledgeKind[]);
+    const maxNotes = args.maxNotes ?? 6;
+    const generated = await generateNotes({ course: course.name, wanted, maxNotes, sources: gathered.sources, complete: ctx.complete });
+    if (generated.callError && generated.notes.length === 0) return failed("INTERNAL", `The note writer failed: ${generated.callError}`);
+    if (generated.notes.length === 0) return failed("NOT_FOUND", "I could not write notes that are backed by quotes from the materials. The materials may be too short or off topic.");
+    const entries = generated.notes.map((note) => ({ ...note, courseId: course.id }));
+    const summary = `Save ${entries.length} teaching ${entries.length === 1 ? "note" : "notes"} written from the materials of ${course.name}`;
+    const created = await eduProposals.create({ actor, type: "KNOWLEDGE", payload: { entries }, courseId: course.id, summary });
+    if (!created.ok) return serviceFailure(created.error);
+    return {
+      ok: true,
+      proposal: created.data,
+      content: JSON.stringify({
+        status: "PENDING_CONFIRMATION",
+        proposalId: created.data.id,
+        summary,
+        notes: entries.length,
+        ...(generated.rejected > 0 ? { warning: `${generated.rejected} drafted notes were left out because they were not backed by the materials.` } : {}),
+        note: "Nothing has been saved yet. The teacher should read the notes and confirm. Students can read them once saved.",
+      }),
+    };
+  },
+});
+
+export const NOT_FOUND_TUTOR_REPLY = "I couldn't find that in your teacher's notes or the course materials. It may be worth asking your teacher.";
+
+const KIND_LABEL: Record<KnowledgeKind, string> = { LESSON_SUMMARY: "Lesson summary", KNOWLEDGE_POINT: "Key point", COMMON_MISTAKE: "Common mistake", EXAMPLE: "Example", FAQ: "FAQ", TEACHING_STYLE: "Teaching style" };
+
+const explainWithTeacherNotes = defineTool({
+  name: "explainWithTeacherNotes",
+  description:
+    "Explain or teach a topic from the student's own courses, using ONLY the teacher's notes and the course materials. Use it when the student asks to explain, teach, or help them understand something. " +
+    "The explanation comes back already verified with citations; pass it on without changing it. Never explain course content from your own knowledge.",
+  parameters: obj(
+    {
+      question: { type: "string", description: "What the student wants explained, in their own words." },
+      courseId: { type: "string", description: "Limit to one course. Omit to use all the student's courses." },
+    },
+    ["question"],
+  ),
+  schema: z.object({ question: z.string().min(1).max(500), courseId: id.optional() }),
+  async run(actor, args, ctx) {
+    if (actor.role !== "STUDENT") return failed("FORBIDDEN", "Only students use the tutor.");
+    if (!ctx) return failed("INTERNAL", "The tutor is not available right now.");
+    let courseIds: string[];
+    if (args.courseId) courseIds = [args.courseId];
+    else {
+      const mine = await services.listMyCourses(actor);
+      if (!mine.ok) return serviceFailure(mine.error);
+      courseIds = mine.data.courses.map((c) => c.id);
+    }
+    const notes = await services.listKnowledgeForStudent(actor, { courseId: args.courseId, includeStyle: true });
+    if (!notes.ok) return serviceFailure(notes.error);
+    const teachingStyle = notes.data.entries.filter((n) => n.kind === "TEACHING_STYLE").map((n) => n.content.slice(0, 600)).slice(0, 5);
+    const sources: CitationSource[] = [];
+    let size = 0;
+    for (const note of notes.data.entries) {
+      if (note.kind === "TEACHING_STYLE" || size + note.content.length > MAX_QA_SOURCE_CHARS) continue;
+      size += note.content.length;
+      sources.push({ materialId: note.id, unitId: "teacher-notes", title: `${KIND_LABEL[note.kind]}: ${note.title}`, content: note.content });
+    }
+    for (const courseId of courseIds) {
+      const materials = await services.getCourseMaterials(actor, { courseId });
+      if (!materials.ok) return serviceFailure(materials.error);
+      for (const unit of materials.data.units) {
+        for (const m of unit.materials) {
+          if (m.kind !== "TEXT" || !m.content || size + m.content.length > MAX_QA_SOURCE_CHARS) continue;
+          size += m.content.length;
+          sources.push({ materialId: m.id, unitId: unit.id, title: m.title, content: m.content });
+        }
+      }
+    }
+    const answer = await answerWithCitations({ question: args.question, sources, system: tutorSystemPrompt(), complete: ctx.complete, extra: { teachingStyle } });
+    if (!answer.found) return { ok: true, content: JSON.stringify({ found: false }), finalReply: NOT_FOUND_TUTOR_REPLY };
+    return { ok: true, content: JSON.stringify({ found: true }), finalReply: answer.answer, citations: answer.citations };
+  },
+});
+
 // ---------- tool sets ----------
 
 const TEACHER_TOOLS: Tool[] = [
@@ -1732,6 +1913,7 @@ const TEACHER_TOOLS: Tool[] = [
   listProgressRecords,
   listMyDashboardLayouts,
   listMyQuizzes,
+  listMyKnowledge,
   proposeMarkAttendance,
   proposeCreateCourse,
   proposeCreateSessions,
@@ -1743,10 +1925,12 @@ const TEACHER_TOOLS: Tool[] = [
   proposeLessonPrep,
   proposeDashboardLayout,
   proposeQuiz,
+  proposeKnowledge,
+  proposeKnowledgeFromMaterials,
 ];
 
 /** Students get no write or memory tools. The one proposal they can make is a leave or different-time request to their own teacher. */
-const STUDENT_TOOLS: Tool[] = [getStudentWorkspace, answerFromCourseMaterials, getMyProfile, listStudentRequests, listProgressRecords, proposeStudentRequest];
+const STUDENT_TOOLS: Tool[] = [getStudentWorkspace, answerFromCourseMaterials, explainWithTeacherNotes, getMyProfile, listStudentRequests, listProgressRecords, proposeStudentRequest];
 
 export function getToolsForRole(role: Role): Tool[] {
   return role === "TEACHER" ? TEACHER_TOOLS : STUDENT_TOOLS;

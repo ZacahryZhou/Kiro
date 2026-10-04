@@ -15,6 +15,7 @@ const TEACHER_NAV: NavItem[] = [
   { href: "/teacher/calendar", label: "Calendar", icon: "calendar" },
   { href: "/teacher/courses", label: "Courses", icon: "courses" },
   { href: "/teacher/students", label: "Students", icon: "students" },
+  { href: "/teacher/knowledge", label: "Knowledge", icon: "knowledge" },
 ];
 const STUDENT_NAV: NavItem[] = [
   { href: "/student", label: "My learning", icon: "learning" },

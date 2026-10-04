@@ -4,12 +4,13 @@ import * as read from "@/services/read";
 import * as write from "@/services/write";
 import * as dashboard from "@/services/dashboard";
 import * as quiz from "@/services/quiz";
+import * as knowledge from "@/services/knowledge";
 import * as fake from "./dev/fake-services";
 import * as memory from "./core/memory";
 import * as profile from "./core/profile";
 import { useRealBackend } from "./runtime";
 
-const realServices = { ...read, ...write, ...dashboard, ...quiz, ...memory, ...profile };
+const realServices = { ...read, ...write, ...dashboard, ...quiz, ...knowledge, ...memory, ...profile };
 const activeServices: typeof fake = useRealBackend
   ? realServices as unknown as typeof fake
   : fake;
@@ -42,3 +43,6 @@ export const getActiveLayout = activeServices.getActiveLayout;
 export const saveDashboardLayout = activeServices.saveDashboardLayout;
 export const createQuiz = activeServices.createQuiz;
 export const listMyQuizzes = activeServices.listMyQuizzes;
+export const saveKnowledgeEntries = activeServices.saveKnowledgeEntries;
+export const listMyKnowledge = activeServices.listMyKnowledge;
+export const listKnowledgeForStudent = activeServices.listKnowledgeForStudent;

@@ -1,6 +1,6 @@
 import {
   AttendanceStatus, CourseType, DeductionReason, MaterialKind, MemoryKind,
-  PrismaClient, Role, SessionStatus,
+  KnowledgeKind, PrismaClient, Role, SessionStatus,
 } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { APP_TZ, zonedTimeToUtc } from "../src/lib/ai/core/time";
@@ -54,6 +54,7 @@ export async function resetFixtures(prisma: PrismaClient): Promise<void> {
     prisma.sessionChange.deleteMany({ where: { session: { courseId: { in: courseIds } } } }),
     prisma.progressRecord.deleteMany({ where: { OR: [{ session: { courseId: { in: courseIds } } }, { studentId: { in: userIds } }] } }),
     prisma.dashboardLayout.deleteMany({ where: { teacherId: { in: userIds } } }),
+    prisma.knowledgeEntry.deleteMany({ where: { teacherId: { in: userIds } } }),
     prisma.studentRequest.deleteMany({ where: { OR: [{ session: { courseId: { in: courseIds } } }, { studentId: { in: userIds } }] } }),
     prisma.session.deleteMany({ where: { courseId: { in: courseIds } } }),
     prisma.material.deleteMany({ where: { unit: { courseId: { in: courseIds } } } }),
@@ -183,6 +184,40 @@ export async function seedFixtures(prisma: PrismaClient, options: { reset?: bool
   ] as const;
   for (const memory of memories) {
     await prisma.agentMemory.upsert({ where: { id: memory.id }, create: memory, update: memory });
+  }
+
+  // A simulated teacher "knowledge base": what Alex wants the students' AI tutor to teach, in Alex's own voice.
+  // Written for students to read. It is separate from the private per-student memories above.
+  const knowledge: { id: string; teacherId: string; courseId: string | null; kind: KnowledgeKind; title: string; content: string }[] = [
+    { id: "kora-ai-knowledge-style", teacherId: alex.id, courseId: null, kind: KnowledgeKind.TEACHING_STYLE, title: "How I like to explain",
+      content: "Start with a concrete everyday example, then give the rule. Explain in short numbered steps, one idea per step. Finish by asking the student to try a similar problem on their own. Be warm and encouraging, and never say that something is easy." },
+    { id: "kora-ai-knowledge-math-unit1", teacherId: alex.id, courseId: courses[0].id, kind: KnowledgeKind.LESSON_SUMMARY, title: "Unit 1: Solving linear equations",
+      content: "In this unit we learn to solve equations of the form ax + b = c. The big idea is balance: whatever you do to one side of the equation you must also do to the other side. We practise one-step equations, two-step equations and equations with the variable on both sides, and we always check an answer by putting it back into the original equation." },
+    { id: "kora-ai-knowledge-math-balance", teacherId: alex.id, courseId: courses[0].id, kind: KnowledgeKind.KNOWLEDGE_POINT, title: "The balance method",
+      content: "Think of an equation as a balanced scale. To keep it balanced, do the same operation on both sides. To solve ax + b = c, first subtract b from both sides, then divide both sides by a. Undoing the addition first and the multiplication second is like unwrapping a present: the last thing that was done is the first thing you undo." },
+    { id: "kora-ai-knowledge-math-check", teacherId: alex.id, courseId: courses[0].id, kind: KnowledgeKind.KNOWLEDGE_POINT, title: "Checking your answer",
+      content: "Substitute your answer back into the original equation. If both sides are equal, the answer is correct. For 2x + 4 = 10 we found x = 3, and 2(3) + 4 = 10, so the answer works. Checking takes ten seconds and catches most mistakes." },
+    { id: "kora-ai-knowledge-math-example", teacherId: alex.id, courseId: courses[0].id, kind: KnowledgeKind.EXAMPLE, title: "Worked example: 3x - 5 = 7",
+      content: "Step 1: add 5 to both sides, so 3x = 12. Step 2: divide both sides by 3, so x = 4. Step 3: check by substituting: 3(4) - 5 = 7, which is true. So x = 4." },
+    { id: "kora-ai-knowledge-math-mistake-sign", teacherId: alex.id, courseId: courses[0].id, kind: KnowledgeKind.COMMON_MISTAKE, title: "Forgetting to flip the inequality sign",
+      content: "When you multiply or divide both sides of an inequality by a negative number, the inequality sign flips. For example, from -2x > 6 we divide by -2 and get x < -3, not x > -3. Many students lose marks here, so say the rule out loud: negative means flip." },
+    { id: "kora-ai-knowledge-math-mistake-side", teacherId: alex.id, courseId: courses[0].id, kind: KnowledgeKind.COMMON_MISTAKE, title: "Changing only one side",
+      content: "A very common slip is to subtract a number from one side and forget the other side. An equation only stays true if both sides get exactly the same treatment. If your answer does not check out, look for the side you forgot." },
+    { id: "kora-ai-knowledge-math-faq", teacherId: alex.id, courseId: courses[0].id, kind: KnowledgeKind.FAQ, title: "Why do we use the opposite operation?",
+      content: "Q: Why do we subtract to get rid of a plus? A: Because subtracting undoes adding. Adding 5 and then subtracting 5 brings you back to where you started, which leaves the variable alone on one side. That is exactly what solving means." },
+    { id: "kora-ai-knowledge-math-unit2", teacherId: alex.id, courseId: courses[0].id, kind: KnowledgeKind.LESSON_SUMMARY, title: "Unit 2: Ratios and proportions",
+      content: "A ratio compares two quantities of the same kind, like 2 cups of flour to 3 cups of sugar, written 2:3. Equivalent ratios describe the same relationship, and we find them by multiplying or dividing both numbers by the same non-zero number. We use this to scale recipes, maps and prices." },
+    { id: "kora-ai-knowledge-math-equivalent", teacherId: alex.id, courseId: courses[0].id, kind: KnowledgeKind.KNOWLEDGE_POINT, title: "Equivalent ratios",
+      content: "The ratio 2:3 is equivalent to 4:6 because we multiplied both numbers by 2. You can always scale a ratio up or down as long as you do the same thing to both numbers. To test two ratios, simplify both and see if they match." },
+    { id: "kora-ai-knowledge-physics-speed", teacherId: alex.id, courseId: courses[1].id, kind: KnowledgeKind.KNOWLEDGE_POINT, title: "Speed and velocity",
+      content: "Speed tells you how fast something moves. Velocity is speed with a direction, so a car going 60 km/h north has a velocity, while 60 km/h on its own is a speed. Average speed is the total distance divided by the total time." },
+    { id: "kora-ai-knowledge-physics-example", teacherId: alex.id, courseId: courses[1].id, kind: KnowledgeKind.EXAMPLE, title: "Worked example: average speed",
+      content: "A cyclist rides 30 km in 2 hours. Average speed = distance divided by time = 30 / 2 = 15 km/h. Always write the units, and check that the answer makes sense: 15 km/h is a normal cycling pace." },
+    { id: "kora-ai-knowledge-english-thesis", teacherId: taylor.id, courseId: courses[2].id, kind: KnowledgeKind.KNOWLEDGE_POINT, title: "What a thesis statement does",
+      content: "A thesis statement names the one claim your whole essay will defend. Put it at the end of your introduction and test it: could a reasonable person disagree with it? If not, it is a fact, not a thesis." },
+  ];
+  for (const note of knowledge) {
+    await prisma.knowledgeEntry.upsert({ where: { id: note.id }, create: note, update: note });
   }
 
 }

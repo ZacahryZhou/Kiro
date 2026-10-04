@@ -35,6 +35,10 @@ export const labels = {
     motions: { calm: "Calm", lively: "Lively", off: "No motion" },
     saved: "Home page layout saved and now active",
   },
+  knowledge: {
+    kinds: { LESSON_SUMMARY: "Lesson summary", KNOWLEDGE_POINT: "Key point", COMMON_MISTAKE: "Common mistake", EXAMPLE: "Example", FAQ: "FAQ", TEACHING_STYLE: "Teaching style" },
+    saved: "Teaching notes saved",
+  },
   quiz: {
     types: { MULTIPLE_CHOICE: "multiple choice", TRUE_FALSE: "true/false", SHORT_ANSWER: "short answer" },
     levels: { EASY: "easy", MEDIUM: "medium", HARD: "hard" },

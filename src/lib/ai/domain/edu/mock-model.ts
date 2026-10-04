@@ -137,6 +137,50 @@ function writeQuiz(system: string, user: string): Completion | undefined {
   return say(JSON.stringify({ questions }));
 }
 
+
+// ---------- the isolated note-writing and tutor calls ----------
+
+function sentencesOf(materials: { materialId: string; title: string; content: string }[]): { materialId: string; title: string; text: string }[] {
+  const out: { materialId: string; title: string; text: string }[] = [];
+  for (const material of materials) {
+    for (const raw of material.content.split(/(?<=[.!?])\s+|\n+/)) {
+      const text = raw.replace(/\s+/g, " ").trim();
+      if (text.length >= 25 && text.length <= 300) out.push({ materialId: material.materialId, title: material.title, text });
+    }
+  }
+  return out;
+}
+
+function writeNotes(system: string, user: string): Completion | undefined {
+  if (!system.startsWith("You write teaching notes from course materials.")) return undefined;
+  const data = parseJsonObject(user) as { wanted?: string[]; maxNotes?: number; materials?: { materialId: string; title: string; content: string }[] } | null;
+  const sentences = sentencesOf(data?.materials ?? []);
+  const wanted = data?.wanted?.length ? data.wanted : ["KNOWLEDGE_POINT"];
+  const notes = sentences.slice(0, data?.maxNotes ?? 6).map((sentence, index) => {
+    const kind = wanted[index % wanted.length];
+    const title = sentence.text.split(/\s+/).slice(0, 6).join(" ").replace(/[.,;:]+$/, "");
+    const content = kind === "LESSON_SUMMARY" ? `This lesson covers: ${sentence.text}` : kind === "COMMON_MISTAKE" ? `Watch out: ${sentence.text}` : kind === "FAQ" ? `Q: What should I remember? A: ${sentence.text}` : sentence.text;
+    return { kind, title: `${title} (${index + 1})`, content, sourceMaterialId: sentence.materialId, sourceQuote: sentence.text };
+  });
+  return say(JSON.stringify({ notes }));
+}
+
+function tutorFromSources(system: string, user: string): Completion | undefined {
+  if (!system.startsWith("You are a student's tutor who teaches ONLY from the teacher's notes")) return undefined;
+  const data = parseJsonObject(user) as { question?: string; materials?: { materialId: string; title: string; content: string }[] } | null;
+  const asked = new Set(words(data?.question ?? "").filter((w) => !STOP.has(w)));
+  const scored = sentencesOf(data?.materials ?? [])
+    // A note whose title matches the question counts for more than a stray shared word.
+    .map((sentence) => ({ ...sentence, score: new Set(words(sentence.text).filter((w) => asked.has(w))).size + 3 * new Set(words(sentence.title).filter((w) => asked.has(w))).size }))
+    .filter((sentence) => sentence.score >= 1)
+    .sort((a, b) => b.score - a.score);
+  if (scored.length === 0 || scored[0].score < 1 || asked.size === 0) return say(JSON.stringify({ found: false, answer: "", citations: [] }));
+  const used: typeof scored = [];
+  for (const sentence of scored) if (used.length < 3 && !used.some((u) => u.text === sentence.text)) used.push(sentence);
+  const answer = `Let's go step by step. ${used.map((u, i) => `${i === 0 ? u.text : `${i === 1 ? "Next, " : "Finally, "}${u.text.charAt(0).toLowerCase()}${u.text.slice(1)}`}`).join(" ")}`;
+  return say(JSON.stringify({ found: true, answer, citations: used.map((u) => ({ materialId: u.materialId, quote: u.text })) }));
+}
+
 // ---------- teacher flows ----------
 
 type Student = { studentId: string; name: string };
@@ -184,6 +228,31 @@ function teacherFlow(text: string, messages: ChatMessage[]): Completion {
   const first = done[0]?.data;
 
   // Pending leave or different-time requests.
+  // Teaching notes for the students' tutor: dictated, or built from the course materials.
+  const dictated = /^\s*(?:please\s+)?(?:add|save|write)\s+(?:an?\s+)?(lesson summary|key point|knowledge point|common mistake|example|faq|teaching style)\s+(?:for|to|in)\s+(?:my\s+|the\s+)?(.+?)\s*(?:course|class)?\s*:\s*([^]+)$/i.exec(text);
+  const fromMaterials = /\b(build|create|write|generate|make|draft)\b/i.test(text) && /\b(teaching notes?|notes|knowledge)\b/i.test(text) && /\bfrom\b.*\bmaterials?\b/i.test(text);
+  if (dictated || fromMaterials) {
+    if (step === 0) return call("listMyCourses", {}, 1);
+    const courses = ((first?.courses as { courseId: string; name: string }[]) ?? []);
+    const label = dictated ? dictated[2] : text;
+    const named = courses.filter((c) => words(label).some((w) => w.length > 3 && c.name.toLowerCase().includes(w)));
+    const pick = courses.length === 1 ? courses[0] : named.length === 1 ? named[0] : undefined;
+    if (!pick && !(dictated && /\b(all|every)\b/i.test(dictated[2]))) return say(courses.length === 0 ? "You have no courses yet." : `Which course are the notes for: ${(named.length > 1 ? named : courses).map((c) => c.name).join(" or ")}?`);
+    if (step === 1) {
+      if (dictated) {
+        const kind = dictated[1].toUpperCase().replace(/\s+/g, "_").replace("KNOWLEDGE_POINT", "KNOWLEDGE_POINT");
+        const content = dictated[3].trim().slice(0, 4000);
+        const title = content.split(/\s+/).slice(0, 7).join(" ").replace(/[.,;:!?]+$/, "");
+        return call("proposeKnowledge", { entries: [{ kind: kind === "KEY_POINT" ? "KNOWLEDGE_POINT" : kind, title, content, ...(pick ? { courseId: pick.courseId } : {}) }] }, 2);
+      }
+      const unit = /\bfrom\s+(?:the\s+)?([A-Za-z][\w ]+?)\s+unit\b/i.exec(text)?.[1];
+      return call("proposeKnowledgeFromMaterials", { courseId: pick!.courseId, ...(unit ? { unit } : {}) }, 2);
+    }
+    const data = done[1].data;
+    if (errorLine(data)) return say(`I couldn't prepare the notes: ${errorLine(data)}`);
+    return say(`${proposalReply(data)}${typeof data.warning === "string" ? ` ${data.warning}` : ""}`);
+  }
+
   // Write a quiz from the course materials: counts, mix and topics come from the sentence; code and a separate writing step do the rest.
   if ((/\b(quiz|exam)\b/i.test(text) || /\b(?:a|the|my)\s+test\b/i.test(text)) && /\b(make|create|write|generate|build|draft|prepare)\b/i.test(text) && !/\bhome\s?page\b/i.test(text)) {
     const num = (re: RegExp) => { const m = re.exec(text); return m ? Number(m[1]) : undefined; };
@@ -517,6 +586,9 @@ function studentFlow(text: string, messages: ChatMessage[]): Completion {
     return say(`I've prepared this request: ${String(data.summary)}. It is only a note to your teacher and is sent once you confirm it below. Your teacher decides.`);
   }
 
+  if (/\b(explain|teach me|help me understand|walk me through|break (?:it )?down)\b/i.test(text)) {
+    if (done.length === 0) return call("explainWithTeacherNotes", { question: text.slice(0, 500) }, 1);
+  }
   if (/\b(schedule|classes|sessions|lessons|attendance|calendar|courses)\b/i.test(text) && !/\b(define|explain|how do|formula)\b/i.test(text)) {
     if (done.length === 0) return call("getStudentWorkspace", { when: when(text) }, 1);
     const sessions = ((first?.sessions as { weekday: string; localDate: string; localTime: string; courseName: string }[]) ?? []);
@@ -536,6 +608,10 @@ export function eduMockModel(params: Params): Completion {
   if (qa) return qa;
   const quiz = writeQuiz(system, user);
   if (quiz) return quiz;
+  const notes = writeNotes(system, user);
+  if (notes) return notes;
+  const tutor = tutorFromSources(system, user);
+  if (tutor) return tutor;
 
   const names = new Set((params.tools ?? []).map((t) => t.name));
   if (names.has("proposeMarkAttendance")) return teacherFlow(user, params.messages);

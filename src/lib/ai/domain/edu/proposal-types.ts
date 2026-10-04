@@ -218,6 +218,17 @@ async function describeQuiz(actor: Actor, payload: ProposalPayloads["QUIZ"]): Pr
   ];
 }
 
+async function describeKnowledge(actor: Actor, payload: ProposalPayloads["KNOWLEDGE"]): Promise<string[]> {
+  const courses = await services.listMyCourses(actor);
+  const names = new Map(courses.ok ? courses.data.courses.map((c) => [c.id, c.name] as const) : []);
+  const kind = (k: string) => labels.knowledge.kinds[k as keyof typeof labels.knowledge.kinds];
+  return [
+    ...payload.entries.slice(0, 8).map((e) => `${kind(e.kind)} (${e.courseId ? (names.get(e.courseId) ?? "a course") : "all your courses"}): ${e.title} - ${e.content.length > 90 ? `${e.content.slice(0, 87)}...` : e.content}`),
+    ...(payload.entries.length > 8 ? [`and ${payload.entries.length - 8} more`] : []),
+    "Students and their AI tutor can read these notes. Nothing private about any student belongs in them.",
+  ];
+}
+
 async function findSession(actor: Actor, sessionId: string) {
   const now = Date.now();
   const schedule = await services.getTeacherSchedule(actor, {
@@ -328,6 +339,11 @@ export const eduProposalHandlers: ProposalRegistry = {
     schema: ProposalPayloadSchemas.QUIZ,
     execute: (actor, payload) => services.createQuiz(actor, payload),
     describe: describeQuiz,
+  },
+  KNOWLEDGE: {
+    schema: ProposalPayloadSchemas.KNOWLEDGE,
+    execute: (actor, payload) => services.saveKnowledgeEntries(actor, payload),
+    describe: describeKnowledge,
   },
   MARK_ATTENDANCE: {
     schema: ProposalPayloadSchemas.MARK_ATTENDANCE,
