@@ -27,9 +27,17 @@ async function post(path: string): Promise<{ ok: boolean; body: ApiBody }> {
   }
 }
 
+/** A card restored from an earlier chat starts in the state the proposal is in now. */
+function initialState(proposal: ProposalView): State {
+  if (proposal.status === "executed") return { kind: "executed", lines: [] };
+  if (proposal.status === "discarded") return { kind: "discarded" };
+  if (proposal.status === "failed") return { kind: "failed", message: "This change could not be applied." };
+  return { kind: "pending" };
+}
+
 export function ProposalCard({ proposal }: { proposal: ProposalView }) {
   const router = useRouter();
-  const [state, setState] = useState<State>({ kind: "pending" });
+  const [state, setState] = useState<State>(() => initialState(proposal));
 
   async function confirm() {
     setState({ kind: "working" });

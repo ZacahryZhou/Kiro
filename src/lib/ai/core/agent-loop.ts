@@ -16,6 +16,8 @@ export type AgentInput = {
   role: Role;
   userMessage: string;
   history: ChatTurn[];
+  /** Set for a course-page assistant: every tool that takes a course is forced to this course. */
+  scope?: { courseId: string; courseName: string };
 };
 export type AgentOutput = {
   reply: string;
@@ -90,6 +92,7 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
   tracer.emit("prompt", "start");
   const messages: ChatMessage[] = [
     { role: "system", content: getSystemPrompt(input.role, new Date(startedAt), deps.policy) },
+    ...(input.scope ? [{ role: "system" as const, content: scopeNote(input.scope) }] : []),
     ...input.history.slice(-MAX_HISTORY).map((turn): ChatMessage => ({ role: turn.role, content: turn.content })),
     { role: "user", content: input.userMessage },
   ];
@@ -146,7 +149,10 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
       log(false, "INVALID_ARGUMENTS");
       return JSON.stringify({ error: { code: "INVALID_ARGUMENTS", message: call.argsError ?? "The arguments were not valid JSON." } });
     }
-    const result = await tool.run(input.actor, call.args, { complete });
+    // In a course chat the course is fixed by code: whatever course the model asks for, the tool sees this one.
+    const hasCourse = !!(tool.parameters as { properties?: Record<string, unknown> } | undefined)?.properties?.courseId;
+    const args = input.scope && hasCourse && typeof call.args === "object" ? { ...(call.args as Record<string, unknown>), courseId: input.scope.courseId } : call.args;
+    const result = await tool.run(input.actor, args, { complete });
     if (result.proposal) {
       proposals.push(result.proposal);
       tracer.emit("proposal", "done", { label: result.proposal.type });
@@ -159,6 +165,10 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
     log(result.ok, result.ok ? undefined : errorCode(result.content));
     return result.content;
   }
+}
+
+function scopeNote(scope: { courseId: string; courseName: string }): string {
+  return `This chat is the assistant for one course only: "${scope.courseName}". The tools are already limited to this course, so do not ask which course. If asked about other courses, the schedule across courses or account matters, say the general assistant (the button at the bottom right of the page) can help with that.`;
 }
 
 function errorCode(content: string): string {

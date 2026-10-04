@@ -589,6 +589,12 @@ function studentFlow(text: string, messages: ChatMessage[]): Completion {
   if (/\b(explain|teach me|help me understand|walk me through|break (?:it )?down)\b/i.test(text)) {
     if (done.length === 0) return call("explainWithTeacherNotes", { question: text.slice(0, 500) }, 1);
   }
+  // "When is my next class?" is answered from the code-computed nextSession, whatever range was asked for.
+  if (/\bnext (class|lesson|session)\b|\bwhen is my next\b|\bupcoming (class|lesson|session)\b/i.test(text)) {
+    if (done.length === 0) return call("getStudentWorkspace", { when: "this_week" }, 1);
+    const next = first?.nextSession as { weekday: string; localDate: string; localTime: string; courseName: string } | null | undefined;
+    return say(next ? `Your next class is ${next.weekday} ${next.localDate} at ${next.localTime}: ${next.courseName}.` : "You have no upcoming classes scheduled.");
+  }
   if (/\b(schedule|classes|sessions|lessons|attendance|calendar|courses)\b/i.test(text) && !/\b(define|explain|how do|formula)\b/i.test(text)) {
     if (done.length === 0) return call("getStudentWorkspace", { when: when(text) }, 1);
     const sessions = ((first?.sessions as { weekday: string; localDate: string; localTime: string; courseName: string }[]) ?? []);

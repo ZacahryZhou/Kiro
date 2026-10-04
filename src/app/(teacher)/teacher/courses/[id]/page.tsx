@@ -3,6 +3,7 @@ import { FileText, MapPin, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorAlert, Initial, PageHeader, SectionHeading } from "@/components/page";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CourseAssistant } from "@/features/ai-agent";
 import { TeacherQuizzes } from "@/components/teacher-quizzes";
 import { listMyQuizzes } from "@/services/quiz";
 import { AddStudentForm, CreateSessionsForm, MarkAttendanceForm, ProgressForm, RescheduleSessionForm, TeacherCourseMaterials } from "@/components/teacher-course-forms";
@@ -91,6 +92,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           <TabsTrigger value="quizzes" className="flex-none px-3.5 sm:flex-1">Quizzes</TabsTrigger>
           <TabsTrigger value="attendance" className="flex-none px-3.5 sm:flex-1">Attendance</TabsTrigger>
           <TabsTrigger value="progress" className="flex-none px-3.5 sm:flex-1">Progress</TabsTrigger>
+          <TabsTrigger value="assistant" className="flex-none px-3.5 sm:flex-1">Assistant</TabsTrigger>
         </TabsList>
 
         <TabsContent value="students" className="space-y-4">
@@ -177,6 +179,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           ) : (
             <TeacherCourseMaterials courseId={id} units={materialsResult.data.units} />
           )}
+        </TabsContent>
+
+        <TabsContent value="assistant" className="space-y-4">
+          <CourseAssistant role="TEACHER" courseId={course.id} courseName={course.name} />
         </TabsContent>
 
         <TabsContent value="quizzes" className="space-y-4">

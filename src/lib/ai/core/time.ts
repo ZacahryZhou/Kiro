@@ -60,7 +60,7 @@ export function zonedTimeToUtc(
 // ---------- calendar helpers used by tools (the model never does date or time-zone math) ----------
 
 export type DateOnly = { year: number; month: number; day: number };
-export type RangeWhen = "today" | "tomorrow" | "this_week" | "next_week";
+export type RangeWhen = "today" | "tomorrow" | "this_week" | "next_week" | "upcoming";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -124,6 +124,7 @@ export function resolveWhen(
   timeZone = APP_TZ,
 ): { from: Date; to: Date } {
   const today = todayLocal(now, timeZone);
+  if (when === "upcoming") return { from: now, to: new Date(now.getTime() + 30 * 86_400_000) };
   if (when === "today") return localDayRange(today, today, timeZone);
   if (when === "tomorrow") {
     const tomorrow = addDaysTo(today, 1);

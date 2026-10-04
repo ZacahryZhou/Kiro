@@ -4,6 +4,7 @@ import { EmptyState, ErrorAlert, PageHeader } from "@/components/page";
 import { requireRole } from "@/lib/auth/actor";
 import { NEXT_ACTION_LABELS } from "@/lib/progress";
 import { formatLocalDate } from "@/lib/time";
+import { CourseAssistant } from "@/features/ai-agent";
 import { StudentNotes } from "@/components/student-notes";
 import { StudentQuizzes } from "@/components/student-quizzes";
 import { listKnowledgeForStudent } from "@/services/knowledge";
@@ -44,6 +45,8 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
         title={course.name}
         description={`${course.subject} · Teacher: ${course.teacherName}`}
       />
+
+      <CourseAssistant role="STUDENT" courseId={course.id} courseName={course.name} />
 
       {notesResult.ok && <StudentNotes notes={notesResult.data.entries} teacherName={course.teacherName} />}
 

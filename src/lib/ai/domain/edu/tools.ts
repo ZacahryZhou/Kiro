@@ -52,7 +52,7 @@ const MAX_MATERIAL_CHARS = 2000;
 const dateText = z.string().refine((v) => parseDateOnly(v) !== null, "Use a real date as YYYY-MM-DD.");
 const timeText = z.string().refine((v) => parseTimeOnly(v) !== null, "Use a 24-hour time as HH:mm.");
 const id = z.string().min(1);
-const whenEnum = z.enum(["today", "tomorrow", "this_week", "next_week"]);
+const whenEnum = z.enum(["today", "tomorrow", "this_week", "next_week", "upcoming"]);
 
 const rangeArgs = {
   when: whenEnum.optional(),
@@ -63,8 +63,8 @@ const rangeArgs = {
 const rangeProperties = {
   when: {
     type: "string",
-    enum: ["today", "tomorrow", "this_week", "next_week"],
-    description: "A named range. Prefer this when the user says today, tomorrow, this week or next week.",
+    enum: ["today", "tomorrow", "this_week", "next_week", "upcoming"],
+    description: "A named range. Prefer this when the user says today, tomorrow, this week or next week. \"upcoming\" is the next 30 days from now.",
   },
   startDate: {
     type: "string",
@@ -95,6 +95,27 @@ function toUtcRange(args: {
   const { from, to } = localDayRange(start, end);
   return { from: from.toISOString(), to: to.toISOString() };
 }
+
+
+type SessionLike = { id: string; courseName: string; startAt: string; durationMin: number; status: string };
+
+/**
+ * What code knows about "now" and the next lesson, so the model never works out dates or weekdays itself.
+ * The next lesson is the first scheduled or rescheduled session that starts after now, looking 60 days ahead.
+ */
+async function nowAndNext(fetchSessions: (range: { from: string; to: string }) => Promise<{ ok: boolean; sessions: SessionLike[] }>) {
+  const now = new Date();
+  const found = await fetchSessions({ from: now.toISOString(), to: new Date(now.getTime() + 60 * 86_400_000).toISOString() });
+  const next = found.ok
+    ? [...found.sessions].filter((s) => (s.status === "SCHEDULED" || s.status === "RESCHEDULED") && Date.parse(s.startAt) >= now.getTime()).sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt))[0]
+    : undefined;
+  return {
+    now: describeInstant(now.toISOString()),
+    nextSession: next ? { sessionId: next.id, courseName: next.courseName, ...describeInstant(next.startAt), durationMin: next.durationMin } : null,
+  };
+}
+
+const NEXT_SESSION_NOTE = "Every schedule result includes `now` and `nextSession`, worked out by code. For 'next class' or 'upcoming' questions use nextSession; never work out a date or weekday yourself, and only state dates that appear in a tool result.";
 
 // ---------- result helpers ----------
 
@@ -167,7 +188,7 @@ const getTeacherSchedule = defineTool({
   name: "getTeacherSchedule",
   description:
     "Get the signed-in teacher's sessions (all statuses) in a date range, ordered by start time. " +
-    "Use it for questions like 'what classes do I have tomorrow or this week'. Times are in the app time zone.",
+    "Use it for questions like 'what classes do I have tomorrow or this week'. Times are in the app time zone. " + NEXT_SESSION_NOTE,
   parameters: obj({ ...rangeProperties, courseId: { type: "string", description: "Only sessions of this course." } }),
   schema: z
     .object({ ...rangeArgs, courseId: id.optional() })
@@ -177,9 +198,14 @@ const getTeacherSchedule = defineTool({
     if (range === null || range === "invalid") {
       return failed("INVALID_ARGUMENTS", "endDate must not be before startDate.");
     }
+    const upcoming = await nowAndNext(async (r) => {
+      const found = await services.getTeacherSchedule(actor, { ...r, courseId: args.courseId });
+      return { ok: found.ok, sessions: found.ok ? found.data.sessions : [] };
+    });
     return fromService(await services.getTeacherSchedule(actor, { ...range, courseId: args.courseId }), (d) => {
       const list = capped(d.sessions);
       return {
+        ...upcoming,
         total: list.total,
         truncated: list.truncated,
         sessions: list.items.map((s) => ({
@@ -542,7 +568,7 @@ const getStudentWorkspace = defineTool({
   name: "getStudentWorkspace",
   description:
     "Get the signed-in student's own courses, sessions and attendance in a date range (default: this week). " +
-    "Use it for questions about the student's own schedule, courses or attendance.",
+    "Use it for questions about the student's own schedule, courses or attendance. " + NEXT_SESSION_NOTE,
   parameters: obj({ ...rangeProperties }),
   schema: z.object({ ...rangeArgs }),
   async run(actor, args) {
@@ -550,9 +576,14 @@ const getStudentWorkspace = defineTool({
     if (range === null || range === "invalid") {
       return failed("INVALID_ARGUMENTS", "endDate must not be before startDate.");
     }
+    const upcoming = await nowAndNext(async (r) => {
+      const found = await services.getStudentWorkspace(actor, r);
+      return { ok: found.ok, sessions: found.ok ? found.data.sessions : [] };
+    });
     return fromService(await services.getStudentWorkspace(actor, range), (d) => {
       const count = (status: string) => d.attendance.filter((r) => r.status === status).length;
       return {
+        ...upcoming,
         courses: capped(d.courses).items.map((c) => ({
           courseId: c.id,
           name: c.name,

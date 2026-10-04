@@ -117,6 +117,16 @@ export function createProposalService(registry: ProposalRegistry, store: Proposa
       return Promise.all(records.map(async (r) => toView(r, await previewFor(actor, r))));
     },
 
+    /** The actor's own proposals among `ids`, in the order given. Other people's ids are silently skipped. */
+    async listByIds(actor: Actor, ids: string[]): Promise<ProposalView[]> {
+      const views: ProposalView[] = [];
+      for (const id of [...new Set(ids)].slice(0, 100)) {
+        const record = await store.get(id);
+        if (record && record.actorId === actor.userId) views.push(toView(record, await previewFor(actor, record)));
+      }
+      return views;
+    },
+
     /** Confirmation steps from contract section 9. Executes at most once. */
     async confirm(actor: Actor, id: string): Promise<Result<ConfirmOutcome>> {
       const loaded = await loadOwn(actor, id);
