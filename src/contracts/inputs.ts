@@ -103,3 +103,6 @@ export type StudentRequestInput = z.infer<typeof StudentRequestInput>;
 export type ResolveStudentRequestInput = z.infer<typeof ResolveStudentRequestInput>;
 export type UpdateProfileInput = z.infer<typeof UpdateProfileInput>;
 export type ChangePasswordInput = z.infer<typeof ChangePasswordInput>;
+
+export const DeleteMaterialInput = z.object({ materialId: id });
+export type DeleteMaterialInput = z.infer<typeof DeleteMaterialInput>;

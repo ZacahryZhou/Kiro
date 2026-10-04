@@ -8,6 +8,7 @@ import * as services from "../services";
 import * as coreRead from "@/services/read";
 import * as coreWrite from "@/services/write";
 import * as dashboard from "@/services/dashboard";
+import { addMaterialsFromFile, deleteMaterial } from "@/services/materials-upload";
 import type { Actor } from "@/contracts";
 
 async function main() {
@@ -270,6 +271,36 @@ async function main() {
     const foreign = await designTool.run(otherTeacher, { name: "Mine", widgets: [{ type: "STUDENT_FOCUS", studentName: "Jordan" }] });
     check(!foreign.ok && !foreign.proposal, "another teacher cannot pin Jordan by name");
     await prisma.dashboardLayout.deleteMany({ where: { teacherId: teacher.userId } });
+
+    // ----- file upload into a unit -----
+    const uploadUnit = await prisma.courseUnit.findFirst({ where: { courseId: course.id } });
+    if (!uploadUnit) throw new Error("The demo course has no unit.");
+    const enc = (text: string) => new TextEncoder().encode(text);
+    const materialsBefore = await prisma.material.count({ where: { unitId: uploadUnit.id } });
+    const uploaded = await addMaterialsFromFile(teacher, { unitId: uploadUnit.id, fileName: "slope_notes.txt", bytes: enc("The slope of a line is rise over run.") });
+    check(uploaded.ok && uploaded.data.parts === 1 && (await prisma.material.count({ where: { unitId: uploadUnit.id } })) === materialsBefore + 1, "a teacher uploads a text file and gets one material");
+    const uploadedRow = uploaded.ok ? await prisma.material.findUnique({ where: { id: uploaded.data.materialIds[0] } }) : null;
+    check(uploadedRow?.title === "slope notes" && uploadedRow.kind === "TEXT" && uploadedRow.content === "The slope of a line is rise over run.", "the material takes its title from the file name and keeps only the text");
+    const longText = Array.from({ length: 50 }, (_, i) => `Paragraph ${i + 1}. ${"Words about linear equations. ".repeat(30)}`).join("\n\n");
+    const split = await addMaterialsFromFile(teacher, { unitId: uploadUnit.id, fileName: "long.md", title: "Long notes", bytes: enc(longText) });
+    check(split.ok && split.data.parts > 1 && (await prisma.material.findMany({ where: { unitId: uploadUnit.id, title: { startsWith: "Long notes (part" } } })).length === split.data.parts, "a long file is split into numbered parts, all created together");
+    const tooLong = await addMaterialsFromFile(teacher, { unitId: uploadUnit.id, fileName: "huge.txt", bytes: enc("Linear equations. ".repeat(7000)) });
+    const countAfterHuge = await prisma.material.count({ where: { unitId: uploadUnit.id } });
+    check(!tooLong.ok && tooLong.error.code === "VALIDATION" && countAfterHuge === (split.ok ? materialsBefore + 1 + split.data.parts : -1), "a file beyond the upload limit is refused and creates nothing");
+    const foreignUpload = await addMaterialsFromFile(otherTeacher, { unitId: uploadUnit.id, fileName: "x.txt", bytes: enc("hello") });
+    check(!foreignUpload.ok && foreignUpload.error.code === "FORBIDDEN" && (await prisma.material.count({ where: { unitId: uploadUnit.id } })) === countAfterHuge, "another teacher cannot upload into this unit");
+    const studentUpload = await addMaterialsFromFile(jordan, { unitId: uploadUnit.id, fileName: "x.txt", bytes: enc("hello") });
+    check(!studentUpload.ok && studentUpload.error.code === "FORBIDDEN", "a student cannot upload course materials");
+    const missingUnit = await addMaterialsFromFile(teacher, { unitId: "no-such-unit", fileName: "x.txt", bytes: enc("hello") });
+    check(!missingUnit.ok && missingUnit.error.code === "NOT_FOUND", "an unknown unit is reported as not found");
+    const badType = await addMaterialsFromFile(teacher, { unitId: uploadUnit.id, fileName: "x.exe", bytes: enc("hello") });
+    check(!badType.ok && badType.error.code === "VALIDATION", "an unsupported file type is refused");
+    const strangerDelete = uploaded.ok ? await deleteMaterial(otherTeacher, { materialId: uploaded.data.materialIds[0] }) : undefined;
+    check(!!strangerDelete && !strangerDelete.ok && strangerDelete.error.code === "NOT_FOUND" && !!(await prisma.material.findUnique({ where: { id: uploaded.ok ? uploaded.data.materialIds[0] : "" } })), "another teacher cannot delete this material");
+    const studentDelete = uploaded.ok ? await deleteMaterial(jordan, { materialId: uploaded.data.materialIds[0] }) : undefined;
+    check(!!studentDelete && !studentDelete.ok && studentDelete.error.code === "FORBIDDEN", "a student cannot delete a material");
+    const ownDelete = uploaded.ok ? await deleteMaterial(teacher, { materialId: uploaded.data.materialIds[0] }) : undefined;
+    check(!!ownDelete && ownDelete.ok && !(await prisma.material.findUnique({ where: { id: uploaded.ok ? uploaded.data.materialIds[0] : "" } })), "the teacher deletes their own material");
   } finally {
     // Leave the database in its pristine fixture state.
     await seedFixtures(prisma, { reset: true });

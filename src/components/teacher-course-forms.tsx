@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState, useTransition } from "react";
+import { FileText, UploadCloud, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,11 +22,14 @@ import {
   createCourseAction,
   createCourseUnitAction,
   createSessionsAction,
+  deleteMaterialAction,
   rescheduleSessionAction,
   saveProgressAction,
+  uploadMaterialFileAction,
 } from "@/app/(teacher)/teacher/courses/actions";
-import type { StudentView, UnitView } from "@/contracts";
+import type { MaterialView, StudentView, UnitView } from "@/contracts";
 import { NEXT_ACTION_LABELS } from "@/lib/progress";
+import { ACCEPTED_EXTENSIONS, MAX_FILE_BYTES, fileKindOf } from "@/lib/file-text";
 
 type FormState = { kind: "success" | "error" | null; message: string; details?: string[] };
 const initialState: FormState = { kind: null, message: "" };
@@ -259,9 +263,9 @@ export function RescheduleSessionForm({
 export function CreateCourseUnitForm({ courseId }: { courseId: string }) {
   const [state, formAction, pending] = useActionState(createCourseUnitAction, initialState);
   return (
-    <form action={formAction} className="space-y-3 rounded-2xl border bg-card shadow-sm p-4 sm:flex sm:items-end sm:gap-3 sm:space-y-0">
+    <form action={formAction} className="space-y-3 rounded-2xl border bg-card shadow-sm p-4 sm:flex sm:flex-wrap sm:items-end sm:gap-3 sm:space-y-0">
       <input type="hidden" name="courseId" value={courseId} />
-      <div className="flex-1 space-y-2">
+      <div className="min-w-0 flex-1 space-y-2">
         <Label htmlFor="unit-title">New unit</Label>
         <Input id="unit-title" name="title" maxLength={80} placeholder="e.g. Fractions and decimals" required />
       </div>
@@ -311,6 +315,135 @@ export function AddMaterialForm({ courseId, unitId }: { courseId: string; unitId
   );
 }
 
+
+const formatSize = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+/** Upload a .txt, .md, .pdf or .docx file; its text becomes one or more text materials in the unit. */
+export function UploadMaterialForm({ courseId, unitId }: { courseId: string; unitId: string }) {
+  const [state, setState] = useState<FormState>(initialState);
+  const [pending, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file) return;
+    const data = new FormData(event.currentTarget);
+    data.set("file", file);
+    setState(initialState);
+    startTransition(async () => {
+      const result = await uploadMaterialFileAction(initialState, data);
+      setState(result);
+      // A successful upload empties the form so the next file starts clean.
+      if (result.kind === "success") {
+        formRef.current?.reset();
+        setFile(null);
+      }
+    });
+  }
+
+  function choose(next: File | null) {
+    setProblem(null);
+    if (!next) return setFile(null);
+    if (!fileKindOf(next.name)) {
+      setFile(null);
+      return setProblem(`That file type is not supported. Use ${ACCEPTED_EXTENSIONS.join(", ")}.`);
+    }
+    if (next.size > MAX_FILE_BYTES) {
+      setFile(null);
+      return setProblem(`That file is ${formatSize(next.size)}. The limit is ${formatSize(MAX_FILE_BYTES)}.`);
+    }
+    setFile(next);
+  }
+
+  return (
+    <form
+      ref={formRef}
+      onSubmit={submit}
+      className="space-y-3 rounded-xl border border-dashed bg-card/60 p-4"
+      data-testid="upload-material-form"
+    >
+      <input type="hidden" name="courseId" value={courseId} />
+      <input type="hidden" name="unitId" value={unitId} />
+      <label
+        htmlFor={`upload-file-${unitId}`}
+        onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => { event.preventDefault(); setDragging(false); choose(event.dataTransfer.files[0] ?? null); }}
+        className={`flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-5 text-center transition-colors focus-within:ring-2 focus-within:ring-ring ${dragging ? "border-primary bg-primary/5" : "border-border hover:border-foreground/30 hover:bg-muted/50"}`}
+      >
+        <UploadCloud className="size-6 text-muted-foreground" aria-hidden />
+        <span className="text-sm font-medium">Drop a file here, or click to choose</span>
+        <span className="text-xs text-muted-foreground">PDF, Word (.docx), .txt or .md, up to {formatSize(MAX_FILE_BYTES)}. Only the text is kept.</span>
+        <input
+          ref={inputRef}
+          id={`upload-file-${unitId}`}
+          type="file"
+          accept={ACCEPTED_EXTENSIONS.join(",")}
+          className="sr-only"
+          onChange={(event) => choose(event.target.files?.[0] ?? null)}
+        />
+      </label>
+      {file && (
+        <div className="flex items-center gap-3 rounded-lg border bg-background px-3 py-2 text-sm" data-testid="selected-file">
+          <FileText className="size-4 shrink-0 text-primary" aria-hidden />
+          <span className="min-w-0 flex-1 truncate font-medium">{file.name}</span>
+          <span className="text-xs text-muted-foreground">{formatSize(file.size)}</span>
+          <button type="button" aria-label="Remove the chosen file" onClick={() => { setFile(null); if (inputRef.current) inputRef.current.value = ""; }} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
+      )}
+      {problem && <p role="alert" className="text-sm text-destructive">{problem}</p>}
+      {file && (
+        <div className="space-y-2">
+          <Label htmlFor={`upload-title-${unitId}`}>Title <span className="font-normal text-muted-foreground">(optional, defaults to the file name)</span></Label>
+          <Input id={`upload-title-${unitId}`} name="title" maxLength={70} placeholder={file.name.replace(/\.[^.]+$/, "")} />
+        </div>
+      )}
+      <FormFeedback state={state} />
+      <Button type="submit" disabled={pending || !file}>{pending ? "Reading the file…" : "Upload file"}</Button>
+    </form>
+  );
+}
+
+/** One material in the teacher's list: what it is, a text preview so uploads can be checked, and a remove button. */
+function MaterialRow({ courseId, material }: { courseId: string; material: MaterialView }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const text = material.content ?? "";
+  function remove() {
+    if (!window.confirm(`Remove “${material.title}”? Students will no longer see it.`)) return;
+    startTransition(async () => {
+      const result = await deleteMaterialAction(courseId, material.id);
+      if (result.kind === "error") setError(result.message);
+    });
+  }
+  return (
+    <li className="rounded-xl bg-muted/50 p-3" data-testid="material-row">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="font-medium">{material.title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{material.kind === "TEXT" ? `Text · ${text.length.toLocaleString("en-US")} characters` : "Link"}</p>
+        </div>
+        <button type="button" onClick={remove} disabled={pending} aria-label={`Remove ${material.title}`} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50">
+          <X className="size-4" aria-hidden />
+        </button>
+      </div>
+      {text && (
+        <details className="mt-2 text-sm">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">Preview the text</summary>
+          <p className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-background p-3 text-muted-foreground">{text.length > 1500 ? `${text.slice(0, 1500)}…` : text}</p>
+        </details>
+      )}
+      {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
+    </li>
+  );
+}
+
 export function TeacherCourseMaterials({ courseId, units }: { courseId: string; units: UnitView[] }) {
   return (
     <div className="space-y-5">
@@ -332,14 +465,10 @@ export function TeacherCourseMaterials({ courseId, units }: { courseId: string; 
                 <p className="text-sm text-muted-foreground">No materials in this unit yet.</p>
               ) : (
                 <ul className="space-y-2">
-                  {unit.materials.map((material) => (
-                    <li key={material.id} className="rounded-xl bg-muted/50 p-3">
-                      <p className="font-medium">{material.title}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{material.kind === "TEXT" ? "Text" : "Link"}</p>
-                    </li>
-                  ))}
+                  {unit.materials.map((material) => <MaterialRow key={material.id} courseId={courseId} material={material} />)}
                 </ul>
               )}
+              <UploadMaterialForm courseId={courseId} unitId={unit.id} />
               <AddMaterialForm courseId={courseId} unitId={unit.id} />
             </li>
           ))}

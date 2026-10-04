@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/actor";
 import { addExistingStudentToCourse, addMaterial, confirmAttendance, createCourse, createCourseUnit, createSessions, rescheduleSession, saveProgressRecord } from "@/services/write";
 import type { ConflictView } from "@/contracts";
+import { addMaterialsFromFile, deleteMaterial } from "@/services/materials-upload";
 
 type ActionState = { kind: "success" | "error" | null; message: string; details?: string[] };
 
@@ -220,6 +221,29 @@ export async function addMaterialAction(_previousState: ActionState, formData: F
   revalidatePath(`/teacher/courses/${courseId}`);
   revalidatePath(`/student/courses/${courseId}`);
   return { kind: "success", message: "Material added successfully." };
+}
+
+/** Adds the text of an uploaded .txt, .md, .pdf or .docx file to a unit. */
+export async function uploadMaterialFileAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const courseId = value(formData, "courseId");
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { kind: "error", message: "Choose a file to upload." };
+  const result = await addMaterialsFromFile(actor, { unitId: value(formData, "unitId"), fileName: file.name, bytes: new Uint8Array(await file.arrayBuffer()), title: value(formData, "title") });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidatePath(`/teacher/courses/${courseId}`);
+  revalidatePath(`/student/courses/${courseId}`);
+  const { parts, characters, fileName } = result.data;
+  return { kind: "success", message: `Added ${fileName} (${characters.toLocaleString("en-US")} characters${parts > 1 ? `, split into ${parts} materials` : ""}).` };
+}
+
+export async function deleteMaterialAction(courseId: string, materialId: string): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const result = await deleteMaterial(actor, { materialId });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidatePath(`/teacher/courses/${courseId}`);
+  revalidatePath(`/student/courses/${courseId}`);
+  return { kind: "success", message: "Material removed." };
 }
 
 export async function rescheduleSessionAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
