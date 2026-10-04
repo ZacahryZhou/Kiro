@@ -144,7 +144,7 @@ export default async function Page() {
                 <p className="mt-2 text-sm text-muted-foreground">Your teacher&apos;s attendance records will appear here.</p>
               </div>
             ) : (
-              <div className="overflow-hidden rounded-xl border bg-white">
+              <div role="region" aria-label="Attendance records" tabIndex={0} className="overflow-x-auto rounded-xl border bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-slate-50 text-muted-foreground">
                     <tr>

@@ -109,7 +109,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                   <p className="mt-2 text-sm text-muted-foreground">Add a registered student by email to get started.</p>
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-xl border bg-white">
+                <div role="region" aria-label="Enrolled students" tabIndex={0} className="overflow-x-auto rounded-xl border bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-slate-50 text-muted-foreground">
                       <tr>
@@ -217,7 +217,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
               <p className="mt-2 text-sm text-muted-foreground">Mark attendance for a scheduled session to see it here.</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border bg-white">
+            <div role="region" aria-label="Attendance and lesson deductions" tabIndex={0} className="overflow-x-auto rounded-xl border bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50 text-muted-foreground">
                   <tr>
