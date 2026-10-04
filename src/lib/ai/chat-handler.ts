@@ -2,6 +2,7 @@ import { z } from "zod";
 import { runAgent, type AgentDeps, type AgentOutput } from "./core/agent-loop";
 import { getAiActor } from "./actor";
 import { errorResponse, unauthenticated } from "./http";
+import { createTracer } from "./trace";
 
 // Logic behind POST /api/ai/chat. The signed-in user and role come from the server session only;
 // the request body carries just the message and recent conversation text.
@@ -27,6 +28,9 @@ export type ChatDeps = {
 export async function handleChat(request: Request, deps: ChatDeps = {}): Promise<Response> {
   const actor = await (deps.getActor ?? getAiActor)();
   if (!actor) return unauthenticated();
+  const tracer = createTracer(actor.role);
+  tracer.emit("request", "start");
+  tracer.emit("identity", "done");
 
   let json: unknown;
   try {
@@ -39,13 +43,14 @@ export async function handleChat(request: Request, deps: ChatDeps = {}): Promise
     return errorResponse({ code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "The request is not valid." });
   }
 
+  tracer.emit("request", "done");
   try {
     const output = await (deps.runAgent ?? runAgent)({
       actor,
       role: actor.role,
       userMessage: parsed.data.message,
       history: (parsed.data.history ?? []).slice(-MAX_HISTORY),
-    });
+    }, { tracer });
     // Internal failure details (missing keys, upstream errors) stay out of production responses.
     const expose = process.env.NODE_ENV !== "production" || FRIENDLY_ERRORS.has(output.error ?? "");
     const reply = output.status === "ERROR" && !expose ? FRIENDLY_FAILURE : output.reply;

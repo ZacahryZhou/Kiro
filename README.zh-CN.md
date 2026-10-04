@@ -157,6 +157,7 @@ docker compose exec app npm run db:seed
 | `AI_BASE_URL` | OpenAI 兼容接口地址,默认 `https://api.deepseek.com` |
 | `AI_API_KEY` | 模型 API Key(只放本地) |
 | `AI_MODEL` | 模型名,例如 `deepseek-chat` |
+| `AI_ADMIN_EMAILS` | 生产环境下允许打开 Agent 控制台的邮箱(逗号分隔;开发环境任何老师都可以) |
 | `AI_MOCK` | 设为 `1` 时用带剧本的演示模型代替真实模型(不需要网络和 key),但仍然使用真实工具和数据库 |
 
 ### 常用命令
@@ -271,6 +272,15 @@ type ErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION" | 
 | `POST /api/ai/proposals/:id/discard` | 无 | `{ status: "discarded" }` |
 
 未登录的请求返回 401。
+
+### 实时 Agent 控制台(管理员)
+
+登录后访问 `/admin/agent`,可实时查看 Agent 的运行。页面画出完整流程(请求、身份、提示词与策略、模型调用、工具调用、提案或引用校验、运行日志、回复、老师确认)。运行中的当前步骤高亮为琥珀色,完成变绿,失败变红,**每一步用到的文件也会在文件列表里高亮**(琥珀色为正在运行的步骤,绿色为本次运行已用到的文件)。页面内嵌聊天面板,发消息即可看到各步骤亮起;**Replay** 可逐步回放任意一次运行。
+
+- 数据来自 `GET /api/ai/trace/stream`(服务器推送事件),无权限者返回 403。
+- 访问:开发环境任何老师;其他环境只有 `AI_ADMIN_EMAILS` 里的邮箱;学生永远不行。
+- 事件只记录步骤名、工具名、耗时和角色,不记录消息内容、工具参数、结果和用户 ID;内存里只保留最近 300 条。
+- 步骤与文件的对应关系在 `src/lib/ai/trace/steps.ts`,`trace-check.ts` 会校验所列文件都存在。
 
 ### 冲突处理(两层)
 

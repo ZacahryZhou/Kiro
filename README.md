@@ -157,6 +157,7 @@ Real values go only in your local `.env`, which is git-ignored. `.env.example` h
 | `AI_BASE_URL` | OpenAI-compatible endpoint, default `https://api.deepseek.com` |
 | `AI_API_KEY` | Model API key (local only) |
 | `AI_MODEL` | Model name, for example `deepseek-chat` |
+| `AI_ADMIN_EMAILS` | Comma-separated emails allowed to open the Agent Console in production (in development any teacher can) |
 | `AI_MOCK` | `1` replaces the model with a scripted demo model (no network or key); it still uses the real tools and database |
 
 ### Useful commands
@@ -271,6 +272,15 @@ Proposals are validated with Zod and pre-checked with read-only functions (for e
 | `POST /api/ai/proposals/:id/discard` | none | `{ status: "discarded" }` |
 
 Unauthenticated requests return 401.
+
+### Live Agent Console (admin)
+
+Open `/admin/agent` (signed in as an allowed user) to watch the agent work in real time. The page draws the whole pipeline (request, identity, prompt and policy, model call, tool call, proposal or citation check, run log, reply, and teacher confirmation). While a run is in progress the current step is highlighted amber, finished steps turn green, failed ones red, and the **files each step uses are highlighted in the file list** (amber for the running step, green for files touched earlier in the run). An embedded chat panel lets you send a message and see it light up; **Replay** re-animates any earlier run step by step.
+
+- Data comes from `GET /api/ai/trace/stream` (server-sent events). It returns 403 to anyone who is not allowed.
+- Access: in development any teacher; otherwise only emails listed in `AI_ADMIN_EMAILS`. Students never.
+- Events hold step names, tool names, timings and the role only. Message text, tool arguments, results and user ids are never recorded, and the buffer keeps the latest 300 events in memory.
+- The step-to-file mapping lives in `src/lib/ai/trace/steps.ts`; `trace-check.ts` verifies every listed file exists.
 
 ### Conflict handling (two layers)
 
