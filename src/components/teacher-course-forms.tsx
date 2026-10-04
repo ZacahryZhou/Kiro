@@ -29,25 +29,11 @@ import {
 } from "@/app/(teacher)/teacher/courses/actions";
 import type { MaterialView, StudentView, UnitView } from "@/contracts";
 import { NEXT_ACTION_LABELS } from "@/lib/progress";
+import { EditMaterialForm, UnitHeader } from "@/components/course-admin-forms";
+import { FormFeedback, initialFormState, selectClass, type FormState } from "@/components/form-feedback";
 import { ACCEPTED_EXTENSIONS, MAX_FILE_BYTES, fileKindOf } from "@/lib/file-text";
 
-type FormState = { kind: "success" | "error" | null; message: string; details?: string[] };
-const initialState: FormState = { kind: null, message: "" };
-
-function FormFeedback({ state }: { state: FormState }) {
-  if (!state.kind) return null;
-  const isError = state.kind === "error";
-  return (
-    <div
-      role={isError ? "alert" : "status"}
-      className={`space-y-1 rounded-lg border p-3 text-sm ${isError ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}
-      aria-live={isError ? "assertive" : "polite"}
-    >
-      <p>{state.message}</p>
-      {state.details?.map((detail, index) => <p key={`${index}-${detail}`}>{detail}</p>)}
-    </div>
-  );
-}
+const initialState = initialFormState;
 
 function SubmitButton({ children, pending }: { children: string; pending: boolean }) {
   return <Button type="submit" disabled={pending}>{pending ? "Saving…" : children}</Button>;
@@ -439,6 +425,7 @@ function MaterialRow({ courseId, material }: { courseId: string; material: Mater
           <p className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-background p-3 text-muted-foreground">{text.length > 1500 ? `${text.slice(0, 1500)}…` : text}</p>
         </details>
       )}
+      <EditMaterialForm material={material} />
       {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
     </li>
   );
@@ -457,10 +444,7 @@ export function TeacherCourseMaterials({ courseId, units }: { courseId: string; 
         <ol className="space-y-4">
           {units.map((unit) => (
             <li key={unit.id} className="space-y-4 rounded-2xl border bg-card shadow-sm p-5">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Unit {unit.order}</p>
-                <h3 className="mt-1 text-lg font-semibold">{unit.title}</h3>
-              </div>
+              <UnitHeader courseId={courseId} unitId={unit.id} title={unit.title} order={unit.order} materialCount={unit.materials.length} />
               {unit.materials.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No materials in this unit yet.</p>
               ) : (
@@ -477,8 +461,6 @@ export function TeacherCourseMaterials({ courseId, units }: { courseId: string; 
     </div>
   );
 }
-
-const selectClass = "h-9 w-full rounded-lg border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** Records what a student worked on in a session that has started. Saving again replaces the earlier record. */
 export function ProgressForm({

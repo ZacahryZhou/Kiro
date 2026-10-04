@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/actor";
 import { addExistingStudentToCourse, addMaterial, confirmAttendance, createCourse, createCourseUnit, createSessions, rescheduleSession, saveProgressRecord } from "@/services/write";
 import type { ConflictView } from "@/contracts";
 import { addMaterialsFromFile, deleteMaterial } from "@/services/materials-upload";
+import { cancelSession, deleteCourse, deleteSession, deleteUnit, removeStudentFromCourse, renameUnit, updateCourse, updateMaterial, updateSession } from "@/services/course-admin";
 
 type ActionState = { kind: "success" | "error" | null; message: string; details?: string[] };
 
@@ -90,16 +92,17 @@ function localDateTimeToUtc(date: string, time: string, timeZone: string): strin
   return null;
 }
 
+/** "45" or "45.50" in dollars to whole cents; empty is 0 and anything else is NaN (which validation rejects). */
+function dollarsToCents(price: string): number {
+  if (price === "") return 0;
+  if (!/^\d+(?:\.\d{1,2})?$/.test(price)) return Number.NaN;
+  const [whole, fraction = ""] = price.split(".");
+  return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+}
+
 export async function createCourseAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
   const actor = await requireRole("TEACHER");
-  const price = value(formData, "price");
-  const validPrice = price === "" || /^\d+(?:\.\d{1,2})?$/.test(price);
-  const priceParts = price.split(".");
-  const pricePerSessionCents = price === ""
-    ? 0
-    : validPrice
-      ? Number(priceParts[0]) * 100 + Number((priceParts[1] ?? "").padEnd(2, "0"))
-      : Number.NaN;
+  const pricePerSessionCents = dollarsToCents(value(formData, "price"));
   const result = await createCourse(actor, {
     name: value(formData, "name"),
     subject: value(formData, "subject"),
@@ -302,4 +305,114 @@ export async function saveProgressAction(_previousState: ActionState, formData: 
   if (!result.ok) return { kind: "error", message: result.error.message };
   revalidatePath(`/teacher/courses/${courseId}`);
   return { kind: "success", message: `Progress saved for ${result.data.studentName}.` };
+}
+
+
+/** Pages that show a course to its teacher and students; refreshed after any change to the course. */
+function revalidateCourse(courseId: string) {
+  for (const path of ["/teacher", "/teacher/courses", "/teacher/schedule", "/teacher/calendar", "/teacher/students", "/student", "/student/calendar"]) revalidatePath(path);
+  revalidatePath(`/teacher/courses/${courseId}`);
+  revalidatePath(`/student/courses/${courseId}`);
+}
+
+export async function updateCourseAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const courseId = value(formData, "courseId");
+  const price = dollarsToCents(value(formData, "price"));
+  const result = await updateCourse(actor, {
+    courseId,
+    name: value(formData, "name"),
+    subject: value(formData, "subject"),
+    type: value(formData, "type") as "ONE_ON_ONE" | "SMALL_CLASS",
+    location: value(formData, "location"),
+    description: value(formData, "description"),
+    pricePerSessionCents: price,
+  });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidateCourse(courseId);
+  return { kind: "success", message: "Course saved." };
+}
+
+/** Deletes the course after the teacher typed its name, then goes back to the course list. */
+export async function deleteCourseAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const courseId = value(formData, "courseId");
+  const result = await deleteCourse(actor, { courseId, confirmName: value(formData, "confirmName") });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidateCourse(courseId);
+  redirect("/teacher/courses");
+}
+
+export async function renameUnitAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const result = await renameUnit(actor, { unitId: value(formData, "unitId"), title: value(formData, "title") });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidateCourse(result.data.courseId);
+  return { kind: "success", message: "Unit renamed." };
+}
+
+export async function deleteUnitAction(courseId: string, unitId: string): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const result = await deleteUnit(actor, { unitId });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidateCourse(result.data.courseId);
+  const n = result.data.materialsRemoved;
+  return { kind: "success", message: `Unit deleted${n > 0 ? ` with ${n} ${n === 1 ? "material" : "materials"}` : ""}.` };
+}
+
+export async function updateMaterialAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const kind = value(formData, "kind");
+  // The raw text field is not trimmed: leading and trailing line breaks are the teacher's formatting.
+  const rawContent = formData.get("content");
+  const result = await updateMaterial(actor, {
+    materialId: value(formData, "materialId"),
+    title: value(formData, "title"),
+    ...(kind === "TEXT" ? { content: typeof rawContent === "string" ? rawContent : "" } : { url: value(formData, "url") }),
+  });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidateCourse(result.data.courseId);
+  return { kind: "success", message: "Material saved." };
+}
+
+export async function cancelSessionAction(courseId: string, sessionId: string): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const result = await cancelSession(actor, { sessionId });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidateCourse(result.data.courseId);
+  return { kind: "success", message: "Session cancelled." };
+}
+
+export async function deleteSessionAction(courseId: string, sessionId: string): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const result = await deleteSession(actor, { sessionId });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidateCourse(result.data.courseId);
+  return { kind: "success", message: "Session deleted." };
+}
+
+export async function updateSessionAction(_previousState: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const timeZone = process.env.APP_TZ || "America/Vancouver";
+  const durationMin = Number(value(formData, "durationMin"));
+  const result = await updateSession(actor, {
+    sessionId: value(formData, "sessionId"),
+    durationMin,
+    location: value(formData, "location"),
+    linkUrl: value(formData, "linkUrl") || null,
+  });
+  if (!result.ok) {
+    return { kind: "error", message: result.error.message, details: result.error.code === "CONFLICT" ? formatConflicts(result.error.details, timeZone) : undefined };
+  }
+  revalidateCourse(result.data.courseId);
+  return { kind: "success", message: "Session saved." };
+}
+
+export async function removeStudentAction(courseId: string, studentId: string): Promise<ActionState> {
+  const actor = await requireRole("TEACHER");
+  const result = await removeStudentFromCourse(actor, { courseId, studentId });
+  if (!result.ok) return { kind: "error", message: result.error.message };
+  revalidateCourse(courseId);
+  const kept = result.data.keptAttendance + result.data.keptDeductions + result.data.keptProgress;
+  return { kind: "success", message: kept > 0 ? "Student removed. Their past attendance, deductions and progress stay on your records." : "Student removed." };
 }

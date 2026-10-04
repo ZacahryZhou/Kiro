@@ -106,3 +106,48 @@ export type ChangePasswordInput = z.infer<typeof ChangePasswordInput>;
 
 export const DeleteMaterialInput = z.object({ materialId: id });
 export type DeleteMaterialInput = z.infer<typeof DeleteMaterialInput>;
+
+// Course management (added after the contract freeze; additive only).
+/** Only the fields that are present change. `null` clears an optional text field. */
+export const UpdateCourseInput = z.object({
+  courseId: id,
+  name: z.string().trim().min(1).max(80).optional(),
+  subject: z.string().trim().min(1).max(40).optional(),
+  type: z.enum(["ONE_ON_ONE", "SMALL_CLASS"]).optional(),
+  location: z.string().trim().max(120).nullable().optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  pricePerSessionCents: z.number().int().nonnegative().optional(),
+});
+/** `confirmName` must match the course name, so a course cannot be deleted by accident. */
+export const DeleteCourseInput = z.object({ courseId: id, confirmName: z.string().max(200) });
+export const CourseImpactInput = z.object({ courseId: id });
+export const RenameUnitInput = z.object({ unitId: id, title: z.string().trim().min(1).max(80) });
+export const DeleteUnitInput = z.object({ unitId: id });
+/** The material kind cannot change. TEXT keeps its text; LINK keeps its URL. */
+export const UpdateMaterialInput = z.object({
+  materialId: id,
+  title: z.string().trim().min(1).max(80).optional(),
+  content: z.string().max(20000).optional(),
+  url: z.string().url().optional(),
+});
+export const CancelSessionInput = z.object({ sessionId: id });
+export const DeleteSessionInput = z.object({ sessionId: id });
+/** Changes the length, place or meeting link of a session. Use rescheduling to change the time. */
+export const UpdateSessionInput = z.object({
+  sessionId: id,
+  durationMin: z.number().int().min(15).max(480).optional(),
+  location: z.string().trim().max(120).nullable().optional(),
+  linkUrl: z.string().url().nullable().optional(),
+});
+export const RemoveStudentInput = z.object({ courseId: id, studentId: id });
+
+export type UpdateCourseInput = z.infer<typeof UpdateCourseInput>;
+export type DeleteCourseInput = z.infer<typeof DeleteCourseInput>;
+export type CourseImpactInput = z.infer<typeof CourseImpactInput>;
+export type RenameUnitInput = z.infer<typeof RenameUnitInput>;
+export type DeleteUnitInput = z.infer<typeof DeleteUnitInput>;
+export type UpdateMaterialInput = z.infer<typeof UpdateMaterialInput>;
+export type CancelSessionInput = z.infer<typeof CancelSessionInput>;
+export type DeleteSessionInput = z.infer<typeof DeleteSessionInput>;
+export type UpdateSessionInput = z.infer<typeof UpdateSessionInput>;
+export type RemoveStudentInput = z.infer<typeof RemoveStudentInput>;

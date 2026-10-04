@@ -4,8 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorAlert, Initial, PageHeader, SectionHeading } from "@/components/page";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CourseAssistant } from "@/features/ai-agent";
+import { DeleteCourseDialog, EditCourseDialog, RemoveStudentButton, SessionAdmin } from "@/components/course-admin-forms";
 import { TeacherQuizzes } from "@/components/teacher-quizzes";
 import { listMyQuizzes } from "@/services/quiz";
+import { getCourseForEdit, getCourseImpact } from "@/services/course-admin";
 import { AddStudentForm, CreateSessionsForm, MarkAttendanceForm, ProgressForm, RescheduleSessionForm, TeacherCourseMaterials } from "@/components/teacher-course-forms";
 import { NEXT_ACTION_LABELS } from "@/lib/progress";
 import { requireRole } from "@/lib/auth/actor";
@@ -39,7 +41,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   if (!course) notFound();
 
   const timeZone = process.env.APP_TZ || "America/Vancouver";
-  const [studentsResult, scheduleResult, attendanceResult, deductionsResult, materialsResult, progressResult, quizzesResult] = await Promise.all([
+  const [studentsResult, scheduleResult, attendanceResult, deductionsResult, materialsResult, progressResult, quizzesResult, editableResult, impactResult] = await Promise.all([
     listMyStudents(actor, { courseId: id }),
     getTeacherSchedule(actor, {
       from: "1970-01-01T00:00:00.000Z",
@@ -51,6 +53,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     getCourseMaterials(actor, { courseId: id }),
     listProgressRecords(actor, { courseId: id }),
     listMyQuizzes(actor, { courseId: id }),
+    getCourseForEdit(actor, { courseId: id }),
+    getCourseImpact(actor, { courseId: id }),
   ]);
 
   const sessionsByDate = new Map<string, SessionView[]>();
@@ -76,7 +80,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         eyebrow="Course details"
         title={course.name}
         description={course.subject}
-        actions={<Badge variant="outline">{courseTypeLabels[course.type]}</Badge>}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">{courseTypeLabels[course.type]}</Badge>
+            {editableResult.ok && <EditCourseDialog course={editableResult.data} />}
+            {impactResult.ok && <DeleteCourseDialog courseId={id} impact={impactResult.data} />}
+          </div>
+        }
       />
       <div className="kora-card flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-4 text-sm text-muted-foreground">
         <span className="inline-flex items-center gap-2"><Users className="size-4" aria-hidden />{course.studentCount} {course.studentCount === 1 ? "student" : "students"} enrolled</span>
@@ -111,6 +121,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                       <tr>
                         <th scope="col" className="px-5 py-3 font-medium">Name</th>
                         <th scope="col" className="px-5 py-3 font-medium">Email</th>
+                        <th scope="col" className="px-5 py-3 text-right font-medium"><span className="sr-only">Actions</span></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -118,6 +129,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                         <tr key={student.id}>
                           <td className="px-5 py-4 font-medium"><span className="flex items-center gap-3"><Initial name={student.name} className="size-8 text-xs" />{student.name}</span></td>
                           <td className="px-5 py-4 text-muted-foreground">{student.email}</td>
+                          <td className="px-5 py-4 text-right"><RemoveStudentButton courseId={id} studentId={student.id} name={student.name} /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -163,6 +175,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                             <MarkAttendanceForm sessionId={session.id} students={studentsResult.data.students} />
                           </>
                         )}
+                        <SessionAdmin courseId={id} sessionId={session.id} status={session.status} durationMin={session.durationMin} location={session.location} linkUrl={session.linkUrl} />
                       </li>
                     ))}
                   </ul>
