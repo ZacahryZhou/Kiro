@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { BookOpen, CalendarDays, CheckCircle2, MapPin } from "lucide-react";
-import { auth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorAlert, PageHeader, SectionHeading, StatCard } from "@/components/page";
 import { requireRole } from "@/lib/auth/actor";
 import { formatLocalDate, formatLocalTime, getLocalDateKey } from "@/lib/time";
 import { StudentRequestForm } from "@/components/student-request-form";
-import { getStudentWorkspace, listAttendance, listStudentRequests, type SessionView } from "@/services/read";
+import { getMyAccount, getStudentWorkspace, listAttendance, listStudentRequests, type SessionView } from "@/services/read";
 
 const statusLabels = {
   SCHEDULED: "Scheduled",
@@ -22,8 +21,8 @@ const courseTypeLabels = {
 
 export default async function Page() {
   const actor = await requireRole("STUDENT");
-  const session = await auth();
-  const firstName = session?.user?.name?.trim().split(/\s+/)[0];
+  const account = await getMyAccount(actor);
+  const firstName = account.ok ? account.data.name.trim().split(/\s+/)[0] : undefined;
   const now = new Date();
   const timeZone = process.env.APP_TZ || "America/Vancouver";
   const to = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);

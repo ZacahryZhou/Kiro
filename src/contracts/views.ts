@@ -96,3 +96,6 @@ export type ProgressRecordView = {
   note?: string;
   updatedAt: string;
 };
+
+/** The signed-in user's own account details. */
+export type AccountView = { name: string; email: string; role: "TEACHER" | "STUDENT" };

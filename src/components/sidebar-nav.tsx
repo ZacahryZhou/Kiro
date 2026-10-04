@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, CalendarDays, GraduationCap, Inbox, LayoutDashboard, Workflow } from "lucide-react";
+import { BookOpen, CalendarDays, CalendarRange, GraduationCap, Inbox, LayoutDashboard, Settings, Users, Workflow } from "lucide-react";
 
-export type NavItem = { href: string; label: string; icon: "schedule" | "courses" | "learning" | "agent" | "requests"; badge?: number };
+export type NavItem = { href: string; label: string; icon: "schedule" | "calendar" | "courses" | "learning" | "agent" | "requests" | "students" | "settings"; badge?: number };
 
-const ICONS = { schedule: CalendarDays, courses: BookOpen, learning: GraduationCap, agent: Workflow, requests: Inbox } as const;
+const ICONS = { schedule: CalendarDays, calendar: CalendarRange, courses: BookOpen, learning: GraduationCap, agent: Workflow, requests: Inbox, students: Users, settings: Settings } as const;
 
 function isActive(pathname: string, href: string) {
-  if (href === "/teacher") return pathname === href; // /teacher/courses has its own entry
+  // /teacher and /student are home pages; their sibling pages have their own menu entries.
+  if (href === "/teacher") return pathname === href;
+  if (href === "/student") return pathname === href || pathname.startsWith("/student/courses");
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

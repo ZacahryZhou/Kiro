@@ -78,6 +78,8 @@ export const AddStudentNoteInput = z.object({
   kind: z.enum(["AVAILABILITY", "NOTE"]),
   content: z.string().min(1).max(500),
 });
+export const UpdateProfileInput = z.object({ name: z.string().trim().min(1).max(80) });
+export const ChangePasswordInput = z.object({ currentPassword: z.string().min(1).max(128), newPassword: z.string().min(8).max(128) });
 export const ResolveStudentRequestInput = z.object({ requestId: id, decision: z.enum(["APPROVED", "DECLINED"]) });
 export const StudentRequestInput = z.object({
   sessionId: id,
@@ -99,3 +101,5 @@ export type SaveProgressInput = z.infer<typeof SaveProgressInput>;
 export type AddStudentNoteInput = z.infer<typeof AddStudentNoteInput>;
 export type StudentRequestInput = z.infer<typeof StudentRequestInput>;
 export type ResolveStudentRequestInput = z.infer<typeof ResolveStudentRequestInput>;
+export type UpdateProfileInput = z.infer<typeof UpdateProfileInput>;
+export type ChangePasswordInput = z.infer<typeof ChangePasswordInput>;

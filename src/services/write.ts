@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { compare, hash } from "bcryptjs";
 import {
   AddStudentInput as AddStudentInputSchema,
   AddMaterialInput as AddMaterialInputSchema,
@@ -9,6 +10,8 @@ import {
   ConfirmAttendanceInput as ConfirmAttendanceInputSchema,
   ResolveStudentRequestInput as ResolveStudentRequestInputSchema,
   SaveProgressInput as SaveProgressInputSchema,
+  UpdateProfileInput as UpdateProfileInputSchema,
+  ChangePasswordInput as ChangePasswordInputSchema,
   StudentRequestInput as StudentRequestInputSchema,
   type AddStudentInput,
   type AddMaterialInput,
@@ -26,6 +29,8 @@ import {
   type ProgressRecordView,
   type ResolveStudentRequestInput,
   type SaveProgressInput,
+  type UpdateProfileInput,
+  type ChangePasswordInput,
   type StudentRequestInput,
   type StudentRequestView,
 } from "@/contracts";
@@ -624,5 +629,35 @@ export async function saveProgressRecord(actor: Actor, input: SaveProgressInput)
     });
   } catch {
     return err("INTERNAL", "Could not save the progress record. Please try again.");
+  }
+}
+
+// ---------- account settings ----------
+
+/** Changes the signed-in user's own display name. */
+export async function updateMyProfile(actor: Actor, input: UpdateProfileInput): Promise<Result<{ name: string }>> {
+  const parsed = UpdateProfileInputSchema.safeParse(input);
+  if (!parsed.success) return err("VALIDATION", "Enter a name between 1 and 80 characters.");
+  try {
+    const updated = await prisma.user.update({ where: { id: actor.userId }, data: { name: parsed.data.name }, select: { name: true } });
+    return ok({ name: updated.name });
+  } catch {
+    return err("INTERNAL", "Could not save your name. Please try again.");
+  }
+}
+
+/** Changes the signed-in user's own password after checking the current one. */
+export async function changeMyPassword(actor: Actor, input: ChangePasswordInput): Promise<Result<{ changed: true }>> {
+  const parsed = ChangePasswordInputSchema.safeParse(input);
+  if (!parsed.success) return err("VALIDATION", "The new password must be 8 to 128 characters.");
+  if (parsed.data.currentPassword === parsed.data.newPassword) return err("VALIDATION", "Choose a new password that is different from the current one.");
+  try {
+    const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { passwordHash: true } });
+    if (!user) return err("NOT_FOUND", "Account not found.");
+    if (!(await compare(parsed.data.currentPassword, user.passwordHash))) return err("VALIDATION", "The current password is not correct.");
+    await prisma.user.update({ where: { id: actor.userId }, data: { passwordHash: await hash(parsed.data.newPassword, 12) } });
+    return ok({ changed: true });
+  } catch {
+    return err("INTERNAL", "Could not change your password. Please try again.");
   }
 }

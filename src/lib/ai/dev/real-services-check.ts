@@ -1,10 +1,12 @@
 // Application-runtime smoke check. Run against an isolated migrated development database:
 // NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts
 import { prisma } from "@/lib/db/prisma";
-import { seedFixtures } from "../../../../prisma/seed-ai";
+import { demoPassword, seedFixtures } from "../../../../prisma/seed-ai";
 import { findTool } from "../domain/edu/tools";
 import { eduProposals } from "../domain/edu/proposal-types";
 import * as services from "../services";
+import * as coreRead from "@/services/read";
+import * as coreWrite from "@/services/write";
 import type { Actor } from "@/contracts";
 
 async function main() {
@@ -192,6 +194,23 @@ async function main() {
     check(!future.ok && future.error.code === "CONFLICT", "progress cannot be saved for a session that has not started");
     const blank = await services.saveProgressRecord(teacher, { ...progressInput, goal: "" });
     check(!blank.ok && blank.error.code === "VALIDATION", "a record needs a goal");
+
+    // ----- account settings -----
+    const hashBefore = (await prisma.user.findUniqueOrThrow({ where: { id: jordan.userId } })).passwordHash;
+    const teacherHashBefore = (await prisma.user.findUniqueOrThrow({ where: { id: teacher.userId } })).passwordHash;
+    const renamed = await coreWrite.updateMyProfile(jordan, { name: "Jordan L." });
+    const account = await coreRead.getMyAccount(jordan);
+    check(renamed.ok && account.ok && account.data.name === "Jordan L." && account.data.role === "STUDENT", "a user can change their own name and read it back");
+    const emptyName = await coreWrite.updateMyProfile(jordan, { name: "   " });
+    check(!emptyName.ok && emptyName.error.code === "VALIDATION", "an empty name is refused");
+    const wrongCurrent = await coreWrite.changeMyPassword(jordan, { currentPassword: "not-the-password", newPassword: "A-new-passphrase-1" });
+    check(!wrongCurrent.ok && wrongCurrent.error.code === "VALIDATION" && (await prisma.user.findUniqueOrThrow({ where: { id: jordan.userId } })).passwordHash === hashBefore, "a wrong current password changes nothing");
+    const tooShort = await coreWrite.changeMyPassword(jordan, { currentPassword: "x", newPassword: "short" });
+    check(!tooShort.ok && tooShort.error.code === "VALIDATION", "a short new password is refused");
+    const changed = await coreWrite.changeMyPassword(jordan, { currentPassword: demoPassword, newPassword: "A-new-passphrase-1" });
+    const hashAfter = (await prisma.user.findUniqueOrThrow({ where: { id: jordan.userId } })).passwordHash;
+    check(changed.ok && hashAfter !== hashBefore, "the right current password lets a user change their own password");
+    check((await prisma.user.findUniqueOrThrow({ where: { id: teacher.userId } })).passwordHash === teacherHashBefore, "changing one user's password never touches another account");
   } finally {
     // Leave the database in its pristine fixture state.
     await seedFixtures(prisma, { reset: true });

@@ -3,7 +3,7 @@ import { LogOut } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { logoutAction } from "@/lib/auth/actions";
 import { currentUserCanViewConsole } from "@/lib/ai/trace/viewer";
-import { listStudentRequests } from "@/services/read";
+import { getMyAccount, listStudentRequests } from "@/services/read";
 import { Brand } from "@/components/brand";
 import { Initial } from "@/components/page";
 import { MobileNav, SidebarNav, type NavItem } from "@/components/sidebar-nav";
@@ -11,20 +11,27 @@ import { Button } from "@/components/ui/button";
 
 const TEACHER_NAV: NavItem[] = [
   { href: "/teacher", label: "Schedule", icon: "schedule" },
+  { href: "/teacher/calendar", label: "Calendar", icon: "calendar" },
   { href: "/teacher/courses", label: "Courses", icon: "courses" },
+  { href: "/teacher/students", label: "Students", icon: "students" },
 ];
-const STUDENT_NAV: NavItem[] = [{ href: "/student", label: "My learning", icon: "learning" }];
+const STUDENT_NAV: NavItem[] = [
+  { href: "/student", label: "My learning", icon: "learning" },
+  { href: "/student/calendar", label: "Calendar", icon: "calendar" },
+];
 
 /** Sidebar + header frame around every signed-in page. The title is the workspace name. */
 export async function WorkspaceShell({ title, role, children }: { title: string; role: "TEACHER" | "STUDENT"; children: ReactNode }) {
   const session = await auth();
-  const name = session?.user?.name?.trim() || "Your account";
+  const actorForReads = { userId: session?.user?.id ?? "", role } as const;
+  const account = await getMyAccount(actorForReads);
+  const name = (account.ok ? account.data.name : session?.user?.name)?.trim() || "Your account";
   const items: NavItem[] = [...(role === "TEACHER" ? TEACHER_NAV : STUDENT_NAV)];
   if (role === "TEACHER") {
-    const actor = { userId: session?.user?.id ?? "", role } as const;
-    const pending = await listStudentRequests(actor, { status: "PENDING" });
+    const pending = await listStudentRequests(actorForReads, { status: "PENDING" });
     items.push({ href: "/teacher/requests", label: "Requests", icon: "requests", badge: pending.ok ? pending.data.requests.length : 0 });
   }
+  items.push({ href: role === "TEACHER" ? "/teacher/settings" : "/student/settings", label: "Settings", icon: "settings" });
   if (await currentUserCanViewConsole()) items.push({ href: "/admin/agent", label: "Agent console", icon: "agent" });
   const roleLabel = role === "TEACHER" ? "Teacher" : "Student";
 

@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { CheckConflictsInput, type AttendanceView, type ConflictView, type CourseView, type DeductionView, type SessionView, type ProgressRecordView, type StudentRequestView, type StudentView, type UnitView, type Result, err, ok } from "@/contracts";
+import { CheckConflictsInput, type AccountView, type AttendanceView, type ConflictView, type CourseView, type DeductionView, type SessionView, type ProgressRecordView, type StudentRequestView, type StudentView, type UnitView, type Result, err, ok } from "@/contracts";
 import type { Actor } from "@/lib/auth/actor";
 import { prisma } from "@/lib/db/prisma";
 
 export type {
+  AccountView,
   AttendanceView,
   ConflictView,
   CourseView,
@@ -579,5 +580,16 @@ export async function listProgressRecords(
     });
   } catch {
     return failure("INTERNAL", "Could not load progress records. Please try again.");
+  }
+}
+
+/** The signed-in user's own name, email and role. Reads only the caller's own row. */
+export async function getMyAccount(actor: Actor): Promise<Result<AccountView>> {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { name: true, email: true, role: true } });
+    if (!user) return failure("NOT_FOUND", "Account not found.");
+    return success({ name: user.name, email: user.email, role: user.role });
+  } catch {
+    return failure("INTERNAL", "Could not load your account. Please try again.");
   }
 }

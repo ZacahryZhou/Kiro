@@ -7,7 +7,7 @@ import { APP_TZ, zonedTimeToUtc } from "../src/lib/ai/core/time";
 
 // Idempotent local acceptance fixtures. Rows with kora-ai-* IDs belong to this seed only;
 // no unrelated user data is deleted. The shared demo password stays in this file.
-const demoPassword = "123456";
+export const demoPassword = "123456";
 
 type Day = { year: number; month: number; day: number };
 const plusDays = (day: Day, by: number): Day => {

@@ -114,3 +114,52 @@ export function localDateTimeToUtcIso(date: string, time: string, timeZone = pro
   }
   return new Date(utc).toISOString();
 }
+
+export type MonthGrid = {
+  monthKey: string;
+  label: string;
+  prevKey: string;
+  nextKey: string;
+  todayKey: string;
+  /** UTC bounds that cover every visible cell, for loading sessions. */
+  from: Date;
+  to: Date;
+  weeks: { key: string; day: number; inMonth: boolean }[][];
+};
+
+/** A Monday-first month grid in `timeZone`. `monthParam` is YYYY-MM; anything else means the current month. */
+export function getMonthGrid(monthParam?: string, now = new Date(), timeZone = process.env.APP_TZ || "America/Vancouver"): MonthGrid {
+  const today = getZonedParts(now, timeZone);
+  let year = today.year;
+  let month = today.month;
+  const match = /^(\d{4})-(\d{2})$/.exec(monthParam ?? "");
+  if (match && Number(match[2]) >= 1 && Number(match[2]) <= 12) {
+    year = Number(match[1]);
+    month = Number(match[2]);
+  }
+  const lead = (new Date(Date.UTC(year, month - 1, 1)).getUTCDay() + 6) % 7;
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const weekCount = Math.ceil((lead + daysInMonth) / 7);
+  const gridStart = Date.UTC(year, month - 1, 1 - lead);
+  const key = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  const weeks = Array.from({ length: weekCount }, (_, week) =>
+    Array.from({ length: 7 }, (_, dayIndex) => {
+      const cell = new Date(gridStart + (week * 7 + dayIndex) * 86_400_000);
+      return { key: key(cell.getTime()), day: cell.getUTCDate(), inMonth: cell.getUTCMonth() === month - 1 };
+    }),
+  );
+  const monthKey = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}`;
+  const prev = new Date(Date.UTC(year, month - 2, 1));
+  const next = new Date(Date.UTC(year, month, 1));
+  const afterLast = key(gridStart + weekCount * 7 * 86_400_000);
+  return {
+    monthKey: monthKey(year, month),
+    label: new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", year: "numeric" }).format(new Date(Date.UTC(year, month - 1, 1))),
+    prevKey: monthKey(prev.getUTCFullYear(), prev.getUTCMonth() + 1),
+    nextKey: monthKey(next.getUTCFullYear(), next.getUTCMonth() + 1),
+    todayKey: getLocalDateKey(now, timeZone),
+    from: new Date(localDateTimeToUtcIso(weeks[0][0].key, "00:00", timeZone)!),
+    to: new Date(localDateTimeToUtcIso(afterLast, "00:00", timeZone)!),
+    weeks,
+  };
+}
