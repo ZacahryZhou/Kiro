@@ -166,6 +166,27 @@ function teacherFlow(text: string, messages: ChatMessage[]): Completion {
     return say(proposalReply(done[2].data));
   }
 
+  // Move one session to a new date and time (dates as YYYY-MM-DD).
+  const move = /\b(?:move|reschedule)\b[^]*?(\d{4}-\d{2}-\d{2})[^]*?\bto\b\s*(\d{4}-\d{2}-\d{2})([^]*)$/i.exec(text);
+  if (move) {
+    const newTime = parseTime(move[3]) ?? parseTime(text.slice(0, text.indexOf(move[1])));
+    if (!newTime) return say("What time should the session move to? For example: \"Move Math on 2028-03-07 to 2028-03-08 at 10am\".");
+    if (step === 0) return call("getTeacherSchedule", { startDate: move[1], endDate: move[1] }, 1);
+    const open = ((first?.sessions as { sessionId: string; courseName: string; localTime: string; status: string }[]) ?? []).filter((x) => x.status === "SCHEDULED" || x.status === "RESCHEDULED");
+    const named = open.filter((x) => words(text).some((w) => w.length > 3 && x.courseName.toLowerCase().includes(w)));
+    const picks = named.length > 0 ? named : open;
+    if (picks.length === 0) return say(`I don't see an open session on ${move[1]}.`);
+    if (picks.length > 1) return say(`Which session do you mean: ${picks.map((x) => `${x.courseName} at ${x.localTime}`).join(" or ")}?`);
+    if (step === 1) return call("proposeReschedule", { sessionId: picks[0].sessionId, newDate: move[2], newTime }, 2);
+    const data = done[1].data;
+    if (errorLine(data)) return say(`I couldn't do that: ${errorLine(data)}`);
+    if (data.status === "CONFLICTS_FOUND") {
+      const rows = (data.conflictsWith as { courseName: string; localDate: string; localTime: string }[]) ?? [];
+      return say(`I can't move it there. It would clash with ${rows.map((r) => `${r.courseName} on ${r.localDate} at ${r.localTime}`).join(", ")}. Would you like a different time?`);
+    }
+    return say(proposalReply(data));
+  }
+
   // Add course content (a unit with one text material).
   const content = /\badd\s+(?:a\s+)?unit\s+(?:called|titled|named)\s+"?([^":]+?)"?\s+to\s+(?:my\s+|the\s+)?([A-Za-z0-9 ]+?)\s*(?:course|class)?\s*[:\-]\s*([\s\S]+)$/i.exec(text);
   if (content) {

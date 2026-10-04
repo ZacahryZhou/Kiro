@@ -175,7 +175,46 @@ async function executeAddStudent(
   return services.addExistingStudentToCourse(actor, payload);
 }
 
+async function findSession(actor: Actor, sessionId: string) {
+  const now = Date.now();
+  const schedule = await services.getTeacherSchedule(actor, {
+    from: new Date(now - 365 * 86_400_000).toISOString(),
+    to: new Date(now + 1095 * 86_400_000).toISOString(),
+  });
+  return schedule.ok ? schedule.data.sessions.find((x) => x.id === sessionId) : undefined;
+}
+
+/** Turns a conflict from the service into a message the teacher can read (contract section 6.3, stage 2). */
+async function executeReschedule(
+  actor: Actor,
+  payload: ProposalPayloads["RESCHEDULE"],
+): Promise<Result<{ sessionId: string; oldStartAt: string; newStartAt: string }>> {
+  const result = await services.rescheduleSession(actor, payload);
+  if (result.ok || result.error.code !== "CONFLICT" || !Array.isArray(result.error.details)) return result;
+  const lines = (result.error.details as ConflictView[]).map((c) => {
+    const when = describeInstant(c.startAt);
+    return `"${c.courseName}" on ${when.weekday} ${when.localDate} ${when.localTime}`;
+  });
+  return err("CONFLICT", `The new time conflicts with ${lines.join("; ")}. The session was not moved.`, result.error.details);
+}
+
 export const eduProposalHandlers: ProposalRegistry = {
+  RESCHEDULE: {
+    schema: ProposalPayloadSchemas.RESCHEDULE,
+    execute: executeReschedule,
+    describe: async (actor, payload) => {
+      const session = await findSession(actor, payload.sessionId);
+      const to = describeInstant(payload.newStartAt);
+      if (!session) return [`Move a session to ${to.weekday} ${to.localDate} ${to.localTime}`];
+      const from = describeInstant(session.startAt);
+      return [
+        session.courseName,
+        `From: ${from.weekday} ${from.localDate} ${from.localTime}`,
+        `To: ${to.weekday} ${to.localDate} ${to.localTime} (${session.durationMin} min, no conflicts)`,
+        "Rescheduling does not change lesson deductions.",
+      ];
+    },
+  },
   ADD_STUDENT: {
     schema: ProposalPayloadSchemas.ADD_STUDENT,
     execute: executeAddStudent,

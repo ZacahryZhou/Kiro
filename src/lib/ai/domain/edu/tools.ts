@@ -837,6 +837,84 @@ const proposeCreateSessions = defineTool({
   },
 });
 
+const proposeReschedule = defineTool({
+  name: "proposeReschedule",
+  description:
+    "Prepare a proposal to move one existing session to a new date and time. This does NOT move anything: the teacher must confirm. " +
+    "Find the session with getTeacherSchedule first and pass its sessionId. Give the new date and time in the teacher's own terms; the system converts them to exact UTC. " +
+    "If the new time clashes with another session, no proposal is created: explain the clash and ask for another time.",
+  parameters: obj(
+    {
+      sessionId: { type: "string", description: "A session ID from getTeacherSchedule." },
+      newDate: { type: "string", description: "New local date as YYYY-MM-DD." },
+      newTime: { type: "string", description: `New local start time as 24-hour HH:mm in ${APP_TZ}.` },
+    },
+    ["sessionId", "newDate", "newTime"],
+  ),
+  schema: z.object({ sessionId: id, newDate: dateText, newTime: timeText }),
+  async run(actor, args) {
+    if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers can reschedule sessions.");
+    const day = parseDateOnly(args.newDate);
+    const clock = parseTimeOnly(args.newTime);
+    if (!day || !clock) return failed("INVALID_ARGUMENTS", "Use a real date as YYYY-MM-DD and a 24-hour time as HH:mm.");
+    const newStartAt = zonedTimeToUtc({ ...day, ...clock }).toISOString();
+    if (Date.parse(newStartAt) < Date.now()) return failed("VALIDATION", "The new time is in the past. Ask the teacher for a future date and time.");
+
+    const now = Date.now();
+    const schedule = await services.getTeacherSchedule(actor, {
+      from: new Date(now - 30 * 86_400_000).toISOString(),
+      to: new Date(now + 1095 * 86_400_000).toISOString(),
+    });
+    if (!schedule.ok) return serviceFailure(schedule.error);
+    const session = schedule.data.sessions.find((x) => x.id === args.sessionId);
+    if (!session) return failed("NOT_FOUND", "That session was not found among your sessions.");
+    if (session.status !== "SCHEDULED" && session.status !== "RESCHEDULED") {
+      return failed("CONFLICT", "Only sessions that are still scheduled can be moved.");
+    }
+    if (session.startAt === newStartAt) return failed("VALIDATION", "The session is already at that time.");
+
+    // Stage 1 of the two-layer conflict check: look before creating any proposal.
+    const check = await services.checkConflicts(actor, {
+      courseId: session.courseId,
+      startAt: newStartAt,
+      durationMin: session.durationMin,
+      excludeSessionId: session.id,
+    });
+    if (!check.ok) return serviceFailure(check.error);
+    const oldWhen = describeInstant(session.startAt);
+    const newWhen = describeInstant(newStartAt);
+    if (check.data.conflicts.length > 0) {
+      return succeed({
+        status: "CONFLICTS_FOUND",
+        course: session.courseName,
+        newTime: pick(newWhen),
+        conflictsWith: check.data.conflicts.map((c) => ({ courseName: c.courseName, ...pick(describeInstant(c.startAt)), durationMin: c.durationMin })),
+        note: "No proposal was created and nothing was moved. Tell the teacher what the new time clashes with and ask for another time.",
+      });
+    }
+
+    const summary = `Move ${session.courseName} from ${oldWhen.weekday} ${oldWhen.localDate} ${oldWhen.localTime} to ${newWhen.weekday} ${newWhen.localDate} ${newWhen.localTime}`;
+    const created = await eduProposals.create({
+      actor,
+      type: "RESCHEDULE",
+      payload: { sessionId: session.id, newStartAt },
+      courseId: session.courseId,
+      summary,
+    });
+    if (!created.ok) return serviceFailure(created.error);
+    return {
+      ok: true,
+      proposal: created.data,
+      content: JSON.stringify({
+        status: "PENDING_CONFIRMATION",
+        proposalId: created.data.id,
+        summary,
+        note: "Nothing has been moved yet. Tell the teacher to review this and confirm. Rescheduling does not change lesson deductions.",
+      }),
+    };
+  },
+});
+
 const proposeAddStudentNote = defineTool({
   name: "proposeAddStudentNote",
   description: "Prepare a teacher-private student memory note or availability constraint. This does NOT save anything until the teacher confirms. Verify the student is enrolled; never make a student-facing promise based on a memory.",
@@ -1227,6 +1305,7 @@ const TEACHER_TOOLS: Tool[] = [
   proposeCreateSessions,
   proposeAddContent,
   proposeAddStudent,
+  proposeReschedule,
   proposeAddStudentNote,
   proposeLessonPrep,
 ];
