@@ -70,7 +70,7 @@ Work is split between two owners (see [Team, tracks and workflow](#team-tracks-a
 | Area | Status |
 |---|---|
 | Next.js scaffold, Docker Compose, PostgreSQL | Done |
-| Prisma schema (14 tables) and migrations | Done |
+| Prisma schema (18 tables) and migrations | Done |
 | Demo account seed (idempotent, refuses to run in production) | Done |
 | Email/password sign-in, role-based route protection, `requireActor()` | Done |
 | Read services (`src/services/read.ts`): courses, schedule, students, materials, student workspace | Done |
@@ -82,6 +82,10 @@ Work is split between two owners (see [Team, tracks and workflow](#team-tracks-a
 | Student leave and different-time requests (student form, teacher Requests inbox, AI) | Done |
 | Progress records (teacher Progress tab, student progress notes, AI drafting) | Done |
 | Month calendar, teacher Students pages and account Settings | Done |
+| Customisable teacher home (nine widgets, drag and resize, six colour themes, motion styles, layout history, AI-designed layouts) | Done |
+| File upload for course materials (.txt, .md, .pdf, .docx; preview and remove) | Done; scanned PDFs need OCR first |
+| AI-written quizzes from materials (grounded questions, draft, publish, student practice) | Done |
+| Teaching knowledge page and a student tutor that teaches from the teacher's notes | Done; kept apart from the private student memory |
 | Role-specific AI panel, chat API, read-only questions, verified material citations and proposal flows | Integrated; requires AI provider configuration for live model responses |
 | Full multi-person AI showcase fixture (`prisma/seed-ai.ts`) | Done; `npm run db:seed:demo`, or `npx tsx prisma/seed-ai.ts --reset` for a clean slate |
 | AI proposals and run log stored in the database (`AgentProposal`, `AgentRun`) | Done; only the AI's own tables are written |
@@ -127,6 +131,8 @@ Manual forms are available for creating courses, enrolling students, scheduling 
 - **Database:** PostgreSQL 17 with Prisma 6
 - **Auth:** Auth.js (next-auth v5 beta), email + password, JWT sessions
 - **Validation:** Zod
+- **Home page grid:** `react-grid-layout` (drag and resize)
+- **File reading:** `unpdf` (PDF) and `mammoth` (Word), on the server only
 - **AI:** any OpenAI-compatible chat-completions API (DeepSeek by default), called with native `fetch` (no `openai` package); `AI_MOCK=1` runs a scripted demo model for offline demos
 - **Runtime:** Docker Compose, run locally at `http://localhost:3000` (no online deployment required)
 
@@ -151,7 +157,35 @@ docker compose exec app npm run db:seed
 
 Open <http://localhost:3000> and sign in with a [demo account](#demo-accounts-and-seed-data).
 
-The container runs `prisma generate` and `prisma migrate deploy` on start, so the schema is created automatically.
+The container runs `prisma generate` and `prisma migrate deploy` on start, so the schema is created automatically. If `package-lock.json` is newer than the installed packages (for example after you pull new dependencies), it also runs `npm install` first. The first start after a pull can take one to three minutes: wait for `✓ Ready` in the log before opening the page.
+
+Then create the AI demo data (two teachers, three students, three courses, materials, attendance, and a simulated teacher knowledge base):
+
+```bash
+docker compose exec app npm run db:seed:demo
+```
+
+### After pulling new code
+
+```bash
+git pull origin main
+docker compose up --build --renew-anon-volumes
+```
+
+`--renew-anon-volumes` rebuilds the `node_modules` volume that Compose keeps between runs, so packages added by a pull are picked up. It does **not** touch the database. New migrations are applied automatically on start.
+
+### Troubleshooting
+
+| What you see | Why | What to do |
+|---|---|---|
+| `Module not found: Can't resolve 'react-grid-layout'` (or `unpdf`, `mammoth`) | The old `node_modules` volume hides the packages in the rebuilt image | `docker compose down`, then `docker compose up --build --renew-anon-volumes` |
+| Browser says `localhost refused to connect` (`ERR_CONNECTION_REFUSED`) | The app container is not running yet, or has stopped | Run `docker compose ps` and `docker compose logs --tail=80 app`; wait for `✓ Ready`; if it exited, read the error in the log |
+| `docker compose up` ends with `context canceled` | The command was interrupted (Ctrl+C, or Docker Desktop paused) after the image was built | Run `docker compose up` again (no `--build` needed) |
+| `Cannot read properties of undefined (reading 'findUnique')` in a dev server you started yourself | The server loaded the Prisma client before `prisma generate` added a new table | Stop and restart the dev server after every `prisma generate` |
+| Demo accounts or data are missing after a restart | The database volume was wiped (`down -v`) or never seeded | Run the two seed commands above |
+| `.env.example` shows as modified in `git status` | You edited the template locally | Put real values only in `.env`; never commit real keys. Restore the template with `git checkout .env.example` |
+
+Never use `docker compose down -v` unless you want to erase the database.
 
 ### Environment variables
 
@@ -173,15 +207,18 @@ Real values go only in your local `.env`, which is git-ignored. `.env.example` h
 
 ```bash
 docker compose up --build            # start
-docker compose down                  # stop
-docker compose down -v               # stop and wipe the database
+docker compose up --build --renew-anon-volumes   # start after pulling new dependencies (keeps the database)
+docker compose down                  # stop (keeps the database)
+docker compose down -v               # stop and WIPE the database
 docker compose logs -f app           # follow app logs
 docker compose exec app npm run db:seed   # seed accounts (idempotent)
 docker compose exec app npx tsx prisma/seed-ai.ts --reset   # AI demo data from a clean slate
 npx tsx src/lib/ai/dev/run-all.ts    # every offline AI check, one summary
 docker compose exec app npm run check:live   # the real-model test list (uses your own AI key, about 60 calls); add -- --list to preview
-npx tsc --noEmit                     # type check
+npm run typecheck                    # type check
 npm run lint                         # lint
+npm run check:ai                     # the same offline AI checks as run-all.ts
+docker compose exec app npm run db:migrate   # apply migrations by hand (also done on start)
 ```
 
 The baseline seed creates two accounts only. Run the AI showcase fixture as a second step to create the multi-person course, attendance, material, conflict and teacher-memory data.
@@ -191,6 +228,13 @@ The baseline seed creates two accounts only. Run the AI showcase fixture as a se
 `docker compose down -v` → `docker compose up --build` → `docker compose exec app npm run db:seed` → `docker compose exec app npm run db:seed:demo` → sign in.
 
 Run all offline AI checks (fake services, no key) with `npx tsx src/lib/ai/dev/run-all.ts`, or the shorter `npm run check:ai`. Run `NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts` inside the app container for real-database acceptance checks.
+
+### What is tested
+
+- **Offline checks** (`npm run check:ai`): 20 scripts, 550 checks, no network or key, on in-memory fake services.
+- **Real-database checks** (`NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts`, inside the app container): 134 checks covering services, permissions, cross-account denial and the confirm path.
+- **Real-model checks** (`npm run check:live`): 20 scenarios against your own provider key; prints PASS, FAIL or REVIEW.
+- Every feature was also run in a browser with two or more accounts (see `docs/DEMO-SCRIPT.md`).
 
 ## Demo accounts and seed data
 
@@ -207,7 +251,8 @@ The multi-person acceptance personas below (Alex Morgan, Taylor Chen, Jordan Lee
 - **Course B, "Grade 8 Physics 1:1"** (Alex; Jordan): one session overlaps Course A next Tuesday at 4 PM, to test conflict detection.
 - **Course C, "Grade 10 English 1:1"** (Taylor; Casey): used to prove Alex's AI cannot see Casey.
 - Completed sessions with attendance and deductions, plus scheduled sessions this week and next.
-- `AgentMemory` examples: Jordan unavailable Tuesday and Thursday afternoons; Sam struggles with functions.
+- `AgentMemory` examples: Jordan unavailable Tuesday and Thursday afternoons; Sam struggles with functions (teacher-only, never shown to students).
+- A simulated **teacher knowledge base** for Alex (12 notes across Math and Physics, plus a teaching style) and one note for Taylor: lesson summaries, key points, worked examples, common mistakes and FAQs. Students read these notes and the tutor teaches from them. It is separate from the private memories above.
 
 The baseline account seed and AI fixture seed are idempotent and refuse to run when `NODE_ENV=production`. The five AI personas use `t+alex@example.test`, `t+taylor@example.test`, `s+jordan@example.test`, `s+sam@example.test` and `s+casey@example.test`.
 
@@ -358,11 +403,13 @@ prisma/               schema.prisma, migrations, seed.ts, seed-ai.ts (AI demo da
 src/contracts/        shared result, view, input, and proposal types (AI track)
 src/app/              login, forbidden, role workspaces, course routes, api/auth, api/ai
 src/components/       workspace-shell, course forms, login-form, ui/ (shadcn)
-src/features/ai-agent/ AiPanel, ProposalCard, MessageList
+src/components/dashboard/  home grid, widgets, themes (teacher home page)
+src/features/ai-agent/ AiPanel, ProposalCard, MessageList, Agent Console
 src/lib/auth/         Auth.js config, requireActor / requireRole
 src/lib/db/           Prisma singleton
 src/lib/time.ts       APP_TZ week ranges and formatting
-src/services/         read.ts and write.ts business services
+src/lib/file-text.ts  PDF, Word and text extraction; dashboard-pack.ts widget placement
+src/services/         read.ts, write.ts, dashboard.ts, quiz.ts, knowledge.ts, materials-upload.ts
 src/lib/ai/           provider, agent loop, education tools, proposal flows and checks
 docs/                 contract, roadmaps, handoff log, prompts, checklist
 docs/zachary/         original Chinese working documents (reference only)
@@ -457,6 +504,8 @@ All of these must pass for the project to count as complete.
 | `docs/ROADMAP-nick.md` | Core product roadmap (N1–N6) |
 | `docs/ROADMAP-next.md` | Remaining work after the front-end redesign, in build order (phases A–F) |
 | `docs/HANDOFF.md` | Append-only message board between the two owners |
+| `docs/DEMO-SCRIPT.md` | A four-minute demo script, plus optional sections for the newest features |
+| `docs/PROJECT-STORY.md` | The project write-up for the submission (Inspiration, What it does, How we built it, ...) |
 | `docs/PROMPTS.md` | Opening prompts for each owner's AI assistant |
 | `docs/H0-CHECKLIST.md` | Pre-work checklist (environment, repository, kickoff) |
 | `docs/zachary/` | Original Chinese working documents for the AI track: roadmap (S1–S8, with the 13-feature list), old contract, rules, beginner guide, checklist, prompts. Reference only; the English files above are authoritative |

@@ -29,6 +29,8 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
+      # These two volumes keep installed packages and the Next.js cache between runs. After pulling new
+      # dependencies, start with: docker compose up --build --renew-anon-volumes (the database is kept).
       - /app/node_modules
       - /app/.next
 

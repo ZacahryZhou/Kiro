@@ -29,6 +29,11 @@ What the assistant can do today, all with the same preview-then-confirm rule:
 - **Adding students to a course**, **course content entry**, **progress records** drafted from the teacher's own words, **attendance trends** that refuse to guess with fewer than three records, and **teacher-only student notes** that help with scheduling.
 - **Student leave requests**: a student asks in plain language, confirms the preview, and the teacher sees a pending request. It never edits the schedule or attendance by itself.
 
+- **A customisable home page**: the teacher drags and resizes widgets (today, requests, a student's focus card, attendance trend and more), picks colours and motion, and keeps a history of layouts; or says "design my home page" and the assistant picks the widgets while code places them.
+- **Course files**: drop a PDF, Word, text or Markdown file on a unit and its text becomes an ordinary material, so student questions and citations work on it.
+- **Quizzes written from the materials**: the teacher asks for a number of questions, types, difficulties and topics. Code plans the mix and keeps only the questions whose answer is backed by a word-for-word quote from a material; the teacher reviews the answer key, publishes it, and students practise it.
+- **A teaching knowledge base and a student tutor**: the teacher's own lesson summaries, key points, mistakes, examples and teaching style (kept separate from the private student memory). Students ask the assistant to explain a topic and get a step-by-step explanation with verified sources, or an honest "your teacher has not covered that".
+
 Around the assistant is a normal product: sign-in, weekly schedule and month calendar, courses, materials, attendance, a Requests inbox, a Students page, account settings, and a live Agent Console that shows each step of the agent and the files it uses.
 
 ## How we built it
@@ -71,12 +76,13 @@ Around the assistant is a normal product: sign-in, weekly schedule and month cal
 ## What's next for Kora
 
 - Self-service registration, password reset by email, and notifications.
+- OCR for scanned PDFs, retrieval for materials longer than the assistant can read at once, and recording quiz attempts.
 - Assignments and lesson-pack balances (tuition changes were left out on purpose until they can follow the same confirm-first rule).
 - Safe corrections to attendance after submission.
 - A broader trial with real tutors and a live-model evaluation of the assistant's wording.
 
 ## Built with
 
-Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, PostgreSQL, Prisma, Auth.js, Zod, Docker, DeepSeek (OpenAI-compatible API).
+Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, react-grid-layout, PostgreSQL, Prisma, Auth.js, Zod, unpdf, mammoth, Docker, DeepSeek (OpenAI-compatible API).
 
 Repository: https://github.com/ZacahryZhou/Kora

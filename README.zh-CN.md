@@ -70,7 +70,7 @@
 | 模块 | 状态 |
 |---|---|
 | Next.js 骨架、Docker Compose、PostgreSQL | 已完成 |
-| Prisma schema(14 张表)和迁移 | 已完成 |
+| Prisma schema(18 张表)和迁移 | 已完成 |
 | 演示账号种子(幂等,生产环境拒绝运行) | 已完成 |
 | 邮箱密码登录、按角色保护路由、`requireActor()` | 已完成 |
 | 只读服务(`src/services/read.ts`):课程、课表、学生、资料、学生工作区 | 已完成 |
@@ -82,6 +82,10 @@
 | 学生请假和换时间请求(学生表单、老师的请求收件箱、AI) | 已完成 |
 | 学习进度记录(老师的进度标签页、学生的进度笔记、AI 起草) | 已完成 |
 | 月历、老师的学生页和账号设置 | 已完成 |
+| 可自定义的老师主页(9 种组件、拖拽缩放、6 套配色、动画风格、布局历史、AI 设计布局) | 已完成 |
+| 课程资料文件上传(.txt、.md、.pdf、.docx;可预览、可删除) | 已完成;扫描版 PDF 需要先做 OCR |
+| 根据资料由 AI 出 quiz(有原文依据的题目、草稿、发布、学生练习) | 已完成 |
+| 教学知识库页面,以及依据老师笔记讲课的学生助教 | 已完成;与老师私有的学生记忆完全分开 |
 | 按角色区分的 AI 面板、聊天接口、只读问答、带验证引用的资料问答、提案流程 | 已接入;要得到真实模型的回复,需要配置 AI 接口 |
 | 完整的多人 AI 演示数据(`prisma/seed-ai.ts`) | 已完成;`npm run db:seed:demo`,或用 `npx tsx prisma/seed-ai.ts --reset` 从干净状态重来 |
 | AI 提案和运行记录存进数据库(`AgentProposal`、`AgentRun`) | 已完成;只写 AI 自己的表 |
@@ -128,6 +132,8 @@
 - **数据库:** PostgreSQL 17 + Prisma 6
 - **登录:** Auth.js(next-auth v5 beta),邮箱 + 密码,JWT 会话
 - **校验:** Zod
+- **主页网格:** `react-grid-layout`(拖拽和缩放)
+- **读文件:** `unpdf`(PDF)和 `mammoth`(Word),只在服务器上运行
 - **AI:** 任意 OpenAI 兼容的 chat-completions 接口(默认 DeepSeek),用原生 `fetch` 调用,不装 `openai` 包;`AI_MOCK=1` 时运行带剧本的演示模型,用于离线演示
 - **运行:** Docker Compose,本地运行在 `http://localhost:3000`,不需要线上部署
 
@@ -152,7 +158,35 @@ docker compose exec app npm run db:seed
 
 打开 <http://localhost:3000>,用[演示账号](#演示账号与种子数据)登录。
 
-容器启动时会自动运行 `prisma generate` 和 `prisma migrate deploy`,所以表结构会自动建好。
+容器启动时会自动运行 `prisma generate` 和 `prisma migrate deploy`,所以表结构会自动建好。如果 `package-lock.json` 比已装的依赖新(比如你拉了新依赖),它还会先运行 `npm install`。拉取新代码后的第一次启动可能要 1–3 分钟:等日志里出现 `✓ Ready` 再打开页面。
+
+然后创建 AI 演示数据(两位老师、三位学生、三门课、资料、出勤,以及一套模拟的老师知识库):
+
+```bash
+docker compose exec app npm run db:seed:demo
+```
+
+### 拉取新代码之后
+
+```bash
+git pull origin main
+docker compose up --build --renew-anon-volumes
+```
+
+`--renew-anon-volumes` 会重建 Compose 在两次运行之间保留的 `node_modules` 卷,这样拉取新代码时新增的依赖才会生效。它**不会**动数据库。新的数据库迁移会在启动时自动应用。
+
+### 常见问题
+
+| 你看到的 | 原因 | 怎么办 |
+|---|---|---|
+| `Module not found: Can't resolve 'react-grid-layout'`(或 `unpdf`、`mammoth`) | 旧的 `node_modules` 卷盖住了重新构建的镜像里的包 | `docker compose down`,再 `docker compose up --build --renew-anon-volumes` |
+| 浏览器显示 `localhost refused to connect`(`ERR_CONNECTION_REFUSED`) | app 容器还没启动,或已经停了 | 运行 `docker compose ps` 和 `docker compose logs --tail=80 app`;等到 `✓ Ready`;如果容器已退出,看日志里的错误 |
+| `docker compose up` 以 `context canceled` 结束 | 镜像构建完之后命令被中断(按了 Ctrl+C,或 Docker Desktop 暂停) | 再运行一次 `docker compose up`(不需要 `--build`) |
+| 自己启动的开发服务器里出现 `Cannot read properties of undefined (reading 'findUnique')` | 服务器在 `prisma generate` 加入新表之前就加载了 Prisma 客户端 | 每次 `prisma generate` 之后都要重启开发服务器 |
+| 重启后演示账号或数据不见了 | 数据库卷被清空了(`down -v`),或者从没导入过种子 | 运行上面的两条种子命令 |
+| `git status` 里 `.env.example` 显示被修改 | 你在本地改了模板 | 真实的值只放在 `.env`,绝不要提交真实密钥;用 `git checkout .env.example` 还原模板 |
+
+除非你想清空数据库,否则不要用 `docker compose down -v`。
 
 ### 环境变量
 
@@ -174,15 +208,18 @@ docker compose exec app npm run db:seed
 
 ```bash
 docker compose up --build            # 启动
-docker compose down                  # 停止
-docker compose down -v               # 停止并清空数据库
+docker compose up --build --renew-anon-volumes   # 拉取新依赖之后启动(保留数据库)
+docker compose down                  # 停止(保留数据库)
+docker compose down -v               # 停止并清空数据库(数据会丢!)
 docker compose logs -f app           # 查看应用日志
 docker compose exec app npm run db:seed   # 创建演示账号(幂等)
 docker compose exec app npx tsx prisma/seed-ai.ts --reset   # 从干净状态导入 AI 演示数据
 npx tsx src/lib/ai/dev/run-all.ts    # 运行全部离线 AI 检查,输出一份汇总
 docker compose exec app npm run check:live   # 用真实模型跑测试清单(用你自己的 AI key,约 60 次调用);加 -- --list 只预览
-npx tsc --noEmit                     # 类型检查
+npm run typecheck                    # 类型检查
 npm run lint                         # 代码检查
+npm run check:ai                     # 和 run-all.ts 一样的离线 AI 检查
+docker compose exec app npm run db:migrate   # 手动应用数据库迁移(启动时也会自动做)
 ```
 
 基础种子只创建两个账号。再运行一步 AI 演示数据,才会创建多人的课程、出勤、资料、冲突场次和老师私有的 memory。
@@ -192,6 +229,13 @@ npm run lint                         # 代码检查
 `docker compose down -v` → `docker compose up --build` → `docker compose exec app npm run db:seed` → `docker compose exec app npm run db:seed:demo` → 登录。
 
 不需要真实 AI key 就能运行全部离线 AI 检查(假服务、不用 key):`npx tsx src/lib/ai/dev/run-all.ts`,或者更短的 `npm run check:ai`。真实数据库的验收检查,在应用容器里运行 `NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts`。
+
+### 测了什么
+
+- **离线检查**(`npm run check:ai`):20 个脚本、550 项检查,不需要网络和 key,跑在内存里的假服务上。
+- **真实数据库检查**(在 app 容器里运行 `NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts`):134 项,覆盖服务、权限、跨账号拒绝和确认路径。
+- **真实模型检查**(`npm run check:live`):用你自己的接口 key 跑 20 个场景,输出 PASS、FAIL 或 REVIEW。
+- 每个功能也都用两个或更多账号在浏览器里跑过(见 `docs/DEMO-SCRIPT.md`)。
 
 ## 演示账号与种子数据
 
@@ -208,6 +252,7 @@ npm run lint                         # 代码检查
 - **课程 B "Grade 8 Physics 1:1"**(Alex;Jordan):有一节与课程 A 下周二 16:00 重叠的场次,用来测试冲突检测。
 - **课程 C "Grade 10 English 1:1"**(Taylor;Casey):用来证明 Alex 的 AI 查不到 Casey。
 - 已完成的场次(带出勤和扣课),以及本周和下周的待上课场次。
+- 一套模拟的**老师知识库**(给 Alex 的数学和物理共 12 条笔记,另加一条讲课风格,给 Taylor 一条笔记):课程摘要、知识点、例题、常见错误和 FAQ。学生能读到这些笔记,助教也依据它讲课。它与下面老师私有的 memory 是分开的。
 - `AgentMemory` 示例:Jordan 周二周四下午不方便;Sam 在函数部分较弱。
 
 基础账号种子和 AI 演示种子都是幂等的,`NODE_ENV=production` 时拒绝运行。五个 AI 角色的邮箱是 `t+alex@example.test`、`t+taylor@example.test`、`s+jordan@example.test`、`s+sam@example.test` 和 `s+casey@example.test`。
@@ -343,11 +388,13 @@ prisma/               schema.prisma、migrations、seed.ts、seed-ai.ts(AI 演�
 src/contracts/        共享的结果、视图、输入和提案类型(AI 这条线)
 src/app/              login、forbidden、各角色工作区、课程路由、api/auth、api/ai
 src/components/       workspace-shell、课程表单、login-form、ui/(shadcn)
-src/features/ai-agent/ AiPanel、ProposalCard、MessageList
+src/components/dashboard/  主页网格、组件、配色(老师主页)
+src/features/ai-agent/ AiPanel、ProposalCard、MessageList、Agent 控制台
 src/lib/auth/         Auth.js 配置、requireActor / requireRole
 src/lib/db/           Prisma 单例
 src/lib/time.ts       按 APP_TZ 计算周范围和格式化
-src/services/         read.ts 和 write.ts 业务服务
+src/lib/file-text.ts  PDF、Word 和文本提取;dashboard-pack.ts 组件排版
+src/services/         read.ts、write.ts、dashboard.ts、quiz.ts、knowledge.ts、materials-upload.ts
 src/lib/ai/           模型调用、Agent 循环、教学工具、提案流程和检查脚本
 docs/                 契约、路线、交接留言板、提示词、检查清单
 docs/zachary/         中文原始工作文档(仅供参考)
@@ -442,6 +489,8 @@ docs/zachary/         中文原始工作文档(仅供参考)
 | `docs/ROADMAP-nick.md` | 基础产品路线(N1–N6) |
 | `docs/ROADMAP-next.md` | 前端重做之后剩余的工作,按开发顺序排列(阶段 A–F) |
 | `docs/HANDOFF.md` | 两位负责人之间只追加的留言板 |
+| `docs/DEMO-SCRIPT.md` | 四分钟演示脚本,以及最新功能的可选演示段落 |
+| `docs/PROJECT-STORY.md` | 提交用的项目介绍(灵感、做了什么、怎么做的……) |
 | `docs/PROMPTS.md` | 给各自 AI 助手的开场提示词 |
 | `docs/H0-CHECKLIST.md` | 开工前检查清单(环境、仓库、开工) |
 | `docs/zachary/` | AI 这条线的中文原始工作文档:路线(S1–S8,含 13 个功能清单)、旧版契约、规则、新手讲解版、检查清单、提示词。仅供参考,以上面的英文文件为准 |
