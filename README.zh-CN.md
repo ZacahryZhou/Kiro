@@ -76,36 +76,40 @@
 | 只读服务(`src/services/read.ts`):课程、课表、学生、资料、学生工作区 | 已完成 |
 | 老师课表页(本周 / 下周) | 已完成 |
 | 学生页(我的课程和未来 30 天的场次) | 已完成 |
-| 老师课程详情页、学生课程资料页 | 下一步 |
-| 写入服务(课程、加入学生、排课、点名、资料、改期) | 计划中 |
-| AI 契约(`src/contracts`)、假服务、Agent 循环、提案、AI 面板 | 计划中 |
-| `seed-ai.ts` 完整演示数据 | 计划中 |
+| 老师课程管理、学生加入、排课、点名和扣课 | 已完成 |
+| 课程单元和资料(老师编辑,学生阅读) | 已完成 |
+| 场次改期(老师界面、冲突检查、变更记录) | 已完成 |
+| 按角色区分的 AI 面板、聊天接口、只读问答、带验证引用的资料问答、提案流程 | 已接入;要得到真实模型的回复,需要配置 AI 接口 |
+| 完整的多人 AI 演示数据(`prisma/seed-ai.ts`) | 已完成;`npm run db:seed:demo`,或用 `npx tsx prisma/seed-ai.ts --reset` 从干净状态重来 |
+| AI 提案和运行记录存进数据库(`AgentProposal`、`AgentRun`) | 已完成;只写 AI 自己的表 |
+| 带剧本的演示模型(`AI_MOCK=1`),不需要网络和 key,直接驱动真实工具 | 已完成 |
+| 2026 年 11 月 1 日之后的温哥华日历行为 | 已按当前时区数据验证;不列颠哥伦比亚省全年保持 UTC-7 |
 
-上表描述的是仓库里现有的代码,下面的开发路线才是后续计划。
+老师和学生的核心流程、持久化的 AI 提案、按角色区分的工具和演示数据都已实现。用真实语言模型做界面验收,仍需要在本地 `.env` 里配置 `AI_API_KEY` 和 `AI_MODEL`。
 
 ## 功能
 
 每个 AI 功能都是同一个模式:老师说一句话,AI 读数据,出预览,老师确认,服务函数写入。A 档必做,B 档其次,C 档是加分项。
 
-| # | 功能 | 老师怎么说(例) | 结果 | 档 |
+| # | 功能 | 老师怎么说(例) | 结果 | 档 / 状态 |
 |---|---|---|---|---|
-| 1 | 查课表、学生、出勤 | "我明天有哪些课?" | 直接回答(只读) | A |
-| 2 | AI 点名 | "今天数学班 Jordan 到了,Sam 请假" | `MARK_ATTENDANCE` 预览,确认后写出勤和扣课 | A |
-| 3 | 学生资料问答 | (学生)"第二章的定义是什么?" | 带校验引用的回答,没有就回答"暂时没有" | A |
-| 4 | AI 建课程 | "新建周末数学小班,加 Jordan 和 Sam" | `CREATE_COURSE` 预览,确认后建课并加学生 | B |
-| 5 | AI 排课 | "下周二四各排一节 60 分钟" | `CREATE_SESSIONS` 预览,逐节 ✅/❌;有冲突就不创建提案 | B |
-| 6 | AI 录入课程内容 | 粘贴一段文字:"建第一单元并加入" | `ADD_CONTENT` 预览,确认后建单元和资料 | B |
-| 7 | 出勤趋势 | "Jordan 最近出勤怎么样?" | 数字由代码计算;少于 3 节课时回答"数据不足,暂不判断" | B |
-| 8 | 学生 memory | "记一下 Jordan 周二周四下午不方便" | `ADD_STUDENT_NOTE` 预览,确认后写入 `AgentMemory`(仅老师可见) | C |
-| 9 | 基于 memory 排课 | "给数学班排下周的课" | 同 #5,候选时间避开已记录的不方便时段 | C |
-| 10 | 备课 | "帮我备明天数学班的课" | `ADD_CONTENT` 预览,含讲义草稿和 5 道练习 | C |
-| 11 | 改期 | "把 10/10 的课改到 10/11 下午 4 点" | `RESCHEDULE` 预览 | C |
-| 12 | 学生请假请求 | (学生)"下周二我想请假" | `STUDENT_REQUEST` 交给老师处理,课表不变 | C |
-| 13 | 学费增减 | "给 Jordan 加 3 次课" | 不在当前 MVP 内;需要先在契约里约定新表、新函数和新提案类型 | C |
+| 1 | 查课表、学生、出勤 | "我明天有哪些课?" | 只读工具可用;回答需要配置好的模型 | A · 已接入 |
+| 2 | AI 点名 | "今天数学班 Jordan 到了,Sam 请假" | `MARK_ATTENDANCE` 预览,确认后写出勤和扣课 | A · 已接入;完整演示需要先导入演示数据 |
+| 3 | 学生资料问答 | (学生)"第二章的定义是什么?" | 带校验引用的回答,没有就回答"暂时没有" | A · 已接入;带引用的回答需要先导入演示数据 |
+| 4 | AI 建课程 | "新建周末数学小班,加 Jordan 和 Sam" | `CREATE_COURSE` 预览,确认后建课并加学生 | B · 已接入 |
+| 5 | AI 排课 | "下周二四各排一节 60 分钟" | `CREATE_SESSIONS` 预览,逐节 ✅/❌;有冲突就不创建提案 | B · 已接入;已按当前温哥华时区规则验证 |
+| 6 | AI 录入课程内容 | 粘贴一段文字:"建第一单元并加入" | `ADD_CONTENT` 预览,确认后建单元和资料 | B · 已接入;真实数据库和确认流程已验证 |
+| 7 | 出勤趋势 | "Jordan 最近出勤怎么样?" | 数字由代码计算;少于 3 节课时回答 "Insufficient data to identify a trend." | B · 已接入;阈值和出勤率已验证 |
+| 8 | 学生 memory | "记一下 Jordan 周二周四下午不方便" | `ADD_STUDENT_NOTE` 预览,确认后写入 `AgentMemory`(仅老师可见) | C · 已接入;角色和课程隔离已验证 |
+| 9 | 基于 memory 排课 | "给数学班排下周的课" | 同 #5,候选时间避开已记录的不方便时段 | C · 已接入;有冲突的偏好会阻止创建提案 |
+| 10 | 备课 | "帮我备明天数学班的课" | `ADD_CONTENT` 预览,含讲义草稿和 5 道练习 | C · 已接入;5 道题的输出经过校验,需要确认 |
+| 11 | 改期 | "把 10/10 的课改到 10/11 下午 4 点" | 老师可以手动改期;AI 的 `RESCHEDULE` 提案未实现 | C · 手动流程已完成;AI 暂不可用 |
+| 12 | 学生请假请求 | (学生)"下周二我想请假" | `STUDENT_REQUEST` 交给老师处理,课表不变 | C · 未实现 |
+| 13 | 学费增减 | "给 Jordan 加 3 次课" | 不在当前 MVP 内;需要先在契约里约定新表、新函数和新提案类型 | C · 不在范围内 |
 
-**最少要演示的一条线(评审看的):** 功能 1 → 2 → 3 → 权限隔离。有余力再展示 4、5、7。
+**最少要演示的一条线:** 功能 1 → 2 → 3 → 权限隔离,在演示数据上进行。可以用真实模型(`AI_API_KEY`、`AI_MODEL`)运行;没有网络和 key 时,用带剧本的演示模式(`AI_MOCK=1`),它能理解几类简单的话,并驱动同样的真实工具、提案、确认和数据库(它不是语言模型,所以展示不了真实模型是怎么选工具的)。
 
-另外还计划做手动表单(建课、按邮箱加学生、批量排课、点名、资料、改期),这样不用 AI 产品也能用。
+手动表单可以用来建课、加学生、排课、点名、管理资料和改期,所以不用 AI 核心流程也能用。
 
 ## 技术栈
 
@@ -114,7 +118,7 @@
 - **数据库:** PostgreSQL 17 + Prisma 6
 - **登录:** Auth.js(next-auth v5 beta),邮箱 + 密码,JWT 会话
 - **校验:** Zod
-- **AI:** 任意 OpenAI 兼容的 chat-completions 接口(默认 DeepSeek),用原生 `fetch` 调用,不装 `openai` 包;`AI_MOCK=1` 时返回预设回答,用于离线演示
+- **AI:** 任意 OpenAI 兼容的 chat-completions 接口(默认 DeepSeek),用原生 `fetch` 调用,不装 `openai` 包;`AI_MOCK=1` 时运行带剧本的演示模型,用于离线演示
 - **运行:** Docker Compose,本地运行在 `http://localhost:3000`,不需要线上部署
 
 > 本项目用的 Next.js 版本有破坏性变更。写 Next.js 代码前,先读 `node_modules/next/dist/docs/` 里对应的文档(见 `CLAUDE.md`)。
@@ -153,7 +157,7 @@ docker compose exec app npm run db:seed
 | `AI_BASE_URL` | OpenAI 兼容接口地址,默认 `https://api.deepseek.com` |
 | `AI_API_KEY` | 模型 API Key(只放本地) |
 | `AI_MODEL` | 模型名,例如 `deepseek-chat` |
-| `AI_MOCK` | 设为 `1` 时不调用模型,返回预设回答 |
+| `AI_MOCK` | 设为 `1` 时用带剧本的演示模型代替真实模型(不需要网络和 key),但仍然使用真实工具和数据库 |
 
 ### 常用命令
 
@@ -163,34 +167,38 @@ docker compose down                  # 停止
 docker compose down -v               # 停止并清空数据库
 docker compose logs -f app           # 查看应用日志
 docker compose exec app npm run db:seed   # 创建演示账号(幂等)
+docker compose exec app npx tsx prisma/seed-ai.ts --reset   # 从干净状态导入 AI 演示数据
+npx tsx src/lib/ai/dev/run-all.ts    # 运行全部离线 AI 检查,输出一份汇总
 npx tsc --noEmit                     # 类型检查
 npm run lint                         # 代码检查
 ```
 
-`npm run db:seed:demo`(`prisma/seed-ai.ts` 的完整演示数据)已经在 `package.json` 里配置,但脚本还没写。
+基础种子只创建两个账号。再运行一步 AI 演示数据,才会创建多人的课程、出勤、资料、冲突场次和老师私有的 memory。
 
 ### 干净环境检查
 
-`docker compose down -v` → `docker compose up --build` → `docker compose exec app npm run db:seed` → 登录。
+`docker compose down -v` → `docker compose up --build` → `docker compose exec app npm run db:seed` → `docker compose exec app npm run db:seed:demo` → 登录。
+
+不需要真实 AI key 就能运行全部离线 AI 检查(假服务、不用 key):`npx tsx src/lib/ai/dev/run-all.ts`,或者更短的 `npm run check:ai`。真实数据库的验收检查,在应用容器里运行 `NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts`。
 
 ## 演示账号与种子数据
 
-`npm run db:seed` 只创建两个基础账号,没有课程。两个账号共用一个演示密码,只写在 `prisma/seed.ts` 里,不写进文档、聊天或日志。重新运行种子时,会删除旧的种子账号(前提是这些账号没有关联数据)。
+`npm run db:seed` 只创建两个基础账号,没有课程。两个账号共用的演示密码只写在 `prisma/seed.ts` 里。重新运行种子时,会删除旧的种子账号(前提是这些账号没有关联数据)。
 
 | 角色 | 姓名 | 邮箱 |
 |---|---|---|
 | 老师 | Demo Teacher | `t@example.test` |
 | 学生 | Demo Student | `s@example.test` |
 
-下面这些多人验收角色(Alex Morgan、Taylor Chen、Jordan Lee、Sam Patel、Casey Kim)是**可选的 AI 联调数据**,和基础登录账号是分开的。`npm run db:seed:demo`(计划中)会连同完整演示数据一起创建它们:
+下面这些多人验收角色(Alex Morgan、Taylor Chen、Jordan Lee、Sam Patel、Casey Kim)和两个基础登录账号是分开的。`npm run db:seed:demo` 会用演示密码创建它们:
 
-- **课程 A "Grade 8 Math Small Group"**(Alex;Jordan 和 Sam):两个单元,资料里有可验证的明确事实,并且故意**不含**二次函数顶点公式,用来测试"暂时没有"。
+- **课程 A "Grade 8 Math Small Group"**(Alex;Jordan 和 Sam):两个单元,资料里有可验证的事实,并且故意**不含**二次函数顶点公式,用来测试"暂时没有"。
 - **课程 B "Grade 8 Physics 1:1"**(Alex;Jordan):有一节与课程 A 下周二 16:00 重叠的场次,用来测试冲突检测。
 - **课程 C "Grade 10 English 1:1"**(Taylor;Casey):用来证明 Alex 的 AI 查不到 Casey。
 - 已完成的场次(带出勤和扣课),以及本周和下周的待上课场次。
 - `AgentMemory` 示例:Jordan 周二周四下午不方便;Sam 在函数部分较弱。
 
-两个种子脚本都是幂等的,`NODE_ENV=production` 时拒绝运行。这批演示数据是现场演示的备用方案:万一现场 AI 建课失败,一条命令就能恢复完整数据。
+基础账号种子和 AI 演示种子都是幂等的,`NODE_ENV=production` 时拒绝运行。五个 AI 角色的邮箱是 `t+alex@example.test`、`t+taylor@example.test`、`s+jordan@example.test`、`s+sam@example.test` 和 `s+casey@example.test`。
 
 ## 架构
 
@@ -225,7 +233,9 @@ type ErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION" | 
 
 老师 Agent 和学生 Agent 是同一个循环,只是系统提示和工具集不同。学生没有任何提案或写入工具(B 档的请假请求是唯一例外)。
 
-只读工具:老师有 `getTeacherSchedule`、`listMyCourses`、`listMyStudents`、`listAttendance`、`listDeductions`、`checkConflicts`、`getCourseMaterials`;学生只有 `getStudentWorkspace` 和 `getCourseMaterials`。
+老师的只读工具:`getTeacherSchedule`、`listMyCourses`、`listMyStudents`、`listAttendance`、`listDeductions`、`checkConflicts`、`getCourseMaterials`、`getAttendanceTrends`、`getStudentMemory`。老师只准备待确认提案的工具:`proposeMarkAttendance`、`proposeCreateCourse`、`proposeCreateSessions`、`proposeAddContent`、`proposeAddStudentNote`、`proposeLessonPrep`。学生的只读工具:`getStudentWorkspace`、`answerFromCourseMaterials`。
+
+两个 Agent 都遵守的行为规则写在 `docs/AI-REPLY-POLICY.md` 里(第 0 节会在运行时被加载进它们的指令)。
 
 ### 提案类型
 
@@ -239,6 +249,8 @@ type ErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION" | 
 | `PROGRESS_RECORD`(B 档) | `SaveProgressInput` | `saveProgressRecord` |
 | `STUDENT_REQUEST`(B 档) | `StudentRequestInput` | `submitStudentRequest` |
 | `ADD_STUDENT_NOTE`(加分) | `AddStudentNoteInput` | AI 侧直接写 `AgentMemory`(不调用服务函数) |
+
+其中 `CREATE_COURSE`、`CREATE_SESSIONS`、`ADD_CONTENT`、`MARK_ATTENDANCE` 和 `ADD_STUDENT_NOTE` 已经做出来;`RESCHEDULE`、`PROGRESS_RECORD` 和 `STUDENT_REQUEST` 在契约里有定义,但还没有 AI 工具(改期在老师界面里可以用)。
 
 提案在创建前要先用 Zod 校验,并用只读函数预先核对(例如学生确实已加入该课程)。确认之前,业务数据**必须保持不变**。`CREATE_COURSE` 不整体回滚:某个邮箱未注册时,课程仍然保留,提案状态记为 `executed`,`result` 里逐项列出结果。
 
@@ -297,29 +309,18 @@ type ErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION" | 
 现有:
 
 ```
-prisma/               schema.prisma、migrations、seed.ts
-src/app/              login、forbidden、(teacher)/teacher、(student)/student、api/auth
-src/components/       workspace-shell、login-form、ui/(shadcn)
+prisma/               schema.prisma、migrations、seed.ts、seed-ai.ts(AI 演示数据,支持 --reset)
+src/contracts/        共享的结果、视图、输入和提案类型(AI 这条线)
+src/app/              login、forbidden、各角色工作区、课程路由、api/auth、api/ai
+src/components/       workspace-shell、课程表单、login-form、ui/(shadcn)
+src/features/ai-agent/ AiPanel、ProposalCard、MessageList
 src/lib/auth/         Auth.js 配置、requireActor / requireRole
 src/lib/db/           Prisma 单例
 src/lib/time.ts       按 APP_TZ 计算周范围和格式化
-src/services/read.ts  只读服务函数
+src/services/         read.ts 和 write.ts 业务服务
+src/lib/ai/           模型调用、Agent 循环、教学工具、提案流程和检查脚本
 docs/                 契约、路线、交接留言板、提示词、检查清单
 docs/zachary/         中文原始工作文档(仅供参考)
-```
-
-计划中(AI 这条线):
-
-```
-src/contracts/        common.ts  views.ts  inputs.ts  proposals.ts  index.ts
-src/lib/ai/
-  core/               provider、agent-loop、proposals、citations、memory(不含任何教学词汇)
-  domain/edu/         prompts、tools、proposal-types、labels(可整体替换)
-  services.ts         唯一的切换点:现在导出假服务,以后改成导出真服务
-  dev/                fake-store、fake-services、chat.ts(终端测试入口)
-src/app/api/ai/       chat、proposals、proposals/[id]/confirm、proposals/[id]/discard
-src/features/ai-agent/ AiPanel、ProposalCard、MessageList
-prisma/seed-ai.ts     完整演示数据
 ```
 
 `src/lib/ai/core/` 是通用层,`domain/edu/` 是可替换的领域层,所以只改那个目录就能把 Agent 换成别的领域。
@@ -349,11 +350,11 @@ prisma/seed-ai.ts     完整演示数据
 | 步骤 | 内容 |
 |---|---|
 | N1 | 骨架、Docker、Prisma schema 和迁移、账号种子、登录 **(已完成)** |
-| N2 | 只读服务 **(已完成)**、老师课表 **(已完成)**、学生页 **(已完成)**、老师课程详情骨架 |
-| N3 | 写入服务(`createCourse`、`addExistingStudentToCourse`、`createSessions`、`checkConflicts`)和手动表单 |
-| N4 | `confirmAttendance` 及扣课、`listAttendance`、`listDeductions`、点名界面 |
-| N5 | 资料、改期,以及在两个布局里各加一行 `<AiPanel/>` |
-| N6 | 界面打磨、最终版 README、干净环境检查、验收用例 1–5 |
+| N2 | 只读服务、老师课表、学生页、老师课程详情 **(已完成)** |
+| N3 | 课程、加学生、排课服务和手动表单 **(已完成)** |
+| N4 | 点名、扣课、读视图和点名界面 **(已完成)** |
+| N5 | 课程资料、改期,以及在两个角色布局里挂上 AI 面板 **(已完成)** |
+| N6 | README 和状态打磨、隔离的干净环境检查 **(核心已完成;AI 场景的验收还没关闭)** |
 
 ### AI Agent(Zachary)
 
@@ -361,14 +362,12 @@ prisma/seed-ai.ts     完整演示数据
 
 | 步骤 | 内容 |
 |---|---|
-| S1 | `src/contracts` 里的契约代码、假数据和假服务、终端聊天入口 |
-| S2 | 模型调用(原生 `fetch`,30 秒超时,支持 `AI_MOCK`)、只读工具、Agent 循环 |
-| S3 | 提案创建、原子确认和丢弃、提案路由;第一个提案是 `MARK_ATTENDANCE` |
-| S4 | 学生 Agent 和带校验引用的资料问答 |
-| S5 | `/api/ai/chat` 和带提案卡片的 `AiPanel` 界面(测试页 `/ai-dev`) |
-| S6 | `CREATE_COURSE` 和 `CREATE_SESSIONS` 提案,由代码完成时区换算并处理夏令时(11 月 1 日前 UTC-7,之后 UTC-8) |
-| S7 | 资料录入、学生 memory、备课、出勤趋势、学费增减(C 档,需要 Nick 同意) |
-| S8 | `seed-ai.ts`、用例清单、权限隔离和 prompt injection 测试、演示排练 |
+| S1–S3 | 契约、假服务、模型调用、Agent 循环和提案路由 **(已完成)** |
+| S4 | 学生 Agent 和带校验引用的资料问答 **(已完成)** |
+| S5 | `/api/ai/chat` 和带提案卡片的 `AiPanel`,面板已挂进两个工作区 **(已完成)** |
+| S6 | `CREATE_COURSE` 和 `CREATE_SESSIONS` 提案 **(已完成;日历检查已更新为温哥华永久 UTC-7)** |
+| S7 | 资料录入、老师私有的学生 memory、基于 memory 的排课、备课和出勤趋势 **(已实现;需要手动用真实模型走一遍)** |
+| S8 | 幂等的多人 `seed-ai.ts`(支持 `--reset`)、带剧本的演示模型、真服务和浏览器验收检查 **(已实现;最后的真实模型排练要等本地 API 凭据)** |
 
 检查点:**H3** 换成真的读服务;**H6** 换成真的写服务,并把提案存储从内存改成 Prisma;**H7.5** 是完成真服务接入的最后期限;截止前两小时冻结新功能。
 
@@ -388,7 +387,7 @@ prisma/seed-ai.ts     完整演示数据
 
 **必做线**
 
-1. Alex Morgan 登录(AI 联调数据创建之后),课表里只有 Alex 自己的课,看不到 Taylor Chen 的。
+1. Alex Morgan 登录(AI 演示数据导入之后),课表里只有 Alex 自己的课,看不到 Taylor Chen 的。
 2. Alex 对 AI 说"今天数学班 Jordan 到了,Sam 请假",出现逐人点名预览,此时出勤页没有变化。点确认后有 2 条出勤记录、1 条扣课记录(Jordan)。再点一次确认,不新增任何记录。
 3. Jordan Lee 登录,课程页只显示 Jordan 自己的课。
 4. Jordan 问资料里有答案的问题,回答带引用;Jordan 问二次函数顶点公式,回答"暂时没有"。
@@ -396,12 +395,12 @@ prisma/seed-ai.ts     完整演示数据
 
 **从空数据库开始(B 档)**
 
-6. "新建周末数学小班,加 Jordan 和 Sam" → 预览 → 确认 → 课表里出现这门课;邮箱未注册时给出明确提示。
+6. "新建周末数学小班,加 Jordan 和 Sam"(学生是按邮箱加的,所以助手会追问邮箱)→ 预览 → 确认 → 课表里出现这门课;邮箱未注册时给出明确提示。
 7. "给这个班下周二和周四各排一节 60 分钟" → 带冲突结果的预览 → 确认 → 出现 2 节课;冲突的场次不写入,并说明原因。
 8. 粘贴文字"建第一单元并加入" → 预览 → 确认 → 资料出现,Jordan 能就它提问。
 9. (加分)"记一下 Jordan 周二周四下午不方便" → 确认;之后排课会避开这些时段;Jordan 问"你有我的什么备注"时,不返回任何 memory。
 
-**演示日的备用方案:** 主线用 `AI_MOCK=1`,用 `npm run db:seed:demo` 一条命令导入完整数据,准备手机热点作为网络备份,截止前两小时冻结代码。
+**演示准备情况:** 用 `AI_MOCK=1` 时,带剧本的演示模型会在真实数据库上跑通主线(点名提案和确认、建课、有冲突的排课、各类查询、带验证引用的资料问答),不需要网络。要展示真实语言模型怎么选工具,就在本地 `.env` 里设置 `AI_API_KEY` 和 `AI_MODEL`。先运行上面的两条种子命令,想从干净状态重复一次演示,就运行 `npx tsx prisma/seed-ai.ts --reset`。学费增减和学生提交的请假请求不在已验收的核心流程内;改期可以在老师界面里完成。
 
 ## 文档索引
 
@@ -409,6 +408,7 @@ prisma/seed-ai.ts     完整演示数据
 |---|---|
 | `CLAUDE.md` | 所有 AI 编程会话的规则,先读它 |
 | `docs/api-contract.md` | 两条线之间的接口契约,与 `CLAUDE.md` 冲突时以它为准 |
+| `docs/AI-REPLY-POLICY.md` | 被加载进老师和学生 AI 提示词里的回复规则 |
 | `docs/ROADMAP-nick.md` | 基础产品路线(N1–N6) |
 | `docs/HANDOFF.md` | 两位负责人之间只追加的留言板 |
 | `docs/PROMPTS.md` | 给各自 AI 助手的开场提示词 |

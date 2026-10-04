@@ -80,7 +80,9 @@ Work is split between two owners (see [Team, tracks and workflow](#team-tracks-a
 | Course units and materials (teacher editing; student reading) | Done |
 | Session rescheduling (teacher UI, conflict checks and change history) | Done |
 | Role-specific AI panel, chat API, read-only questions, verified material citations and proposal flows | Integrated; requires AI provider configuration for live model responses |
-| Full multi-person AI showcase fixture (`prisma/seed-ai.ts`) | Done; repeatable with `npm run db:seed:demo` |
+| Full multi-person AI showcase fixture (`prisma/seed-ai.ts`) | Done; `npm run db:seed:demo`, or `npx tsx prisma/seed-ai.ts --reset` for a clean slate |
+| AI proposals and run log stored in the database (`AgentProposal`, `AgentRun`) | Done; only the AI's own tables are written |
+| Scripted demo model (`AI_MOCK=1`) that drives the real tools with no network or key | Done |
 | Vancouver calendar behavior after Nov 1, 2026 | Verified with current time-zone data; British Columbia keeps UTC-7 year-round |
 
 Core teacher/student workflows, persistent AI proposals, role-specific tools and the showcase fixture are implemented. UI acceptance with a live language model still requires a configured `AI_API_KEY` and `AI_MODEL` in the local `.env` file.
@@ -105,7 +107,7 @@ Each AI feature follows the same pattern: the teacher says one sentence, the AI 
 | 12 | Student leave request | (student) "I need to take leave next Tuesday" | `STUDENT_REQUEST` pending for the teacher; schedule unchanged | C · Not implemented |
 | 13 | Tuition adjustment | "Add 3 sessions for Jordan" | Out of the current MVP; needs a new table, function and proposal type agreed in the contract | C · Out of scope |
 
-**Intended demo line:** feature 1 → 2 → 3 → access isolation. This requires a configured live model and the separate showcase fixture; `AI_MOCK=1` only returns a canned provider reply and does not exercise model tool selection.
+**Intended demo line:** feature 1 → 2 → 3 → access isolation, on the showcase fixture. It runs with a live model (`AI_API_KEY`, `AI_MODEL`) or, with no network or key, in the scripted demo mode (`AI_MOCK=1`), which understands a few plain requests and drives the same real tools, proposals, confirmation and database (it is not a language model, so it does not show how a real model chooses tools).
 
 Manual forms are available for creating courses, enrolling students, scheduling sessions, recording attendance, managing materials, and rescheduling sessions, so core workflows also work without the AI.
 
@@ -116,7 +118,7 @@ Manual forms are available for creating courses, enrolling students, scheduling 
 - **Database:** PostgreSQL 17 with Prisma 6
 - **Auth:** Auth.js (next-auth v5 beta), email + password, JWT sessions
 - **Validation:** Zod
-- **AI:** any OpenAI-compatible chat-completions API (DeepSeek by default), called with native `fetch` (no `openai` package); `AI_MOCK=1` returns canned answers for offline demos
+- **AI:** any OpenAI-compatible chat-completions API (DeepSeek by default), called with native `fetch` (no `openai` package); `AI_MOCK=1` runs a scripted demo model for offline demos
 - **Runtime:** Docker Compose, run locally at `http://localhost:3000` (no online deployment required)
 
 > This project uses a Next.js version with breaking changes. Read the relevant guide in `node_modules/next/dist/docs/` before writing Next.js code (see `CLAUDE.md`).
@@ -155,7 +157,7 @@ Real values go only in your local `.env`, which is git-ignored. `.env.example` h
 | `AI_BASE_URL` | OpenAI-compatible endpoint, default `https://api.deepseek.com` |
 | `AI_API_KEY` | Model API key (local only) |
 | `AI_MODEL` | Model name, for example `deepseek-chat` |
-| `AI_MOCK` | `1` returns preset answers without calling a model |
+| `AI_MOCK` | `1` replaces the model with a scripted demo model (no network or key); it still uses the real tools and database |
 
 ### Useful commands
 
@@ -165,6 +167,8 @@ docker compose down                  # stop
 docker compose down -v               # stop and wipe the database
 docker compose logs -f app           # follow app logs
 docker compose exec app npm run db:seed   # seed accounts (idempotent)
+docker compose exec app npx tsx prisma/seed-ai.ts --reset   # AI demo data from a clean slate
+npx tsx src/lib/ai/dev/run-all.ts    # every offline AI check, one summary
 npx tsc --noEmit                     # type check
 npm run lint                         # lint
 ```
@@ -175,7 +179,7 @@ The baseline seed creates two accounts only. Run the AI showcase fixture as a se
 
 `docker compose down -v` → `docker compose up --build` → `docker compose exec app npm run db:seed` → `docker compose exec app npm run db:seed:demo` → sign in.
 
-Run the provider/tool/proposal/student/policy/route acceptance checks without a live AI key using `npm run check:ai`. Run `NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts` inside the app container for real-database acceptance checks.
+Run all offline AI checks (fake services, no key) with `npx tsx src/lib/ai/dev/run-all.ts`, or the shorter `npm run check:ai`. Run `NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts` inside the app container for real-database acceptance checks.
 
 ## Demo accounts and seed data
 
@@ -229,7 +233,9 @@ Conventions: IDs are `cuid()` strings; times are ISO 8601 UTC strings stored as 
 
 The teacher and student agents are the same loop with different system prompts and tool sets. Students have no proposal or write tools (the Tier B leave request is the only exception).
 
-Read-only tools: `getTeacherSchedule`, `listMyCourses`, `listMyStudents`, `listAttendance`, `listDeductions`, `checkConflicts`, `getCourseMaterials` (teachers); `getStudentWorkspace`, `getCourseMaterials` (students).
+Teacher tools, read-only: `getTeacherSchedule`, `listMyCourses`, `listMyStudents`, `listAttendance`, `listDeductions`, `checkConflicts`, `getCourseMaterials`, `getAttendanceTrends`, `getStudentMemory`. Teacher tools that only prepare a pending proposal: `proposeMarkAttendance`, `proposeCreateCourse`, `proposeCreateSessions`, `proposeAddContent`, `proposeAddStudentNote`, `proposeLessonPrep`. Student tools, read-only: `getStudentWorkspace`, `answerFromCourseMaterials`.
+
+The behaviour rules both agents follow are written in `docs/AI-REPLY-POLICY.md` (section 0 is loaded into their instructions at run time).
 
 ### Proposal types
 
@@ -243,6 +249,8 @@ Read-only tools: `getTeacherSchedule`, `listMyCourses`, `listMyStudents`, `listA
 | `PROGRESS_RECORD` (Tier B) | `SaveProgressInput` | `saveProgressRecord` |
 | `STUDENT_REQUEST` (Tier B) | `StudentRequestInput` | `submitStudentRequest` |
 | `ADD_STUDENT_NOTE` (bonus) | `AddStudentNoteInput` | AI side writes `AgentMemory` (no service function) |
+
+Of these, `CREATE_COURSE`, `CREATE_SESSIONS`, `ADD_CONTENT`, `MARK_ATTENDANCE` and `ADD_STUDENT_NOTE` are built; `RESCHEDULE`, `PROGRESS_RECORD` and `STUDENT_REQUEST` are defined in the contract but have no AI tool yet (rescheduling is available in the teacher UI).
 
 Proposals are validated with Zod and pre-checked with read-only functions (for example, that the student is really enrolled) before they are created. Business data **must remain unchanged** until confirmation. `CREATE_COURSE` is not rolled back as a whole: if an email is unregistered the course stays, the proposal is `executed`, and the result lists per-email outcomes.
 
@@ -301,7 +309,7 @@ Unauthorized access always returns `FORBIDDEN`; a missing course returns `NOT_FO
 Current:
 
 ```
-prisma/               schema.prisma, migrations, seed.ts
+prisma/               schema.prisma, migrations, seed.ts, seed-ai.ts (AI demo data, `--reset` supported)
 src/contracts/        shared result, view, input, and proposal types (AI track)
 src/app/              login, forbidden, role workspaces, course routes, api/auth, api/ai
 src/components/       workspace-shell, course forms, login-form, ui/ (shadcn)
@@ -313,12 +321,6 @@ src/services/         read.ts and write.ts business services
 src/lib/ai/           provider, agent loop, education tools, proposal flows and checks
 docs/                 contract, roadmaps, handoff log, prompts, checklist
 docs/zachary/         original Chinese working documents (reference only)
-```
-
-Not yet present:
-
-```
-prisma/seed-ai.ts     full multi-person demo and acceptance data
 ```
 
 `src/lib/ai/core/` is generic and `domain/edu/` is the replaceable domain layer, so the agent can be re-skinned for another domain by changing only that directory.
@@ -365,7 +367,7 @@ Strategy: write **fake services** against the contract first and run the whole A
 | S5 | `/api/ai/chat` and `AiPanel` with proposal cards; panel mounted in both workspaces **(done)** |
 | S6 | `CREATE_COURSE` and `CREATE_SESSIONS` proposals **(done; calendar checks updated for permanent UTC-7 in Vancouver)** |
 | S7 | Content entry, teacher-private student memory, memory-aware scheduling, lesson prep and attendance trends **(implemented; manually rehearse the live model path)** |
-| S8 | Idempotent multi-person `seed-ai.ts` fixture and real-service acceptance checks **(implemented; final live-model rehearsal awaits local API credentials/model)** |
+| S8 | Idempotent multi-person `seed-ai.ts` fixture (with `--reset`), scripted demo model, real-service and browser acceptance checks **(implemented; final live-model rehearsal awaits local API credentials/model)** |
 
 Checkpoints: **H3** swap in the real read services; **H6** swap in the real write services and move proposals from memory to Prisma; **H7.5** is the last moment to finish the real-service integration; freeze new features two hours before the deadline.
 
@@ -393,12 +395,12 @@ All of these must pass for the project to count as complete.
 
 **From an empty database (Tier B)**
 
-6. "Create a weekend math group and add Jordan and Sam" → preview → confirm → the course appears; an unregistered email produces a clear message.
+6. "Create a weekend math group and add Jordan and Sam" (students are added by email, so the assistant asks for the emails) → preview → confirm → the course appears; an unregistered email produces a clear message.
 7. "Schedule one 60-minute session for this group next Tuesday and Thursday" → preview with conflict results → confirm → two sessions appear; conflicting sessions are not written and the reason is explained.
 8. Paste text "Create the first unit and add this" → preview → confirm → the material appears and Jordan can ask about it.
 9. (Bonus) "Remember that Jordan is unavailable Tuesday and Thursday afternoons" → confirm; later scheduling avoids those times; when Jordan asks "What notes do you have about me?" no memory is returned.
 
-**Demo readiness:** `AI_MOCK=1` confirms the provider path without network access but returns a canned reply; it cannot demonstrate model-selected tools. The multi-person fixture and real-service checks are available. To rehearse natural-language tool use in the app, set `AI_API_KEY` and `AI_MODEL` in the local `.env`, then run both seed commands above. Tuition adjustments and student-submitted leave requests remain outside the accepted core flow; rescheduling is available through the teacher UI.
+**Demo readiness:** with `AI_MOCK=1` the scripted demo model runs the main line (attendance proposal and confirmation, course creation, scheduling with conflicts, lookups, and materials Q&A with verified citations) on the real database, with no network. To show a real language model choosing tools, set `AI_API_KEY` and `AI_MODEL` in the local `.env`. Run both seed commands above first, and `npx tsx prisma/seed-ai.ts --reset` to repeat a demo from a clean slate. Tuition adjustments and student-submitted leave requests remain outside the accepted core flow; rescheduling is available through the teacher UI.
 
 ## Documentation index
 
