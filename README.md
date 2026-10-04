@@ -121,6 +121,9 @@ Work is split between two owners (see [Team, tracks and workflow](#team-tracks-a
 | Teaching knowledge page and a student tutor that teaches from the teacher's notes | Done; kept apart from the private student memory |
 | AI chat as a centred pop-up with history; every chat has its own context; each course page has its own assistant | Done; chats are stored per user (`AgentConversation`, `AgentMessage`) |
 | Edit and delete courses, units, materials, sessions and enrolments; upload files from the Teaching knowledge page | Done; deleting a course needs its name typed and shows what goes with it |
+| Quiz attempts saved: students see their last result, teachers see every student's scores, the average and the most-missed questions (and can ask the assistant) | Done |
+| Agent Console panel that lists every tool in plain words (read-only vs prepare a change) | Done |
+| Student accounts added without deleting anything (`npm run db:add-students`) | Done |
 | Teachers attach photos in the chat (timetable, worksheet, whiteboard) | Done; needs `AI_VISION_MODEL` for real reading. The text read from a photo is treated as untrusted data and the picture is never stored |
 | Role-specific AI panel, chat API, read-only questions, verified material citations and proposal flows | Integrated; requires AI provider configuration for live model responses |
 | Full multi-person AI showcase fixture (`prisma/seed-ai.ts`) | Done; `npm run db:seed:demo`, or `npx tsx prisma/seed-ai.ts --reset` for a clean slate |
@@ -278,6 +281,7 @@ Run all offline AI checks (fake services, no key) with `npx tsx src/lib/ai/dev/r
 
 - **Offline checks** (`npm run check:ai`): 24 scripts, 659 checks, no network or key, on in-memory fake services.
 - **Real-database checks** (`NODE_ENV=development npx tsx src/lib/ai/dev/real-services-check.ts`, inside the app container): 134 checks covering services, permissions, cross-account denial and the confirm path.
+- **Real-database scripts for the newest services** (run inside the app container with `NODE_ENV=development`): `src/lib/ai/dev/course-admin-real-check.ts` (edit and delete courses, units, sessions, enrolments) and `src/lib/ai/dev/quiz-attempts-real-check.ts` (saved quiz attempts and teacher results). Run `npm run db:seed:demo` first; both reset the demo data when they finish.
 - **Real-model checks** (`npm run check:live`): 20 scenarios against your own provider key; prints PASS, FAIL or REVIEW.
 - Every feature was also run in a browser with two or more accounts (see `docs/DEMO-SCRIPT.md`).
 
