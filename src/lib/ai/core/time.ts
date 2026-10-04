@@ -89,6 +89,12 @@ export function parseTimeOnly(text: string): { hour: number; minute: number } | 
   return hour < 24 && minute < 60 ? { hour, minute } : null;
 }
 
+/** The date of `weekday` in the Monday-to-Sunday week that contains `anchor` (all local, in code). */
+export function dateInSameWeek(anchor: DateOnly, weekday: WeekdayCode): DateOnly {
+  const anchorIndex = (new Date(Date.UTC(anchor.year, anchor.month - 1, anchor.day)).getUTCDay() + 6) % 7;
+  return addDaysTo(anchor, WEEKDAY_CODES.indexOf(weekday) - anchorIndex);
+}
+
 export function addDaysTo(date: DateOnly, days: number): DateOnly {
   const d = new Date(Date.UTC(date.year, date.month - 1, date.day + days));
   return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };

@@ -60,6 +60,12 @@ async function main() {
   const lateConfirm = await eduProposals.confirm(alex, late.proposal!.id);
   check("A clash created after the proposal is rejected at confirmation and nothing moves", blocker.ok && lateConfirm.ok && lateConfirm.data.status === "failed" && lateConfirm.data.error?.code === "CONFLICT" && session().startAt === at("2028-03-07", "10:00"), lateConfirm);
 
+  // A weekday is resolved by code inside the session's own Monday-to-Sunday week.
+  const byWeekday = await run("proposeReschedule", alex, { sessionId, newWeekday: "THU", newTime: "11:00" });
+  check("A weekday is turned into a date by code (the session is on Tuesday 2028-03-07, so Thursday is 2028-03-09)", byWeekday.ok && (byWeekday.proposal?.payload as any)?.newStartAt === at("2028-03-09", "11:00"), byWeekday.data);
+  check("Giving both a date and a weekday is refused", (await run("proposeReschedule", alex, { sessionId, newDate: "2028-03-08", newWeekday: "THU", newTime: "11:00" })).data.error?.code === "INVALID_ARGUMENTS");
+  check("Giving neither a date nor a weekday is refused", (await run("proposeReschedule", alex, { sessionId, newTime: "11:00" })).data.error?.code === "INVALID_ARGUMENTS");
+
   console.info(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
   process.exitCode = failures === 0 ? 0 : 1;
 }

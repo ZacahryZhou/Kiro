@@ -10,6 +10,9 @@ import {
   resolveSessions,
   resolveWhen,
   zonedTimeToUtc,
+  dateInSameWeek,
+  formatDateOnly,
+  utcToLocalParts,
 } from "../../core/time";
 import { answerWithCitations, parseJsonObject, type CitationSource } from "../../core/citations";
 import { chatCompletion } from "../../core/provider";
@@ -841,24 +844,24 @@ const proposeReschedule = defineTool({
   name: "proposeReschedule",
   description:
     "Prepare a proposal to move one existing session to a new date and time. This does NOT move anything: the teacher must confirm. " +
-    "Find the session with getTeacherSchedule first and pass its sessionId. Give the new date and time in the teacher's own terms; the system converts them to exact UTC. " +
+    "Find the session with getTeacherSchedule first and pass its sessionId. Give the new time as HH:mm and EITHER a calendar date (newDate) OR a weekday (newWeekday, meaning that weekday of the same Monday-to-Sunday week as the session); the system works out the exact date and UTC time, never you. " +
     "If the new time clashes with another session, no proposal is created: explain the clash and ask for another time.",
   parameters: obj(
     {
       sessionId: { type: "string", description: "A session ID from getTeacherSchedule." },
-      newDate: { type: "string", description: "New local date as YYYY-MM-DD." },
+      newDate: { type: "string", description: "New local date as YYYY-MM-DD, only if the teacher gave a calendar date." },
+      newWeekday: { type: "string", enum: [...WEEKDAY_CODES], description: "New weekday, for example FRI, when the teacher said a weekday such as 'Friday'." },
       newTime: { type: "string", description: `New local start time as 24-hour HH:mm in ${APP_TZ}.` },
     },
-    ["sessionId", "newDate", "newTime"],
+    ["sessionId", "newTime"],
   ),
-  schema: z.object({ sessionId: id, newDate: dateText, newTime: timeText }),
+  schema: z.object({ sessionId: id, newDate: dateText.optional(), newWeekday: z.enum(WEEKDAY_CODES).optional(), newTime: timeText }),
   async run(actor, args) {
     if (actor.role !== "TEACHER") return failed("FORBIDDEN", "Only teachers can reschedule sessions.");
-    const day = parseDateOnly(args.newDate);
     const clock = parseTimeOnly(args.newTime);
-    if (!day || !clock) return failed("INVALID_ARGUMENTS", "Use a real date as YYYY-MM-DD and a 24-hour time as HH:mm.");
-    const newStartAt = zonedTimeToUtc({ ...day, ...clock }).toISOString();
-    if (Date.parse(newStartAt) < Date.now()) return failed("VALIDATION", "The new time is in the past. Ask the teacher for a future date and time.");
+    if (!clock) return failed("INVALID_ARGUMENTS", "Use a 24-hour time as HH:mm.");
+    if (!args.newDate && !args.newWeekday) return failed("INVALID_ARGUMENTS", "Give the new date, or the new weekday. Ask the teacher when to move it.");
+    if (args.newDate && args.newWeekday) return failed("INVALID_ARGUMENTS", "Give either the new date or the new weekday, not both.");
 
     const now = Date.now();
     const schedule = await services.getTeacherSchedule(actor, {
@@ -871,6 +874,12 @@ const proposeReschedule = defineTool({
     if (session.status !== "SCHEDULED" && session.status !== "RESCHEDULED") {
       return failed("CONFLICT", "Only sessions that are still scheduled can be moved.");
     }
+    const day = args.newDate
+      ? parseDateOnly(args.newDate)
+      : dateInSameWeek(utcToLocalParts(new Date(session.startAt)), args.newWeekday!);
+    if (!day) return failed("INVALID_ARGUMENTS", "Use a real date as YYYY-MM-DD.");
+    const newStartAt = zonedTimeToUtc({ ...day, ...clock }).toISOString();
+    if (Date.parse(newStartAt) < Date.now()) return failed("VALIDATION", `The new time (${formatDateOnly(day)} ${args.newTime}) is in the past. Ask the teacher for a future date and time.`);
     if (session.startAt === newStartAt) return failed("VALIDATION", "The session is already at that time.");
 
     // Stage 1 of the two-layer conflict check: look before creating any proposal.
