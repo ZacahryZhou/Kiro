@@ -81,3 +81,26 @@ export type QuizResultView = {
   score: number;
   results: { questionId: string; correct: boolean | null; yourAnswer: string; correctAnswer: string; explanation?: string }[];
 };
+
+// Saved attempts (added after the contract freeze; additive only).
+/** A student's latest result on one quiz. */
+export type QuizAttemptView = { quizId: string; score: number; graded: number; total: number; attempts: number; submittedAt: string };
+export const QuizResultsInput = z.object({ courseId: id.optional(), quizId: id.optional() });
+export type QuizResultsInput = z.infer<typeof QuizResultsInput>;
+/** What a teacher sees for one quiz: who took it, how they did, and which questions were missed most. */
+export type QuizResultsView = {
+  quizId: string;
+  courseId: string;
+  courseName: string;
+  title: string;
+  published: boolean;
+  /** Students who have taken it at least once. */
+  takers: number;
+  /** Average of each student's latest result as a percentage of the questions that were marked; null when nobody has taken it. */
+  averagePercent: number | null;
+  students: { studentId: string; studentName: string; attempts: number; latest: { score: number; graded: number; submittedAt: string }; best: { score: number; graded: number } }[];
+  /** Enrolled students who have not taken it yet. */
+  notTaken: { studentId: string; studentName: string }[];
+  /** Marked questions ordered by how many of the students' latest answers were wrong. */
+  hardestQuestions: { questionId: string; order: number; prompt: string; wrong: number; answered: number }[];
+};

@@ -108,6 +108,10 @@ async function main() {
   const listed = await run("listMyQuizzes", alex, {});
   check("The saved quiz is listed without its answer key", listed.data.total === 1 && listed.data.quizzes[0].questions === 6 && !JSON.stringify(listed.data).includes("sourceQuote"));
   check("Another teacher sees no quizzes", (await run("listMyQuizzes", taylor, {})).data.total === 0);
+  const results = await run("getQuizResults", alex, {});
+  check("A teacher can ask how students did, and an untaken quiz says nobody took it", results.ok && results.data.total === 1 && results.data.quizzes[0].studentsWhoTookIt === 0 && results.data.quizzes[0].averagePercent === null, results);
+  check("Another teacher gets no quiz results", (await run("getQuizResults", taylor, {})).data.total === 0);
+  check("Students do not have the results tool", !findTool("STUDENT", "getQuizResults"));
 
   const short = await run("proposeQuiz", alex, { courseId: ids.courseA, count: 30, unit: "Unit 2" });
   check("When the materials cannot support every question, the summary says how many were written", short.ok && /\d+ of the 30 questions you asked for/.test(short.proposal?.summary ?? "") && typeof short.data.warning === "string", short.proposal?.summary);

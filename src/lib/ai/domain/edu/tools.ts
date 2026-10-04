@@ -1658,6 +1658,33 @@ const listMyQuizzes = defineTool({
 });
 
 
+const getQuizResults = defineTool({
+  name: "getQuizResults",
+  description:
+    "How the teacher's students did on their quizzes: per quiz, who took it, each student's latest and best score, the class average, who has not taken it, and the questions missed most. " +
+    "Scores are computed by code from the answer key; report them as given. Short answers are not marked.",
+  parameters: obj({ courseId: { type: "string", description: "Optional course ID to limit the results to one course." } }),
+  schema: z.object({ courseId: id.optional() }),
+  async run(actor, args) {
+    const result = await services.listQuizResults(actor, args);
+    if (!result.ok) return serviceFailure(result.error);
+    const shown = (score: number, graded: number) => (graded > 0 ? `${score}/${graded}` : "not marked");
+    return succeed({
+      quizzes: result.data.quizzes.map((quiz) => ({
+        title: quiz.title,
+        course: quiz.courseName,
+        published: quiz.published,
+        studentsWhoTookIt: quiz.takers,
+        averagePercent: quiz.averagePercent,
+        students: quiz.students.map((s) => ({ name: s.studentName, latest: shown(s.latest.score, s.latest.graded), best: shown(s.best.score, s.best.graded), attempts: s.attempts })),
+        notTakenYet: quiz.notTaken.map((n) => n.studentName),
+        mostMissed: quiz.hardestQuestions.map((q) => `Q${q.order}: ${q.prompt} (${q.wrong} of ${q.answered} wrong)`),
+      })),
+      total: result.data.quizzes.length,
+    });
+  },
+});
+
 /** Text materials of one course (optionally one unit) as sources for a writing step, within a size budget. */
 async function gatherTextSources(actor: Actor, courseId: string, unit: string | undefined, budget: number, purpose: string): Promise<{ ok: true; sources: { materialId: string; title: string; content: string }[] } | { ok: false; result: ToolResult }> {
   const materials = await services.getCourseMaterials(actor, { courseId });
@@ -1954,6 +1981,7 @@ const TEACHER_TOOLS: Tool[] = [
   listProgressRecords,
   listMyDashboardLayouts,
   listMyQuizzes,
+  getQuizResults,
   listMyKnowledge,
   proposeMarkAttendance,
   proposeCreateCourse,

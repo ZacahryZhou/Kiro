@@ -60,7 +60,7 @@ Kora's assistant is an **agent with tools**, not a chat box bolted onto a calend
 - **An assistant on every course.** Each course page has its own assistant, locked to that course in code and with its own history, so a student can ask the course tutor about the material while the global assistant stays general.
 - **Photos for teachers.** Attach, paste or drop up to four photos (a timetable, a worksheet, a whiteboard). They are read once and never stored.
 
-**By the numbers:** 29 teacher tools (16 read-only, 13 that prepare proposals) and 7 student tools · 12 proposal types · a model-and-tool loop of at most 6 rounds · 640 offline checks across 23 scripts, plus real-database and real-model checks.
+**By the numbers:** 30 teacher tools (17 read-only, 13 that prepare proposals) and 7 student tools · 12 proposal types · a model-and-tool loop of at most 6 rounds · 640 offline checks across 23 scripts, plus real-database and real-model checks.
 
 ## How it works
 
@@ -158,7 +158,8 @@ Each AI feature follows the same pattern: the teacher says one sentence, the AI 
 | 20 | Course assistants | Open a course and ask "What did we cover last week?" (teacher) or "Explain this unit" (student) | An assistant locked to that course in code, with its own history | C · Integrated |
 | 21 | Photos in the chat | (teacher) attach a photo of a timetable: "Add these classes to my calendar" | A vision model reads the photo and the agent prepares proposals; the text is treated as untrusted data and the picture is never stored | C · Integrated; needs `AI_VISION_MODEL` for real reading |
 | 22 | Course management | Edit or delete a course, unit, material or session; remove a student; upload files from the Teaching knowledge page | Manual teacher forms; deleting a course needs its name typed and lists what goes with it | C · Integrated (not an AI proposal yet) |
-| 23 | Tuition adjustment | "Add 3 sessions for Jordan" | Out of the current MVP; needs a new table, function and proposal type agreed in the contract | C · Out of scope |
+| 23 | Quiz results | (student) takes a published quiz; (teacher) "How did my students do on the slope quiz?" | Code marks multiple choice and true/false and saves each attempt; the student sees their last result, the teacher sees every student's latest and best score, the average, who has not taken it and the most-missed questions, in the Quizzes tab or by asking the assistant | C · Integrated |
+| 24 | Tuition adjustment | "Add 3 sessions for Jordan" | Out of the current MVP; needs a new table, function and proposal type agreed in the contract | C · Out of scope |
 
 **Intended demo line:** feature 1 → 2 → 3 → access isolation, on the showcase fixture. It runs with a live model (`AI_API_KEY`, `AI_MODEL`) or, with no network or key, in the scripted demo mode (`AI_MOCK=1`), which understands a few plain requests and drives the same real tools, proposals, confirmation and database (it is not a language model, so it does not show how a real model chooses tools).
 
@@ -335,7 +336,7 @@ Conventions: IDs are `cuid()` strings; times are ISO 8601 UTC strings stored as 
 
 The teacher and student agents are the same loop with different system prompts and tool sets. Students have no write tools; the one proposal they can prepare is a leave or different-time request to their own teacher, and it still needs their confirmation.
 
-Teacher tools, read-only (16): `getTeacherSchedule`, `listMyCourses`, `listMyStudents`, `listAttendance`, `listDeductions`, `checkConflicts`, `getCourseMaterials`, `getAttendanceTrends`, `getStudentMemory`, `getMyProfile`, `findMyStudent`, `listStudentRequests`, `listProgressRecords`, `listMyDashboardLayouts`, `listMyQuizzes`, `listMyKnowledge`. Teacher tools that only prepare a pending proposal (13): `proposeMarkAttendance`, `proposeCreateCourse`, `proposeCreateSessions`, `proposeAddContent`, `proposeAddStudent`, `proposeReschedule`, `proposeProgressRecord`, `proposeAddStudentNote`, `proposeLessonPrep`, `proposeDashboardLayout`, `proposeQuiz`, `proposeKnowledge`, `proposeKnowledgeFromMaterials`. Student tools (7): `getStudentWorkspace`, `answerFromCourseMaterials`, `explainWithTeacherNotes`, `getMyProfile`, `listStudentRequests`, `listProgressRecords` (read-only) and `proposeStudentRequest`.
+Teacher tools, read-only (17): `getTeacherSchedule`, `listMyCourses`, `listMyStudents`, `listAttendance`, `listDeductions`, `checkConflicts`, `getCourseMaterials`, `getAttendanceTrends`, `getStudentMemory`, `getMyProfile`, `findMyStudent`, `listStudentRequests`, `listProgressRecords`, `listMyDashboardLayouts`, `listMyQuizzes`, `getQuizResults`, `listMyKnowledge`. Teacher tools that only prepare a pending proposal (13): `proposeMarkAttendance`, `proposeCreateCourse`, `proposeCreateSessions`, `proposeAddContent`, `proposeAddStudent`, `proposeReschedule`, `proposeProgressRecord`, `proposeAddStudentNote`, `proposeLessonPrep`, `proposeDashboardLayout`, `proposeQuiz`, `proposeKnowledge`, `proposeKnowledgeFromMaterials`. Student tools (7): `getStudentWorkspace`, `answerFromCourseMaterials`, `explainWithTeacherNotes`, `getMyProfile`, `listStudentRequests`, `listProgressRecords` (read-only) and `proposeStudentRequest`.
 
 The behaviour rules both agents follow are written in `docs/AI-REPLY-POLICY.md` (section 0 is loaded into their instructions at run time).
 

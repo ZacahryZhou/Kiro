@@ -41,7 +41,7 @@ Around the agent is a normal product: sign-in, schedule and calendar, courses, m
 
 ## How we built it
 
-**The agent.** One model-and-tool loop (at most six rounds, with a timeout) runs in two configurations: **29 teacher tools** (16 read-only, 13 that prepare proposals) and **7 student tools**. The model chooses the next tool; everything around it is fixed code. Proposals move through an atomic state machine (pending, confirmed, executed or failed), so clicking Confirm twice writes once.
+**The agent.** One model-and-tool loop (at most six rounds, with a timeout) runs in two configurations: **30 teacher tools** (17 read-only, 13 that prepare proposals) and **7 student tools**. The model chooses the next tool; everything around it is fixed code. Proposals move through an atomic state machine (pending, confirmed, executed or failed), so clicking Confirm twice writes once.
 
 **Trust is enforced by design, not by prompts.**
 
@@ -69,7 +69,7 @@ Around the agent is a normal product: sign-in, schedule and calendar, courses, m
 ## Accomplishments that we're proud of
 
 - The headline behaviour works end to end: one sentence, one preview, one confirmation, one write. Confirming twice or in parallel writes once.
-- An agent with 29 tools that still cannot write a single business row on its own.
+- An agent with 30 tools that still cannot write a single business row on its own.
 - Grounded generation: quizzes, notes and tutor answers are kept only when code can find their quote in the teacher's own material.
 - A student tutor that teaches from the teacher's notes and says "I couldn't find that" when the answer is not there.
 - 640 offline checks across 23 scripts, real-database checks for permissions and cross-account denial, and a real-model checklist anyone can run with their own key.

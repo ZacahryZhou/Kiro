@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check, Eye, EyeOff, FileQuestion, Quote, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { QuizQuestionView, QuizView } from "@/contracts";
+import type { QuizQuestionView, QuizResultsView, QuizView } from "@/contracts";
 import { deleteQuizAction, publishQuizAction } from "@/app/(teacher)/teacher/courses/quiz-actions";
 
 const TYPE_LABEL = { MULTIPLE_CHOICE: "Multiple choice", TRUE_FALSE: "True / false", SHORT_ANSWER: "Short answer" } as const;
@@ -48,7 +48,35 @@ function Question({ question }: { question: QuizQuestionView }) {
   );
 }
 
-function QuizCard({ courseId, quiz }: { courseId: string; quiz: QuizView }) {
+function ResultsPanel({ results }: { results?: QuizResultsView }) {
+  if (!results) return null;
+  const pct = (score: number, graded: number) => (graded > 0 ? `${score}/${graded} (${Math.round((score / graded) * 100)}%)` : "not marked");
+  return (
+    <details className="group rounded-xl border bg-muted/30 p-3" data-testid="quiz-results">
+      <summary className="cursor-pointer text-sm font-medium text-primary hover:underline">
+        Student results · {results.takers} {results.takers === 1 ? "student has" : "students have"} taken it{results.averagePercent !== null ? ` · average ${results.averagePercent}%` : ""}
+      </summary>
+      {results.students.length === 0 ? (
+        <p className="mt-2 text-sm text-muted-foreground">{results.published ? "Nobody has taken this quiz yet." : "Publish the quiz so students can take it."}</p>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <div className="overflow-x-auto"><table className="w-full text-left text-sm">
+            <thead className="text-muted-foreground"><tr><th scope="col" className="py-1.5 pr-4 font-medium">Student</th><th scope="col" className="py-1.5 pr-4 font-medium">Latest</th><th scope="col" className="py-1.5 pr-4 font-medium">Best</th><th scope="col" className="py-1.5 font-medium">Attempts</th></tr></thead>
+            <tbody className="divide-y">{results.students.map((student) => (
+              <tr key={student.studentId} data-testid="quiz-result-row"><td className="py-1.5 pr-4 font-medium">{student.studentName}</td><td className="py-1.5 pr-4 tabular-nums">{pct(student.latest.score, student.latest.graded)}</td><td className="py-1.5 pr-4 tabular-nums">{pct(student.best.score, student.best.graded)}</td><td className="py-1.5 tabular-nums">{student.attempts}</td></tr>
+            ))}</tbody>
+          </table></div>
+          {results.hardestQuestions.length > 0 && (
+            <div className="text-sm"><p className="font-medium">Most missed</p><ul className="mt-1 space-y-0.5 text-muted-foreground">{results.hardestQuestions.map((q) => <li key={q.questionId}>Q{q.order}: {q.prompt} <span className="whitespace-nowrap">({q.wrong} of {q.answered} wrong)</span></li>)}</ul></div>
+          )}
+        </div>
+      )}
+      {results.notTaken.length > 0 && <p className="mt-2 text-xs text-muted-foreground">Not taken yet: {results.notTaken.map((n) => n.studentName).join(", ")}</p>}
+    </details>
+  );
+}
+
+function QuizCard({ courseId, quiz, results }: { courseId: string; quiz: QuizView; results?: QuizResultsView }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   function toggle() {
@@ -84,6 +112,7 @@ function QuizCard({ courseId, quiz }: { courseId: string; quiz: QuizView }) {
         </div>
       </div>
       {message && <p role={message.ok ? "status" : "alert"} className={`text-sm ${message.ok ? "text-muted-foreground" : "text-destructive"}`}>{message.text}</p>}
+      <ResultsPanel results={results} />
       <details className="group">
         <summary className="cursor-pointer text-sm font-medium text-primary hover:underline">View questions and answer key</summary>
         <ol className="mt-3 space-y-3">{quiz.questions.map((q) => <Question key={q.id} question={q} />)}</ol>
@@ -92,7 +121,7 @@ function QuizCard({ courseId, quiz }: { courseId: string; quiz: QuizView }) {
   );
 }
 
-export function TeacherQuizzes({ courseId, quizzes }: { courseId: string; quizzes: QuizView[] }) {
+export function TeacherQuizzes({ courseId, quizzes, results = [] }: { courseId: string; quizzes: QuizView[]; results?: QuizResultsView[] }) {
   if (quizzes.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed bg-card/60 px-6 py-12 text-center">
@@ -102,5 +131,5 @@ export function TeacherQuizzes({ courseId, quizzes }: { courseId: string; quizze
       </div>
     );
   }
-  return <ul className="space-y-4">{quizzes.map((quiz) => <QuizCard key={quiz.id} courseId={courseId} quiz={quiz} />)}</ul>;
+  return <ul className="space-y-4">{quizzes.map((quiz) => <QuizCard key={quiz.id} courseId={courseId} quiz={quiz} results={results.find((r) => r.quizId === quiz.id)} />)}</ul>;
 }

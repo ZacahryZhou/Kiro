@@ -3,12 +3,12 @@
 import { useState, useTransition } from "react";
 import { CheckCircle2, CircleHelp, RotateCcw, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { QuizResultView, QuizStudentView } from "@/contracts";
+import type { QuizAttemptView, QuizResultView, QuizStudentView } from "@/contracts";
 import { checkQuizAction } from "@/app/(student)/student/courses/quiz-actions";
 
 const LEVEL_LABEL = { EASY: "Easy", MEDIUM: "Medium", HARD: "Hard" } as const;
 
-function QuizCard({ quiz }: { quiz: QuizStudentView }) {
+function QuizCard({ quiz, last }: { quiz: QuizStudentView; last?: QuizAttemptView }) {
   const [open, setOpen] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<QuizResultView | null>(null);
@@ -36,7 +36,12 @@ function QuizCard({ quiz }: { quiz: QuizStudentView }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="font-medium">{quiz.title}</h3>
-          <p className="text-xs text-muted-foreground">{quiz.questions.length} questions · practice only, nothing is graded or recorded</p>
+          <p className="text-xs text-muted-foreground">{quiz.questions.length} questions · your score is saved and your teacher can see it</p>
+          {last && (
+            <p className="mt-1 text-xs font-medium text-emerald-700" data-testid="last-result">
+              {last.graded > 0 ? `Last result: ${last.score} of ${last.graded} right` : "Last attempt saved"} · {last.attempts} {last.attempts === 1 ? "attempt" : "attempts"}
+            </p>
+          )}
         </div>
         <button type="button" onClick={() => setOpen((v) => !v)} className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/85" aria-expanded={open} data-testid="start-quiz">
           {open ? "Close" : result ? "Review" : "Start practice"}
@@ -113,7 +118,7 @@ function QuizCard({ quiz }: { quiz: QuizStudentView }) {
   );
 }
 
-export function StudentQuizzes({ quizzes }: { quizzes: QuizStudentView[] }) {
+export function StudentQuizzes({ quizzes, attempts = [] }: { quizzes: QuizStudentView[]; attempts?: QuizAttemptView[] }) {
   if (quizzes.length === 0) return null;
   return (
     <section aria-label="Practice quizzes" className="kora-card space-y-4 p-5 sm:p-6" data-testid="student-quizzes">
@@ -121,7 +126,7 @@ export function StudentQuizzes({ quizzes }: { quizzes: QuizStudentView[] }) {
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Practice</p>
         <h2 className="text-lg font-semibold tracking-tight sm:text-xl">Quizzes from your teacher</h2>
       </div>
-      <ul className="space-y-3">{quizzes.map((quiz) => <QuizCard key={quiz.id} quiz={quiz} />)}</ul>
+      <ul className="space-y-3">{quizzes.map((quiz) => <QuizCard key={quiz.id} quiz={quiz} last={attempts.find((a) => a.quizId === quiz.id)} />)}</ul>
     </section>
   );
 }

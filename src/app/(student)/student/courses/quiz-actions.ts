@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth/actor";
 import type { QuizResultView } from "@/contracts";
 import { checkQuizAnswers } from "@/services/quiz";
 
-/** Marks a student's practice answers. Nothing is stored. */
+/** Marks a student's answers and saves the attempt so the teacher can see the result. */
 export async function checkQuizAction(quizId: string, answers: { questionId: string; answer: string }[]): Promise<{ ok: true; result: QuizResultView } | { ok: false; message: string }> {
   const actor = await requireRole("STUDENT");
   const result = await checkQuizAnswers(actor, { quizId, answers });

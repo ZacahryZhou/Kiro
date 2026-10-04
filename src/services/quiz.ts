@@ -9,7 +9,11 @@ import {
   type CheckQuizInput,
   type CreateQuizInput,
   type DeleteQuizInput,
+  QuizResultsInput as QuizResultsInputSchema,
+  type QuizAttemptView,
   type QuizQuestionView,
+  type QuizResultsInput,
+  type QuizResultsView,
   type QuizResultView,
   type QuizStudentView,
   type QuizView,
@@ -164,8 +168,9 @@ export async function deleteQuiz(actor: Actor, input: DeleteQuizInput): Promise<
 }
 
 /**
- * Practice mode for a student: marks multiple-choice and true/false answers and reveals the key and
- * explanations. Short answers are shown with the model answer for the student to compare. Nothing is stored.
+ * Marks a student's answers (multiple choice and true/false), saves the attempt for the teacher, and
+ * reveals the key and explanations. Short answers are saved and shown with the model answer for the
+ * student to compare; they are not marked. Scores are computed here from the key, never by a model.
  */
 export async function checkQuizAnswers(actor: Actor, input: CheckQuizInput): Promise<Result<QuizResultView>> {
   if (actor.role !== "STUDENT") return err("FORBIDDEN", "Only students can take quizzes.");
@@ -174,7 +179,7 @@ export async function checkQuizAnswers(actor: Actor, input: CheckQuizInput): Pro
   try {
     const quiz = await prisma.quiz.findFirst({
       where: { id: parsed.data.quizId, published: true, course: { enrollments: { some: { studentId: actor.userId } } } },
-      select: { questions: { orderBy: { order: "asc" }, select: { id: true, type: true, answer: true, explanation: true } } },
+      select: { id: true, questions: { orderBy: { order: "asc" }, select: { id: true, type: true, answer: true, explanation: true } } },
     });
     if (!quiz) return err("NOT_FOUND", "That quiz was not found.");
     const given = new Map(parsed.data.answers.map((a) => [a.questionId, a.answer]));
@@ -183,8 +188,111 @@ export async function checkQuizAnswers(actor: Actor, input: CheckQuizInput): Pro
       return { questionId: q.id, correct: yourAnswer === "" && q.type !== "SHORT_ANSWER" ? false : gradeAnswer(q.type, yourAnswer, q.answer), yourAnswer, correctAnswer: q.answer, ...(q.explanation ? { explanation: q.explanation } : {}) };
     });
     const marked = results.filter((r) => r.correct !== null);
-    return ok({ graded: marked.length, score: marked.filter((r) => r.correct).length, results });
+    const score = marked.filter((r) => r.correct).length;
+    await prisma.quizAttempt.create({
+      data: {
+        quizId: quiz.id,
+        studentId: actor.userId,
+        graded: marked.length,
+        score,
+        total: quiz.questions.length,
+        answers: results.map((r) => ({ questionId: r.questionId, answer: r.yourAnswer, correct: r.correct })),
+      },
+    });
+    return ok({ graded: marked.length, score, results });
   } catch {
     return err("INTERNAL", "Could not check your answers. Please try again.");
+  }
+}
+
+/** The signed-in student's own latest result on each quiz they have taken. */
+export async function listMyQuizAttempts(actor: Actor, input: { courseId?: string } = {}): Promise<Result<{ attempts: QuizAttemptView[] }>> {
+  if (actor.role !== "STUDENT") return err("FORBIDDEN", "Only students can take quizzes.");
+  try {
+    const rows = await prisma.quizAttempt.findMany({
+      where: { studentId: actor.userId, ...(input.courseId ? { quiz: { courseId: input.courseId } } : {}) },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+      select: { quizId: true, score: true, graded: true, total: true, createdAt: true },
+    });
+    const latest = new Map<string, QuizAttemptView>();
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      counts.set(row.quizId, (counts.get(row.quizId) ?? 0) + 1);
+      if (!latest.has(row.quizId)) latest.set(row.quizId, { quizId: row.quizId, score: row.score, graded: row.graded, total: row.total, attempts: 0, submittedAt: row.createdAt.toISOString() });
+    }
+    return ok({ attempts: [...latest.values()].map((a) => ({ ...a, attempts: counts.get(a.quizId) ?? 1 })) });
+  } catch {
+    return err("INTERNAL", "Could not load your results. Please try again.");
+  }
+}
+
+/** How the students of the teacher's own courses did on their quizzes. Other teachers' quizzes are never included. */
+export async function listQuizResults(actor: Actor, input: QuizResultsInput = {}): Promise<Result<{ quizzes: QuizResultsView[] }>> {
+  if (actor.role !== "TEACHER") return err("FORBIDDEN", "Only teachers can see quiz results.");
+  const parsed = QuizResultsInputSchema.safeParse(input);
+  if (!parsed.success) return err("VALIDATION", "Choose a valid course or quiz.");
+  try {
+    const quizzes = await prisma.quiz.findMany({
+      where: { course: { teacherId: actor.userId }, ...(parsed.data.courseId ? { courseId: parsed.data.courseId } : {}), ...(parsed.data.quizId ? { id: parsed.data.quizId } : {}) },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      select: {
+        id: true,
+        courseId: true,
+        title: true,
+        published: true,
+        course: { select: { name: true, enrollments: { select: { student: { select: { id: true, name: true } } } } } },
+        questions: { orderBy: { order: "asc" }, select: { id: true, order: true, type: true, prompt: true } },
+        attempts: { orderBy: { createdAt: "desc" }, select: { studentId: true, score: true, graded: true, answers: true, createdAt: true, student: { select: { name: true } } } },
+      },
+    });
+    const views = quizzes.map((quiz): QuizResultsView => {
+      const enrolled = new Map(quiz.course.enrollments.map((e) => [e.student.id, e.student.name]));
+      const byStudent = new Map<string, typeof quiz.attempts>();
+      // Only students still enrolled count, so removing a student also removes them from the numbers.
+      for (const attempt of quiz.attempts) if (enrolled.has(attempt.studentId)) byStudent.set(attempt.studentId, [...(byStudent.get(attempt.studentId) ?? []), attempt]);
+      const students = [...byStudent.entries()].map(([studentId, list]) => {
+        const best = list.reduce((a, b) => (b.graded > 0 && (a.graded === 0 || b.score / b.graded > a.score / a.graded) ? b : a));
+        return {
+          studentId,
+          studentName: enrolled.get(studentId) ?? "Student",
+          attempts: list.length,
+          latest: { score: list[0].score, graded: list[0].graded, submittedAt: list[0].createdAt.toISOString() },
+          best: { score: best.score, graded: best.graded },
+        };
+      });
+      const percents = students.filter((s) => s.latest.graded > 0).map((s) => (s.latest.score / s.latest.graded) * 100);
+      const wrongCount = new Map<string, { wrong: number; answered: number }>();
+      for (const list of byStudent.values()) {
+        const answers = Array.isArray(list[0].answers) ? (list[0].answers as { questionId?: string; correct?: boolean | null }[]) : [];
+        for (const a of answers) {
+          if (!a.questionId || a.correct === null || a.correct === undefined) continue;
+          const entry = wrongCount.get(a.questionId) ?? { wrong: 0, answered: 0 };
+          entry.answered += 1;
+          if (a.correct === false) entry.wrong += 1;
+          wrongCount.set(a.questionId, entry);
+        }
+      }
+      return {
+        quizId: quiz.id,
+        courseId: quiz.courseId,
+        courseName: quiz.course.name,
+        title: quiz.title,
+        published: quiz.published,
+        takers: students.length,
+        averagePercent: percents.length > 0 ? Math.round(percents.reduce((a, b) => a + b, 0) / percents.length) : null,
+        students: students.sort((a, b) => a.studentName.localeCompare(b.studentName)),
+        notTaken: [...enrolled.entries()].filter(([id]) => !byStudent.has(id)).map(([studentId, studentName]) => ({ studentId, studentName })),
+        hardestQuestions: quiz.questions
+          .map((q) => ({ questionId: q.id, order: q.order, prompt: q.prompt, ...(wrongCount.get(q.id) ?? { wrong: 0, answered: 0 }) }))
+          .filter((q) => q.wrong > 0)
+          .sort((a, b) => b.wrong - a.wrong || a.order - b.order)
+          .slice(0, 3),
+      };
+    });
+    return ok({ quizzes: views });
+  } catch {
+    return err("INTERNAL", "Could not load the quiz results. Please try again.");
   }
 }

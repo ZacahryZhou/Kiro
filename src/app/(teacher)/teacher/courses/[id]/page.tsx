@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CourseAssistant } from "@/features/ai-agent";
 import { DeleteCourseDialog, EditCourseDialog, RemoveStudentButton, SessionAdmin } from "@/components/course-admin-forms";
 import { TeacherQuizzes } from "@/components/teacher-quizzes";
-import { listMyQuizzes } from "@/services/quiz";
+import { listMyQuizzes, listQuizResults } from "@/services/quiz";
 import { getCourseForEdit, getCourseImpact } from "@/services/course-admin";
 import { AddStudentForm, CreateSessionsForm, MarkAttendanceForm, ProgressForm, RescheduleSessionForm, TeacherCourseMaterials } from "@/components/teacher-course-forms";
 import { NEXT_ACTION_LABELS } from "@/lib/progress";
@@ -41,7 +41,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   if (!course) notFound();
 
   const timeZone = process.env.APP_TZ || "America/Vancouver";
-  const [studentsResult, scheduleResult, attendanceResult, deductionsResult, materialsResult, progressResult, quizzesResult, editableResult, impactResult] = await Promise.all([
+  const [studentsResult, scheduleResult, attendanceResult, deductionsResult, materialsResult, progressResult, quizzesResult, editableResult, impactResult, quizResults] = await Promise.all([
     listMyStudents(actor, { courseId: id }),
     getTeacherSchedule(actor, {
       from: "1970-01-01T00:00:00.000Z",
@@ -55,6 +55,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     listMyQuizzes(actor, { courseId: id }),
     getCourseForEdit(actor, { courseId: id }),
     getCourseImpact(actor, { courseId: id }),
+    listQuizResults(actor, { courseId: id }),
   ]);
 
   const sessionsByDate = new Map<string, SessionView[]>();
@@ -199,8 +200,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         </TabsContent>
 
         <TabsContent value="quizzes" className="space-y-4">
-          <SectionHeading title="Quizzes" description="Written by the assistant from your materials. Review a draft, then publish it so students can practise." />
-          {!quizzesResult.ok ? <ErrorAlert message={quizzesResult.error.message} /> : <TeacherQuizzes courseId={id} quizzes={quizzesResult.data.quizzes} />}
+          <SectionHeading title="Quizzes" description="Written by the assistant from your materials. Review a draft, publish it, then see how your students did." />
+          {!quizzesResult.ok ? <ErrorAlert message={quizzesResult.error.message} /> : <TeacherQuizzes courseId={id} quizzes={quizzesResult.data.quizzes} results={quizResults.ok ? quizResults.data.quizzes : []} />}
         </TabsContent>
 
         <TabsContent value="attendance" className="space-y-4">

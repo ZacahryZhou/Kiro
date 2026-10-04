@@ -25,6 +25,7 @@ import {
   type KnowledgeView,
   type StudentKnowledgeView,
   type QuizView,
+  type QuizResultsView,
   type DeductionView,
   type ErrorCode,
   type Result,
@@ -984,6 +985,13 @@ export async function listMyQuizzes(actor: Actor, input: { courseId?: string } =
   if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers can view quiz answer keys.");
   const mine = store.quizzes.filter((q) => store.courses.some((c) => c.id === q.courseId && c.teacherId === actor.userId) && (!input.courseId || q.courseId === input.courseId));
   return ok({ quizzes: mine.map((q) => ({ id: q.id, courseId: q.courseId, courseName: store.courses.find((c) => c.id === q.courseId)?.name ?? "", title: q.title, published: q.published, createdAt: q.createdAt, questions: q.questions as unknown as QuizView["questions"] })) });
+}
+
+/** The fake keeps no attempts: nobody has taken any quiz, so every enrolled student is listed as not taken. */
+export async function listQuizResults(actor: Actor, input: { courseId?: string; quizId?: string } = {}): Promise<Result<{ quizzes: QuizResultsView[] }>> {
+  if (actor.role !== "TEACHER") return fail("FORBIDDEN", "Only teachers can see quiz results.");
+  const mine = store.quizzes.filter((q) => store.courses.some((c) => c.id === q.courseId && c.teacherId === actor.userId) && (!input.courseId || q.courseId === input.courseId) && (!input.quizId || q.id === input.quizId));
+  return ok({ quizzes: mine.map((q) => ({ quizId: q.id, courseId: q.courseId, courseName: store.courses.find((c) => c.id === q.courseId)?.name ?? "", title: q.title, published: q.published, takers: 0, averagePercent: null, students: [], notTaken: [], hardestQuestions: [] })) });
 }
 
 // ---------- teaching knowledge (contract v0.7) ----------

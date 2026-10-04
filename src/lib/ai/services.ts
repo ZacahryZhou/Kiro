@@ -43,6 +43,7 @@ export const getActiveLayout = activeServices.getActiveLayout;
 export const saveDashboardLayout = activeServices.saveDashboardLayout;
 export const createQuiz = activeServices.createQuiz;
 export const listMyQuizzes = activeServices.listMyQuizzes;
+export const listQuizResults = activeServices.listQuizResults;
 export const saveKnowledgeEntries = activeServices.saveKnowledgeEntries;
 export const listMyKnowledge = activeServices.listMyKnowledge;
 export const listKnowledgeForStudent = activeServices.listKnowledgeForStudent;

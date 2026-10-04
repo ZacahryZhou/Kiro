@@ -115,6 +115,7 @@ model User {
   dashboardLayouts  DashboardLayout[]
   knowledgeEntries  KnowledgeEntry[]
   agentConversations AgentConversation[]
+  quizAttempts       QuizAttempt[]
 }
 
 model Course {
@@ -357,8 +358,29 @@ model Quiz {
 
   course    Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
   questions QuizQuestion[]
+  attempts  QuizAttempt[]
 
   @@index([courseId, createdAt])
+}
+
+/// One submission of a published quiz by a student. Scores are computed by code from the answer key.
+model QuizAttempt {
+  id        String   @id @default(cuid())
+  quizId    String
+  studentId String
+  /// Multiple-choice and true/false questions that were marked, and how many were right.
+  graded    Int
+  score     Int
+  total     Int
+  /// [{ questionId, answer, correct: boolean | null }] as submitted.
+  answers   Json
+  createdAt DateTime @default(now())
+
+  quiz    Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([quizId, studentId, createdAt])
+  @@index([studentId, createdAt])
 }
 
 model QuizQuestion {

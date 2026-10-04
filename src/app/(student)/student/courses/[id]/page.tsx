@@ -8,7 +8,7 @@ import { CourseAssistant } from "@/features/ai-agent";
 import { StudentNotes } from "@/components/student-notes";
 import { StudentQuizzes } from "@/components/student-quizzes";
 import { listKnowledgeForStudent } from "@/services/knowledge";
-import { listStudentQuizzes } from "@/services/quiz";
+import { listMyQuizAttempts, listStudentQuizzes } from "@/services/quiz";
 import { getCourseMaterials, listMyCourses, listProgressRecords } from "@/services/read";
 
 function safeExternalUrl(value: string | undefined): string | undefined {
@@ -34,7 +34,7 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
   const course = coursesResult.data.courses.find((item) => item.id === id);
   if (!course) notFound();
 
-  const [materialsResult, progressResult, quizzesResult, notesResult] = await Promise.all([getCourseMaterials(actor, { courseId: id }), listProgressRecords(actor, { courseId: id }), listStudentQuizzes(actor, { courseId: id }), listKnowledgeForStudent(actor, { courseId: id })]);
+  const [materialsResult, progressResult, quizzesResult, notesResult, attemptsResult] = await Promise.all([getCourseMaterials(actor, { courseId: id }), listProgressRecords(actor, { courseId: id }), listStudentQuizzes(actor, { courseId: id }), listKnowledgeForStudent(actor, { courseId: id }), listMyQuizAttempts(actor, { courseId: id })]);
   const timeZone = process.env.APP_TZ || "America/Vancouver";
   const progress = progressResult.ok ? progressResult.data.records : [];
   return (
@@ -50,7 +50,7 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
 
       {notesResult.ok && <StudentNotes notes={notesResult.data.entries} teacherName={course.teacherName} />}
 
-      {quizzesResult.ok && <StudentQuizzes quizzes={quizzesResult.data.quizzes} />}
+      {quizzesResult.ok && <StudentQuizzes quizzes={quizzesResult.data.quizzes} attempts={attemptsResult.ok ? attemptsResult.data.attempts : []} />}
 
       {!materialsResult.ok ? (
         <ErrorAlert message={materialsResult.error.message} />
